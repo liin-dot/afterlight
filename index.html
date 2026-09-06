@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101917">
+  <meta name="description" content="烬夜 AFTERLIGHT — 一款原创像素风自动战斗生存游戏。守住最后的火光。">
+  <title>烬夜 AFTERLIGHT · 最后的守灯人</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./status.css">
+  <link rel="stylesheet" href="./fusion.css">
+  <link rel="stylesheet" href="./catalog.css">
+  <link rel="stylesheet" href="./run-menu.css">
+</head>
+<body>
+  <main id="app">
+    <canvas id="world" aria-label="烬夜游戏画面"></canvas>
+    <div class="screen-grain" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header id="masthead">
+      <a class="brand" href="./" aria-label="烬夜首页"><i class="brand-mark"></i><span>AFTERLIGHT<span class="brand-sub">THE LAST WARDEN</span></span></a>
+      <div class="header-actions"><span class="version">独立像素生存游戏 <b>VOL. 01</b></span><button id="sound-button" class="icon-button" title="声音开关 [M]" aria-label="声音开关"><span id="sound-icon">♫</span></button><button id="fullscreen-button" class="icon-button" title="全屏 [F]" aria-label="全屏">⛶</button></div>
+    </header>
+
+    <section id="menu" class="menu overlay">
+      <div class="menu-copy">
+        <div class="eyebrow"><span class="tiny-flame"></span> 当长夜降临，最后一盏灯仍为你而燃。</div>
+        <h1><span class="chinese-title">烬<span>夜</span><i>✦</i></span><span class="english-title">AFTERLIGHT</span></h1>
+        <p class="tagline">孤身入夜。万物来袭。<br><span>拾起余烬，成为黑暗中的最后一道光。</span></p>
+        <div class="selection-label"><span>01 <i>/</i> 选择你的守灯人</span><span id="character-tag">近战 · 均衡</span></div>
+        <div id="characters" class="character-grid"></div>
+        <div class="character-description" id="character-description"></div>
+        <button id="start-button" class="primary-button"><span class="start-diamond">◆</span><span>踏 入 长 夜<small>BEGIN THE NIGHT</small></span><span class="button-arrow">↗</span></button>
+        <div class="menu-secondary"><button id="archive-button">守灯人手记 <span>↗</span></button><button id="menu-status-button">角色状态 <span>C</span></button><button id="menu-catalog-button" title="永久道具图鉴 [I]">道具图鉴 <span id="menu-catalog-count">0/39</span></button><button id="meta-button">余烬祭坛 <span id="meta-count">0 ✦</span></button></div>
+      </div>
+      <div id="camp-return-note" class="camp-return-note hidden" role="status"></div>
+      <div class="scene-caption"><span class="live-dot"></span><span>遗忘墓园<small>THE FORSAKEN GROVE</small></span><b>01</b></div>
+      <div class="world-caption"><span>北境，旧王国边界</span><span>月蚀之夜 · 第 137 年</span></div>
+      <footer class="menu-footer"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 <i>·</i> <kbd>SPACE</kbd> 冲刺 <i>·</i> 自动攻击</span><span class="footer-right">活过黎明之前的六分钟 <span>✦</span></span></footer>
+    </section>
+
+    <section id="hud" class="hidden" aria-label="游戏状态">
+      <div class="xp-track"><div id="xp-fill"></div><span id="xp-label">LEVEL 01</span></div>
+      <div class="hud-top">
+        <button id="status-button" class="player-status" aria-label="查看角色状态、武器与道具效果" aria-haspopup="dialog" title="角色状态 [C]"><canvas id="hud-avatar" width="32" height="40"></canvas><span class="status-vitals"><span class="status-name"><span id="player-name">守灯人</span><b id="level-label">LV. 1</b></span><span class="health-track"><span id="health-fill"></span></span><span class="health-numbers"><span id="health-label">100 / 100</span><span class="status-hint">状态 <kbd>C</kbd></span></span></span></button>
+        <div class="run-clock"><div id="phase-label">夜色渐深</div><strong id="timer">00:00</strong><span>破晓倒计时 <b id="time-left">06:00</b></span></div>
+        <div class="run-stats"><span><i>☠</i> <b id="kill-count">0</b><small>击败</small></span><span><i>✦</i> <b id="gold-count">0</b><small>余烬</small></span><button id="pause-button" class="run-menu-entry" aria-label="打开远征菜单，继续、重新开始或退出到营地" title="远征菜单 [Esc / P]" aria-haspopup="dialog"><span aria-hidden="true">Ⅱ</span><span>菜单</span><kbd>Esc</kbd></button></div>
+      </div>
+      <div id="boss-bar" class="boss-bar hidden"><span id="boss-name">墓园看守</span><div><i id="boss-fill"></i></div><small id="boss-health"></small></div>
+      <button id="fusion-tracker" class="fusion-tracker" aria-label="查看武器融合图谱" title="融合图谱 [G]"><span class="fusion-tracker-glyph">◇</span><span><b id="fusion-tracker-title">融合图谱</b><small id="fusion-tracker-detail">亲手铸成，才会记入图谱</small></span><kbd>G</kbd></button>
+      <button id="hud-catalog-button" class="hud-catalog-button" aria-label="查看历次远征已发现的道具" title="道具图鉴 [I]"><span>▤ 道具图鉴 <b id="hud-catalog-count">0</b></span><kbd>I</kbd></button>
+      <div id="event-banner" class="event-banner"></div>
+      <div id="toast" role="status" class="toast"></div>
+      <div class="hud-bottom"><div class="area-label"><span class="live-dot"></span> 遗忘墓园<small id="threat-label">威胁等级 I</small></div><div id="weapon-dock" class="weapon-dock"></div><div class="dash-status"><div class="dash-icon">↯<span id="dash-cooldown"></span></div><span>幽影冲刺<small><kbd>SPACE</kbd></small></span></div></div>
+      <div id="touch-controls"><div id="joystick"><i></i></div><button id="touch-dash" aria-label="冲刺">↯</button></div>
+    </section>
+
+    <section id="level-screen" class="modal-wrap hidden"><div class="level-modal"><div class="eyebrow centered">THE LIGHT GROWS STRONGER</div><h2>余烬觉醒</h2><p>黑暗赋予你选择，<span id="new-level">等级 2</span></p><div id="upgrade-cards" class="upgrade-cards"></div><div class="level-footer"><button id="level-menu-button" class="text-button">远征菜单 <kbd>Esc</kbd></button><span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> 快捷选择</span><button id="level-status-button" class="text-button">角色状态 <kbd>C</kbd></button><button id="level-fusion-button" class="text-button">融合图谱 <kbd>G</kbd></button><button id="level-catalog-button" class="text-button">道具图鉴 <kbd>I</kbd></button><button id="reroll-button" class="text-button">↻ 重铸命运 <span id="rerolls-left">3</span></button></div></div></section>
+
+    <section id="pause-screen" class="modal-wrap hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-describedby="pause-context">
+      <div class="panel pause-panel">
+        <div class="eyebrow centered">A MOMENT IN THE DARK</div><h2 id="pause-title">远征菜单</h2><p id="pause-context">战斗已暂停，准备好再出发。</p>
+        <div id="pause-stats" class="pause-stats"></div>
+        <button id="resume-button" class="primary-button compact"><span id="resume-label">继续守夜</span><kbd>Esc</kbd></button>
+        <div class="run-actions">
+          <button id="restart-button" class="run-action restart-action"><span class="run-action-symbol" aria-hidden="true">↻</span><span><strong>重新开始</strong><small id="restart-description">使用当前角色，从 00:00 / LV.1 重开</small></span><kbd>R</kbd></button>
+          <button id="quit-button" class="run-action quit-action"><span class="run-action-symbol" aria-hidden="true">⌂</span><span><strong>退出到营地</strong><small>结算本局，返回角色选择与永久祭坛</small></span><kbd>Q</kbd></button>
+        </div>
+        <div class="run-preservation"><b id="pause-reward">本局可结算 +0 余烬</b><span>重开和退出都会结算本局余烬，保留永久成长与图鉴发现；本局等级与装备在下一局重新获得。</span></div>
+        <div class="run-reference-actions"><button id="pause-status-button" class="sheet-entry">角色状态 <kbd>C</kbd></button><button id="pause-catalog-button" class="sheet-entry">道具图鉴 <kbd>I</kbd></button></div>
+        <div class="controls-legend"><span><kbd>WASD / ↑↓←→</kbd> 移动</span><span><kbd>SPACE</kbd> 冲刺</span><span><kbd>Esc / P</kbd> 菜单 / 返回</span><span><kbd>M</kbd> 声音</span></div>
+      </div>
+    </section>
+
+    <section id="end-screen" class="modal-wrap hidden"><div class="panel end-panel"><div id="end-eyebrow" class="eyebrow centered">THE EMBER NEVER DIES</div><canvas id="end-art" width="96" height="64"></canvas><h2 id="end-title">灯灭，余烬犹存。</h2><p id="end-description">每一次倒下，都让下一盏灯更明亮。</p><div id="end-stats" class="end-stats"></div><div id="record-label" class="record-label"></div><button id="retry-button" class="primary-button compact">重新开始 <span>↻</span></button><button id="end-status-button" class="sheet-entry">查看本局属性与道具 <kbd>C</kbd></button><button id="end-catalog-button" class="sheet-entry">查看永久道具图鉴 <kbd>I</kbd></button><button id="home-button" class="text-button">退出到营地 · 升级祭坛</button></div></section>
+
+    <section id="archive-screen" class="modal-wrap hidden"><div class="panel archive-panel"><button class="close-button" data-close="archive-screen" aria-label="关闭">×</button><div class="eyebrow">FIELD NOTES / 137</div><h2>守灯人手记</h2><p>记住这些，黎明就会近一点。</p><div class="guide-grid"><article><span>01</span><h3>保持移动</h3><p>武器会自动锁敌。用 WASD 或方向键移动，空格冲刺穿过敌群；冲刺期间免疫伤害。右上角「菜单」或 Esc 可暂停、重新开始和退出到营地。</p></article><article><span>02</span><h3>拾起灵光</h3><p>击败敌人会掉落绿色经验结晶。收集后升级，从三种随机祝福中选择一种，打造自己的流派。</p></article><article><span>03</span><h3>进化与融合</h3><p>10 种普通武器各有独立进化。尝试搭配武器与联动遗物，条件满足时升级会出现未知融合；首次铸成后，按 G 回看已发现配方。</p></article><article><span>04</span><h3>守到黎明</h3><p>精英看守在 02:00、04:00 来袭。活过六分钟并击败最终首领，黎明才会到来。</p></article><article><span>05</span><h3>探索墓园</h3><p>靠近祭坛自动点亮，获得治疗和经验。精英掉落宝箱，冲刺进入拾取范围即可收获。</p></article><article><span>06</span><h3>遗物共鸣</h3><p>联动遗物会响应武器命中、施放或击杀，产生点燃、引雷、冰爆等效果。部分遗物能参与融合，消耗后化为成品的固有能力。</p></article></div><div class="archive-foot">建议戴上耳机 · 支持键盘与触屏 · 进度保存在当前浏览器</div></div></section>
+
+    <section id="meta-screen" class="modal-wrap hidden"><div class="panel meta-panel"><button class="close-button" data-close="meta-screen" aria-label="关闭">×</button><div class="eyebrow">THE EMBER SANCTUM</div><h2>余烬祭坛</h2><p>将长夜的馈赠，留给下一次远征。</p><div class="ember-balance">✦ <strong id="ember-balance">0</strong><span>可用余烬</span></div><div id="meta-upgrades" class="meta-upgrades"></div><div id="meta-best" class="archive-foot"></div></div></section>
+    <section id="status-screen" class="modal-wrap hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-describedby="sheet-context">
+      <div class="panel sheet-panel">
+        <header class="sheet-header"><div><div class="eyebrow">WARDEN'S DOSSIER / 守灯人档案</div><h2 id="sheet-title">角色状态</h2></div><button id="sheet-close" class="icon-button" aria-label="关闭角色状态" title="关闭 [C / Esc]">×</button></header>
+        <div class="sheet-hero">
+          <div class="sheet-portrait"><canvas id="sheet-avatar" width="32" height="40"></canvas></div>
+          <div class="sheet-identity"><div><h3 id="sheet-name"></h3><span id="sheet-level" class="sheet-badge"></span></div><p id="sheet-talent"></p><small id="sheet-lore"></small></div>
+          <div class="sheet-vitals"><div><span>生命</span><b id="sheet-health"></b></div><div class="sheet-meter"><i id="sheet-health-fill"></i></div><div><span>升级经验</span><b id="sheet-xp"></b></div><div class="sheet-meter experience"><i id="sheet-xp-fill"></i></div></div>
+        </div>
+        <div class="sheet-context"><span id="sheet-context"></span><span id="sheet-run"></span></div>
+        <div class="sheet-tabs" role="tablist" aria-label="角色状态内容">
+          <button id="sheet-tab-attributes" role="tab" aria-selected="true" aria-controls="sheet-attributes" tabindex="0">01 <span>角色属性</span></button>
+          <button id="sheet-tab-items" role="tab" aria-selected="false" aria-controls="sheet-items" tabindex="-1">02 <span>武器与道具</span><b id="sheet-item-count">0</b></button>
+          <button id="sheet-tab-fusion" role="tab" aria-selected="false" aria-controls="sheet-fusion" tabindex="-1">03 <span>融合图谱</span><b id="sheet-fusion-count">0/9</b></button>
+          <button id="sheet-tab-catalog" role="tab" aria-selected="false" aria-controls="sheet-catalog" tabindex="-1">04 <span>道具图鉴</span><b id="sheet-catalog-count">0</b></button>
+        </div>
+        <div id="sheet-scroll" class="sheet-scroll">
+          <div id="sheet-attributes" role="tabpanel" aria-labelledby="sheet-tab-attributes" tabindex="0">
+            <div class="sheet-section-heading"><h3>当前属性</h3><span>已计入全部生效加成</span></div>
+            <div id="sheet-stat-grid" class="sheet-stat-grid"></div>
+            <div class="sheet-section-heading"><h3>永久祭坛</h3><span id="sheet-meta-note">本次远征生效的祝福</span></div>
+            <div id="sheet-meta" class="sheet-meta-grid"></div>
+          </div>
+          <div id="sheet-items" class="hidden" role="tabpanel" aria-labelledby="sheet-tab-items" tabindex="0">
+            <div class="sheet-section-heading"><h3>武器 <span id="sheet-weapon-count"></span></h3><span>伤害已计入加成，暴击另算</span></div>
+            <div id="sheet-weapons" class="sheet-item-grid"></div>
+            <div class="sheet-section-heading"><h3>属性祝福 <span id="sheet-passive-count"></span></h3><span>显示当前等级的累计效果</span></div>
+            <div id="sheet-passives" class="sheet-item-grid"></div>
+            <div class="sheet-section-heading"><h3>联动遗物 <span id="sheet-relic-count"></span></h3><span>命中 · 施放 · 击杀触发</span></div>
+            <p class="relic-guide">遗物随装备自动生效。查看下方的联动状态，找到适合你当前武器的搭配；标有菱形印记的遗物也能参与融合。</p>
+            <div id="sheet-relics" class="sheet-item-grid"></div>
+            <details class="sheet-pickup-guide"><summary>拾取物与场景奖励 <span>查看效果 ＋</span></summary><div id="sheet-pickups" class="sheet-pickup-grid"></div></details>
+          </div>
+          <div id="sheet-catalog" class="hidden" role="tabpanel" aria-labelledby="sheet-tab-catalog" tabindex="0">
+            <div class="catalog-intro"><div><span>THE KEEPER'S COLLECTION / 长夜藏品</span><h3>拾起过的光，永不遗忘。</h3><p id="catalog-context">营地查阅 · 历次远征发现永久保留</p></div><div class="catalog-counter"><strong id="catalog-count">0 / 39</strong><small>已发现道具</small></div></div>
+            <div class="catalog-toolbar"><label class="catalog-search"><span>⌕</span><input id="catalog-search" type="search" aria-label="搜索已发现的道具" placeholder="搜索名称、效果、触发条件…" autocomplete="off" spellcheck="false"><button id="catalog-clear" aria-label="清空图鉴搜索" title="清空搜索">×</button></label><span id="catalog-list-count" aria-live="polite"></span></div>
+            <div id="catalog-filters" class="catalog-filters" role="group" aria-label="图鉴分类"></div>
+            <div id="catalog-empty" class="catalog-empty"></div>
+            <div id="catalog-layout" class="catalog-layout"><nav id="catalog-list" class="catalog-list" aria-label="已发现道具列表"></nav><article id="catalog-detail" class="catalog-detail" tabindex="-1" aria-label="道具详细信息"></article></div>
+            <p id="catalog-save-note" class="catalog-save-note"></p>
+          </div>
+          <div id="sheet-fusion" class="hidden" role="tabpanel" aria-labelledby="sheet-tab-fusion" tabindex="0">
+            <div class="fusion-intro discovery-intro"><div><span>THE UNWRITTEN GRIMOIRE / 发现手记</span><h3>传说，由你亲手写下。</h3><p>只有在远征中<b>成功融合</b>的武器，才会记录名称、材料与效果。发现会立即保存，之后的远征可回看与追踪。</p></div><div class="discovery-counter"><strong id="sheet-discovery-count">0 / 9</strong><small>已发现的融合</small></div></div>
+            <div class="fusion-rule-strip"><span>◇ 未知配方自动判定，无需追踪</span><span>◆ 武器 × 武器，或武器 × 遗物</span><span>✦ 升级时选择融合，成品最高 3 级</span></div>
+            <div id="sheet-fusion-recipes" class="fusion-recipes"></div>
+            <p class="fusion-footnote">图谱仅展示已经亲手发现的配方。融合会消耗所列材料；道具的独立效果随之失去，已消耗的材料本局不再出现。追踪已知配方会从下次升级或重铸开始优先提供材料。宝箱只强化装备，不会自动融合。</p>
+          </div>
+        </div>
+        <footer class="sheet-footer"><span><kbd>C</kbd> / <kbd>ESC</kbd> 关闭 <i>·</i> 查看期间时间停止</span><button id="sheet-menu-button" class="sheet-run-menu hidden">远征菜单</button><button id="sheet-return" class="sheet-return">继续守夜 ↗</button></footer>
+      </div>
+    </section>
+    <div id="announcer" class="sr-only" aria-live="polite"></div>
+  </main>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
