@@ -154,12 +154,12 @@ export class CharacterSheet {
     const dashLeft = preview ? 0 : this.game.player.dashCooldown;
     const dashState = !preview && this.game.player.dashTime > 0 ? '正在冲刺' : dashLeft > 0 ? '剩余 ' + seconds(dashLeft) : '已就绪';
     const rows = [
-      ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 10}`, p.vitality && `不灭之心 +${p.vitality * 25}`])],
+      ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 8}`, p.vitality && `不灭之心 +${p.vitality * 18}`])],
       ['power', '武器伤害', percent(stats.damageMultiplier), '倍率', source([`角色基础 ×${number(character.damage, 2)}`, `加成池 +${number(((m.power || 0) * .05 + (p.power || 0) * .15) * 100)}%`, m.power && `祭坛 +${m.power * 5}%`, p.power && `猩红誓约 +${p.power * 15}%`])],
       ['haste', '施放冷却缩减', percent(1 - stats.haste), '', p.haste ? `时隙沙漏 ${p.haste} 级；再与武器自身冷却相乘。游魂灯的接触间隔不变。` : '暂无冷却祝福；每种武器仍有独立的等级冷却。'],
       ['speed', '移动速度', number(stats.moveSpeed), '像素 / 秒', source([`角色基础 ${character.speed}`, p.speed ? `夜行之靴 +${p.speed * 8}%` : '暂无额外加成'])],
       ['armor', '伤害减免', stats.armor, '点 / 次', p.armor ? `旧王护符 ${p.armor} 级；受伤扣除固定数值，最低为 1。` : '暂无护符；固定减伤不等于百分比减伤。'],
-      ['regen', '生命恢复', number(stats.regeneration), '点 / 秒', source([p.regen && `复苏苔芽 +${number(p.regen * .7)}`, m.regen && `春回之息 +${number(m.regen * .2)}`]) || '暂无持续恢复效果。'],
+      ['regen', '生命恢复', number(stats.regeneration), '点 / 秒', source([p.regen && `复苏苔芽 +${number(p.regen * .45)}`, m.regen && `春回之息 +${number(m.regen * .1)}`]) || '暂无持续恢复效果。'],
       ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 38', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .3, 2)}`])],
       ['magnet', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.magnet && `引魂石 +${p.magnet * 10}%`, m.magnet && `引路之光 +${m.magnet * 10}%`])],
       ['luck', '暴击率', percent(stats.criticalChance), '', source(['基础 5%', p.luck && `命运四叶 +${p.luck * 8} 个百分点`])],
@@ -301,7 +301,7 @@ export class CharacterSheet {
           const link=node('button','sheet-recipe-link','已发现路线 · '+WEAPONS[recipe.id].name+' ↗');link.addEventListener('click',()=>{this.selectTab('fusion');$('recipe-'+recipe.id)?.scrollIntoView({block:'nearest'})});card.append(link);
         }
       }
-      if(key==='vitality')card.append(node('p','sheet-effect-note','每次获得时立即恢复 35 点生命，上限为最大生命。'));
+      if(key==='vitality')card.append(node('p','sheet-effect-note','每次获得时立即恢复 20 点生命，上限为最大生命。'));
       if(key==='haste')card.append(node('p','sheet-effect-note','缩短武器施放冷却；环绕接触、持续伤害和遗物触发冷却不受影响。'));
       const next=node('p','sheet-next');
       next.textContent=level>=data.max?'已满级 · 当前效果持续至被融合消耗或本次远征结束。':'下一级累计：'+(data.relic?relicDescription(key,level+1,stats):passiveEffect(key,level+1));
@@ -321,7 +321,7 @@ export class CharacterSheet {
   buildMeta(meta) {
     $('sheet-meta').replaceChildren(...Object.entries(META).map(([key, info]) => {
       const level = meta[key] || 0;
-      const effects = {vitality: `初始生命 +${level * 10}`, power: `武器伤害加成 +${level * 5}%`, magnet: `经验获取 +${level * 10}%`, regen: `每秒恢复 ${number(level * .2)} 点生命`};
+      const effects = {vitality: `初始生命 +${level * 8}`, power: `武器伤害加成 +${level * 5}%`, magnet: `经验获取 +${level * 10}%`, regen: `每秒恢复 ${number(level * .1)} 点生命`};
       const card = node('article', 'sheet-meta-card' + (level ? '' : ' inactive')), words = node('div'), title = node('h4', '', info.name);
       title.append(node('span', '', `LV. ${level} / ${info.max}`));
       words.append(title, node('p', '', level ? effects[key] : '未获得 · 可在营地的余烬祭坛提升'));
@@ -333,11 +333,11 @@ export class CharacterSheet {
   buildPickups(stats) {
     const rows = [
       ['灵光结晶', `拾取后获得经验；结晶所含经验随敌人而变，当前按 ${percent(stats.xpMultiplier)} 获取。`],
-      ['生命药草', '拾取后立即恢复 18 点生命，不超过最大生命。'],
+      ['生命药草', '拾取后立即恢复 16 点生命，不超过最大生命。'],
       ['引魂之光', '让地面上现有的全部经验结晶向你飞来；不永久改变拾取半径。'],
-      ['古老宝箱', `恢复 20 点生命，并随机强化一件已持有武器：普通武器最高进化，融合武器最高 3 级。所有装备都达到各自上限后改为 ${number(45 * stats.xpMultiplier)} 经验。精英宝箱另赠 25 余烬，首领宝箱赠 60。宝箱不会自动消耗材料进行融合。`],
-      ['古老祭坛', `靠近自动点亮，每座仅一次：恢复 35 点生命，获得 15 余烬与 ${number(12 * stats.xpMultiplier)} 经验。`],
-      ['生命甘露', '所有武器与被动都满级后的升级馈赠：立即回满生命并获得 30 余烬。'],
+      ['古老宝箱', `恢复 14 点生命，并随机强化一件已持有武器：普通武器最高进化，融合武器最高 3 级。所有装备都达到各自上限后改为 ${number(32 * stats.xpMultiplier)} 经验。精英宝箱另赠 25 余烬，首领宝箱赠 60。宝箱不会自动融合。`],
+      ['古老祭坛', `靠近自动点亮，每座仅一次：恢复 25 点生命，获得 15 余烬与 ${number(12 * stats.xpMultiplier)} 经验。`],
+      ['生命甘露', '所有武器与被动都满级后的升级馈赠：恢复 50% 最大生命并获得 30 余烬。'],
     ];
     $('sheet-pickups').replaceChildren(...rows.map(([title, description]) => {
       const entry = node('article'); entry.append(node('h4', '', title), node('p', '', description)); return entry;

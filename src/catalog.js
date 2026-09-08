@@ -112,7 +112,7 @@ export class ItemCatalog {
       target.append(node('p','catalog-acquisition','获得方式：'+(data.fusion?'在远征的升级选择中完成对应融合；成品可继续升级或由宝箱强化。':'从升级选择中获得；部分角色以该武器出征。升级与宝箱可强化，最高进化至 6 级。')));
     }else if(type==='passive'){
       target.append(node('p','catalog-description',data.relic?relicDescription(key,level,stats):passiveEffect(key,level)));
-      if(key==='vitality')target.append(node('p','catalog-description','每次升级此祝福时，还会立即恢复 35 点生命，不超过最大生命。'));
+      if(key==='vitality')target.append(node('p','catalog-description','每次升级此祝福时，还会立即恢复 20 点生命，不超过最大生命。'));
       if(key==='haste')target.append(node('p','catalog-description','仅影响武器施放冷却；环绕接触、持续伤害和遗物触发冷却不受影响。'));
       if(data.relic){target.append(node('div','catalog-trigger','触发条件 · '+data.trigger));if(data.lore)target.append(node('p','catalog-lore',data.lore))}
       if(data.catalyst)target.append(node('p','catalog-acquisition','可作为融合材料。融合会消耗全部等级并失去原有独立效果；只有已发现的路线会在下方展示。'));

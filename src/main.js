@@ -1,4 +1,4 @@
-import {Game} from './game.js';
+import {Game,RUN_DURATION} from './game.js';
 import {Sound} from './audio.js';
 import {paintIcon,paintAvatar,fire,glow,drawSprite} from './art.js';
 import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,META,formatTime,readSave,writeSave,mergeItemDiscoveries,catalogItem} from './data.js';
@@ -67,9 +67,9 @@ function toggleSound(){sound.init();sound.toggle();save.muted=sound.muted;savePr
 async function fullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{if(game.state==='running')game.toast('当前浏览器不支持全屏，可以使用浏览器的全屏功能。')}}
 
 function updateHud(){
- const p=game.player;if(!p)return;const hp=Math.max(0,Math.ceil(p.hp));text('health-label',hp+' / '+p.maxHp);$('health-fill').style.width=Math.max(0,p.hp/p.maxHp*100)+'%';$('xp-fill').style.width=Math.min(100,game.xp/game.xpNext*100)+'%';text('xp-label','LEVEL '+String(game.level).padStart(2,'0'));text('level-label','LV. '+game.level);text('timer',formatTime(game.time));text('time-left',game.time<360?formatTime(360-game.time):'击败首领');text('kill-count',game.kills.toLocaleString());text('gold-count',game.gold.toLocaleString());
- text('phase-label',game.time<60?'月下初行':game.time<120?'夜色渐深':game.time<180?'暗潮汹涌':game.time<240?'群魔苏醒':game.time<300?'黎明将至':game.time<360?'最后的守望':'破晓之战');
- text('threat-label','威胁等级 '+['I','II','III','IV','V','VI','VII'][Math.min(6,Math.floor(game.time/60))]);
+ const p=game.player;if(!p)return;const hp=Math.max(0,Math.ceil(p.hp));text('health-label',hp+' / '+p.maxHp);$('health-fill').style.width=Math.max(0,p.hp/p.maxHp*100)+'%';$('xp-fill').style.width=Math.min(100,game.xp/game.xpNext*100)+'%';text('xp-label','LEVEL '+String(game.level).padStart(2,'0'));text('level-label','LV. '+game.level);text('timer',formatTime(game.time));text('time-left',game.time<RUN_DURATION?formatTime(RUN_DURATION-game.time):'击败首领');text('kill-count',game.kills.toLocaleString());text('gold-count',game.gold.toLocaleString());
+ text('phase-label',game.time<60?'月下初行':game.time<120?'夜色渐深':game.time<240?'暗潮汹涌':game.time<360?'群魔苏醒':game.time<480?'黎明将至':game.time<RUN_DURATION?'最后的守望':'破晓之战');
+ text('threat-label','威胁等级 '+['I','II','III','IV','V','VI','VII','VIII','IX','X','XI'][Math.min(10,Math.floor(game.time/60))]);
  const maxCooldown=game.stats.dashCooldown;$('dash-cooldown').style.height=Math.min(100,game.player.dashCooldown/maxCooldown*100)+'%';$('touch-dash').style.opacity=game.player.dashCooldown>0?'.45':'1';
  const bosses=game.enemies.filter(e=>e.boss&&!e.dead);const boss=bosses.find(e=>e.final)||bosses[0];if(boss){show('boss-bar');text('boss-name',boss.name+(boss.enraged?' · 狂怒':''));$('boss-fill').style.width=Math.max(0,boss.hp/boss.maxHp*100)+'%';text('boss-health',Math.max(0,Math.ceil(boss.hp)).toLocaleString()+' / '+boss.maxHp.toLocaleString());lastBoss=boss.id}else{hide('boss-bar');lastBoss=null}
 }

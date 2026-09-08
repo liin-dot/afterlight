@@ -43,7 +43,7 @@ export function onWeaponHit(game,e,kind) {
   }
   if(kind==='bloodmoon'&&game.player.hp<game.player.maxHp) {
     const level=game.weapons.bloodmoon||1;
-    if(readyProc(game,'bloodmoon',1.25-level*.15))game.player.hp=Math.min(game.player.maxHp,game.player.hp+2+level);
+    if(readyProc(game,'bloodmoon',1.4-level*.15))game.player.hp=Math.min(game.player.maxHp,game.player.hp+1+level);
   }
   if(p.conductor&&(tags.includes('projectile')||tags.includes('beam'))) {
     const v=relicValues('conductor',p.conductor,game.stats);

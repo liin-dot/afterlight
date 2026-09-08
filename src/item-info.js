@@ -6,12 +6,12 @@ const damage=v=>String(Math.round(v));
 
 export const passiveEffect = (key, level) => ({
   power: `武器伤害加成 +${level * 15}%。`,
-  vitality: `最大生命 +${level * 25}。`,
+  vitality: `最大生命 +${level * 18}。`,
   haste: `所有武器的施放冷却缩短 ${level * 8}%。`,
   speed: `移动速度 +${level * 8}%，冲刺冷却缩短 ${level * 8}%。`,
   magnet: `拾取范围 +${level * 30}%，经验获取 +${level * 10}%。`,
   armor: `每次受伤减少 ${level * 2} 点；最低仍受到 1 点伤害。`,
-  regen: `每秒恢复 ${number(level * .7)} 点生命。`,
+  regen: `每秒恢复 ${number(level * .45)} 点生命。`,
   luck: `暴击率增加 ${level * 8} 个百分点；暴击伤害为 2 倍。`,
 }[key]);
 

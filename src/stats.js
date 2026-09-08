@@ -3,14 +3,14 @@ import {WEAPONS} from './data.js';
 // The simulation and character sheet use the same effective values.
 export function characterStats(character, passives = {}, meta = {}) {
   return {
-    maxHp: character.hp + (meta.vitality || 0) * 10 + (passives.vitality || 0) * 25,
+    maxHp: character.hp + (meta.vitality || 0) * 8 + (passives.vitality || 0) * 18,
     damageMultiplier: character.damage * (1 + (meta.power || 0) * .05 + (passives.power || 0) * .15),
     haste: Math.max(.48, 1 - (passives.haste || 0) * .08),
     moveSpeed: character.speed * (1 + (passives.speed || 0) * .08),
     pickupRadius: 38 * (character.id === 'witch' ? 1.35 : 1) * (1 + (passives.magnet || 0) * .30),
     xpMultiplier: 1 + (passives.magnet || 0) * .10 + (meta.magnet || 0) * .10,
     armor: (passives.armor || 0) * 2,
-    regeneration: (passives.regen || 0) * .7 + (meta.regen || 0) * .2,
+    regeneration: (passives.regen || 0) * .45 + (meta.regen || 0) * .1,
     criticalChance: .05 + (passives.luck || 0) * .08,
     criticalMultiplier: 2,
     dashCooldown: 2.5 * (1 - (passives.speed || 0) * .08),
@@ -32,7 +32,7 @@ export function weaponStats(kind, level, stats, character) {
     case 'eclipse': return {...common,damage:damage(75+level*35),count:2+level,radius:16+level*2,flightTime:.8,returnMultiplier:1+level*.15,splashDamage:damage(25+level*18),splashRadius:25+level*6};
     case 'requiem': return {...common,damage:damage(80+level*40),radius:112+level*13,echoDamage:damage(65+level*35),echoCount:1,echoDelay:.55,count:4+level*2,soulDamage:damage(32+level*18)};
     case 'plague': return {...common,damage:damage(45+level*22),count:level,radius:58+level*11,duration:3.4,hitInterval:.6,fieldDamage:damage(23+level*12),poisonDamage:damage(23+level*12),poisonDuration:3,blastDamage:damage(95+level*45)};
-    case 'bloodmoon': return {...common,damage:damage(65+level*30),count:1+level,radius:14+level*2,flightTime:.7,returnMultiplier:1.25,heal:2+level,healCooldown:1.25-level*.15};
+    case 'bloodmoon': return {...common,damage:damage(65+level*30),count:1+level,radius:14+level*2,flightTime:.7,returnMultiplier:1.25,heal:1+level,healCooldown:1.4-level*.15};
     case 'tempest': return {...common,damage:damage(85+level*35),count:2+level,range:310+level*20,width:10+level*2,chainDamage:damage(35+level*20),chainCount:3+level,chainRange:165};
     case 'absolute': return {...common,damage:damage(70+level*32),radius:125+level*13,freeze:1.6+level*.2,bossFreeze:.45+level*.1,blastDamage:damage(110+level*55),echoDelay:.65,slowDuration:3.2};
     case 'solar': return {...common, damage:damage(110 + level * 60), radius:94 + level * 12, arc:Math.PI * 2, burnDamage:damage(40 + level * 15), innerRadius:32, duration:1.8, hitInterval:.45};

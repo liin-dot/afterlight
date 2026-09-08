@@ -1,9 +1,9 @@
 import {NEW_WEAPONS,RELICS} from './content.js';
 
 export const CHARACTERS = [
- {id:'warden',name:'守灯人',english:'WARDEN',tag:'近战 · 均衡',weapon:'blade',hp:110,speed:88,damage:1.10,description:'<b>余烬长刃</b> 起手 · 伤害 +10% · 生命 110',lore:'背着最后一盏灯，走进无人归来的墓园。'},
- {id:'witch',name:'逐星者',english:'SEER',tag:'法术 · 环绕',weapon:'orbit',hp:85,speed:91,damage:1,description:'<b>游魂灯</b> 起手 · 拾取范围 +35% · 生命 85',lore:'群星熄灭以后，她仍听得见灵魂的回声。'},
- {id:'ranger',name:'荒野客',english:'RANGER',tag:'远程 · 敏捷',weapon:'bolt',hp:95,speed:102,damage:1,description:'<b>荆棘连弩</b> 起手 · 弩矢数量 +1 · 生命 95',lore:'比黑暗更安静，比死亡快一步。'},
+ {id:'warden',name:'守灯人',english:'WARDEN',tag:'近战 · 均衡',weapon:'blade',hp:90,speed:88,damage:1.10,description:'<b>余烬长刃</b> 起手 · 伤害 +10% · 生命 90',lore:'背着最后一盏灯，走进无人归来的墓园。'},
+ {id:'witch',name:'逐星者',english:'SEER',tag:'法术 · 环绕',weapon:'orbit',hp:70,speed:91,damage:1,description:'<b>游魂灯</b> 起手 · 拾取范围 +35% · 生命 70',lore:'群星熄灭以后，她仍听得见灵魂的回声。'},
+ {id:'ranger',name:'荒野客',english:'RANGER',tag:'远程 · 敏捷',weapon:'bolt',hp:80,speed:102,damage:1,description:'<b>荆棘连弩</b> 起手 · 弩矢数量 +1 · 生命 80',lore:'比黑暗更安静，比死亡快一步。'},
 ];
 export const WEAPONS = {
  ...NEW_WEAPONS,
@@ -20,25 +20,25 @@ export const WEAPONS = {
 export const PASSIVES = {
  ...RELICS,
  power:{name:'猩红誓约',desc:'所有武器伤害 +15%。',color:'#d5957c',max:5},
- vitality:{name:'不灭之心',desc:'最大生命 +25，并立即恢复 35 点生命。',color:'#b7ce92',max:5},
+ vitality:{name:'不灭之心',desc:'最大生命 +18，并立即恢复 20 点生命。',color:'#b7ce92',max:5},
  haste:{name:'时隙沙漏',desc:'所有武器冷却缩短 8%。',color:'#d8c997',max:5},
  speed:{name:'夜行之靴',desc:'移动速度 +8%，冲刺冷却缩短 8%。',color:'#b1c696',max:5},
  magnet:{name:'引魂石',desc:'拾取范围 +30%，经验获取 +10%。',color:'#92c4c2',max:5},
  armor:{name:'旧王护符',desc:'每次受伤减少 2 点，最低仍受到 1 点伤害。',color:'#b9c4a1',max:5},
- regen:{name:'复苏苔芽',desc:'每秒恢复 0.7 点生命。',color:'#a9c591',max:5},
+ regen:{name:'复苏苔芽',desc:'每秒恢复 0.45 点生命。',color:'#a9c591',max:5},
  luck:{name:'命运四叶',desc:'暴击几率 +8%，暴击造成双倍伤害。',color:'#bbc58c',max:5},
 };
 export const META = {
- vitality:{name:'长明之躯',desc:'每级 +10 初始生命',max:5,cost:50},
+ vitality:{name:'长明之躯',desc:'每级 +8 初始生命',max:5,cost:50},
  power:{name:'余烬之力',desc:'每级 +5% 武器伤害',max:5,cost:65},
  magnet:{name:'引路之光',desc:'每级 +10% 经验获取',max:5,cost:55},
- regen:{name:'春回之息',desc:'每级 +0.2 生命 / 秒',max:5,cost:75},
+ regen:{name:'春回之息',desc:'每级 +0.1 生命 / 秒',max:5,cost:75},
 };
 export const PICKUPS = {
  xp:{name:'灵光结晶',color:'#b3cc89',desc:'拾取后获得经验。不同敌人掉落的结晶包含不同经验，较大的结晶也可能由多颗合并而成。',source:'击败敌人后掉落。'},
- heal:{name:'生命药草',color:'#bfd394',desc:'拾取后立即恢复 18 点生命，不超过最大生命。',source:'击败敌人时有机会掉落。'},
+ heal:{name:'生命药草',color:'#bfd394',desc:'拾取后立即恢复 16 点生命，不超过最大生命。',source:'击败敌人时有机会掉落。'},
  magnet:{name:'引魂之光',color:'#a6d9e2',desc:'让地面上现有的全部经验结晶向你飞来；不会永久改变拾取范围。',source:'击败普通敌人时有机会掉落。'},
- chest:{name:'古老宝箱',color:'#e0bd78',desc:'恢复 20 点生命，随机强化一件未满级的已持有武器。普通武器最高 6 级，融合武器最高 3 级；武器全部满级时改为获得 45 基础经验。精英宝箱另赠 25 余烬，首领宝箱赠 60 余烬。宝箱不会自动融合。',source:'击败精英或首领后掉落。'},
+ chest:{name:'古老宝箱',color:'#e0bd78',desc:'恢复 14 点生命，随机强化一件未满级的已持有武器。普通武器最高 6 级，融合武器最高 3 级；武器全部满级时改为获得 32 基础经验。精英宝箱另赠 25 余烬，首领宝箱赠 60 余烬。宝箱不会自动融合。',source:'击败精英或首领后掉落。'},
 };
 export const ENEMIES = {
  skeleton:{hp:26,speed:29,damage:9,xp:2,r:7,score:1},

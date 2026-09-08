@@ -39,7 +39,7 @@ export function relicValues(key,level,stats) {
     case 'conductor': return {damage:damage(18+level*12),count:level+1,range:130,cooldown:1.8-level*.2};
     case 'rime': return {damage:damage(22+level*16),radius:38+level*8,cooldown:1.6};
     case 'spore': return {damage:damage(15+level*12),radius:42+level*8,poisonDamage:damage(7+level*5),duration:3,cooldown:.3};
-    case 'siphon': return {heal:level+1,cooldown:1.4-level*.2};
+    case 'siphon': return {heal:level,cooldown:1.8-level*.2};
     case 'echo': return {damage:damage(20+level*18),radius:65+level*14,casts:3,cooldown:.6};
     case 'lens': return {multiplier:.3+level*.15};
     case 'cinder': return {damage:damage(22+level*18),radius:40+level*10,cooldown:.3};
