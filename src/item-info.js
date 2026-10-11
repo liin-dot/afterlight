@@ -5,14 +5,20 @@ const seconds=v=>number(v,2)+' 秒';
 const damage=v=>String(Math.round(v));
 
 export const passiveEffect = (key, level) => ({
-  power: `武器伤害加成 +${level * 15}%。`,
-  vitality: `最大生命 +${level * 18}。`,
-  haste: `所有武器的施放冷却缩短 ${level * 8}%。`,
-  speed: `移动速度 +${level * 8}%，冲刺冷却缩短 ${level * 8}%。`,
-  magnet: `拾取范围 +${level * 30}%，经验获取 +${level * 10}%。`,
-  armor: `每次受伤减少 ${level * 2} 点；最低仍受到 1 点伤害。`,
-  regen: `每秒恢复 ${number(level * .45)} 点生命。`,
-  luck: `暴击率增加 ${level * 8} 个百分点；暴击伤害为 2 倍。`,
+  power: `武器伤害加成 +${level * 12}%。`,
+  vitality: `最大生命 +${level * 12}。`,
+  haste: `所有武器的施放冷却缩短 ${level * 6}%。`,
+  speed: `移动速度 +${level * 6}%，冲刺冷却缩短 ${level * 6}%。`,
+  magnet: `拾取范围 +${level * 35}%。`,
+  armor: `每次受伤减少 ${level * 2} 点；至少承受原始伤害的 30%。`,
+  regen: `每秒恢复 ${number(level * .22)} 点生命。`,
+  luck: `暴击率增加 ${level * 5} 个百分点；基础暴击伤害为 2 倍。`,
+  area: `武器范围、光束宽度与距离 +${level * 10}%。`,
+  duration: `武器领域、减速与普通敌人冻结持续 +${level * 15}%；首领冻结不变。`,
+  amount: `武器弹数、环绕物或落雷目标 +${level}；不增加炮台数量。`,
+  focus: `暴击伤害倍率 +${number(level * .25,2)}。`,
+  growth: `经验获取 +${level * 10}%。`,
+  curse: `伤害 +${level * 10}%，经验 +${level * 8}%；敌人生命 +${level * 12}%，生成频率 +${level * 8}%，速度 +${level * 3}%。`,
 }[key]);
 
 export function weaponFacts(kind, values) {
@@ -39,10 +45,27 @@ export function weaponFacts(kind, values) {
     if (['prism','tempest'].includes(kind)) facts.push(['每轮光束',v.count+' 道'],['穿透距离',v.range+' 像素'],['光束宽度',v.width*2+' 像素']);
     if (kind==='tempest') facts.push(['每轮连锁目标',v.chainCount+' 个'],['连锁伤害',damage(v.chainDamage)]);
     if (kind==='absolute') facts.push(['圣域半径',v.radius+' 像素'],['普通敌人 / 首领冻结',seconds(v.freeze)+' / '+seconds(v.bossFreeze)],['延迟碎冰伤害',damage(v.blastDamage)],['碎冰延迟',seconds(v.echoDelay)]);
+    if(['shard','ricochet'].includes(kind))facts.push(['每轮骨轮',v.count+' 枚'],['每轮最多命中',v.bounces+1+' 个不同目标'],['弹跳搜索范围',v.range+' 像素']);
+    if(kind==='ricochet')facts.push(['首击分裂','2 枚追踪骨片'],['每枚骨片伤害',damage(v.splitDamage)]);
+    if(['meteor','starfall','supernova','hailfire'].includes(kind))facts.push(['每轮最多落点',v.count+' 处'],['爆炸半径',v.radius+' 像素'],['首枚落地延迟',seconds(v.delay)]);
+    if(['mine','wintermine','pestilence'].includes(kind))facts.push(['每轮陷阱',v.count+' 枚'],['爆炸半径',v.radius+' 像素'],['武装时间',seconds(v.armTime)],['留存上限',seconds(v.lifetime)],['同时留存','最多 12 枚；旧陷阱会引爆']);
+    if(['starfall','wintermine','pestilence','hailfire'].includes(kind)||kind==='meteor'&&v.evolved)facts.push(['残留领域持续',seconds(v.duration)],['领域伤害',damage(v.fieldDamage)+' / '+seconds(v.hitInterval)]);
+    if(kind==='starfall')facts.push(['易伤标记','伤害 +'+number((v.vulnerability-1)*100)+'% · 3 秒']);
+    if(kind==='supernova')facts.push(['交叉光束','4 道 · 各 '+damage(v.beamDamage)+' 伤害'],['每道光束长度',v.range+' 像素']);
+    if(kind==='wintermine'||kind==='hailfire')facts.push(['普通敌人 / 首领冻结',seconds(v.freeze)+' / '+seconds(v.bossFreeze)]);
+    if(kind==='pestilence')facts.push(['侵蚀伤害',damage(v.poisonDamage)+' / 秒'],['侵蚀持续',seconds(v.poisonDuration)],['终结毒爆',damage(v.blastDamage)]);
+    if(['sentinel','bastion','stormsentry','soulforge'].includes(kind))facts.push([kind==='soulforge'?'每轮追踪魂火':'每轮石弹',v.count+' 枚'],['射击间隔',seconds(v.fireInterval)],['召唤物持续',seconds(v.duration)],['每弹命中上限',v.pierce+' 个目标'],['索敌范围',v.range+' 像素'],['召唤物上限','同时存在 2 座']);
+    if(kind==='soulforge')facts.push(['散魂震波',damage(v.blastDamage)],['散魂半径',v.blastRadius+' 像素']);
+    if(kind==='bastion')facts.push(['近身守护','每 5 秒补至 '+v.shield+' 护盾'],['守护范围',v.shieldRadius+' 像素']);
+    if(kind==='stormsentry')facts.push(['每轮首弹连锁',v.chainCount+' 个目标'],['连锁伤害',damage(v.chainDamage)]);
+    if(['tether','soulchain'].includes(kind))facts.push(['最多锁定',v.count+' 个目标'],['连锁范围',v.range+' 像素'],['牵引距离',v.pull+' 像素 · 首领 12%'],['减速持续',seconds(v.slowDuration)]);
+    if((kind==='tether'||kind==='soulchain')&&v.blastDamage)facts.push(['延迟震爆',damage(v.blastDamage)],['震爆半径',v.blastRadius+' 像素']);
+    if(['lance','execution'].includes(kind))facts.push(['枪芒长度',v.range+' 像素'],['枪芒宽度',v.width*2+' 像素'],['每轮突刺',v.strikes+' 次']);
+    if(kind==='execution')facts.push(['处决阈值',percent(v.threshold)+' 生命以下'],['处决增伤',percent(v.executeMultiplier-1)+' · 首领减半']);
     return facts;
   }
 
 
 export function weaponExtra(key,v,stats,character){
- return key==='bolt'&&v.homing?' 进化后弩矢会追踪敌人。':key==='orbit'&&v.evolved?' 两组游魂沿内外双环反向旋转。':key==='flame'&&v.evolved?' 飞行中每 0.2 秒留下半径 20 像素的火路，持续 1.4 秒，每 0.45 秒造成 '+damage(weaponStats('flame',3,stats,character).burnDamage)+' 伤害。':'';
+ return key==='bolt'&&v.homing?' 进化后弩矢会追踪敌人。':key==='orbit'&&v.evolved?' 两组游魂沿内外双环反向旋转。':key==='flame'&&v.evolved?' 飞行中每 0.2 秒留下半径 '+number(20*stats.areaMultiplier)+' 像素的火路，持续 '+seconds(1.4*stats.durationMultiplier)+'，每 0.45 秒造成 '+damage(weaponStats('flame',3,stats,character).burnDamage)+' 伤害。':'';
 }

@@ -51,11 +51,10 @@ export function updateFusion(game,kind,v,dt) {
     game.sound.play('frost');game.burst(x,y,26,'#c1e6e9',130);
   }
   onWeaponCast(game,kind,game.projectiles[projectileStart]);
-  if(game.zones.length>50)game.zones.shift();
 }
 
 export function chainArrow(game,arrow,first) {
-  if(arrow.fusionKind!=='thunderbolt'||arrow.chained)return;
+  if(!arrow.chainDamage||arrow.chained)return;
   arrow.chained=true;
   const excluded=new Set(arrow.hit);
   let last=first;
@@ -96,7 +95,7 @@ export function updateFusionZone(game,z,dt) {
     z.tick=z.hitInterval;
     for(const e of enemies) {
       const d=Math.hypot(e.x-z.x,e.y-z.y);
-      if(d<z.r+e.r&&(!z.innerRadius||d+e.r>=z.innerRadius))game.hit(e,z.damage,z.x,z.y,0,false,z.kind);
+      if(d<z.r+e.r&&(!z.innerRadius||d+e.r>=z.innerRadius))game.hit(e,z.damage,z.x,z.y,0,false,z.kind,true);
     }
   }
 }

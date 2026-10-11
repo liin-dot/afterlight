@@ -2,6 +2,7 @@
   "name": "afterlight",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "AFTERLIGHT — an original pixel-art survivor game",
-  "scripts": { "start": "node server.cjs" }
+  "scripts": { "start": "node server.cjs", "check": "node tools/check-balance.mjs" }
 }

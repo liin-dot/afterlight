@@ -1,10 +1,12 @@
 import {paintAvatar, paintIcon} from './art.js';
-import {WEAPONS, PASSIVES, META, formatTime} from './data.js';
+import {WEAPONS, PASSIVES, PICKUPS, META, formatTime} from './data.js';
 import {characterStats, weaponStats} from './stats.js';
-import {FUSIONS,WEAPON_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData,fusionUsesRelic} from './fusions.js';
-import {relicDescription,compatibleWeapons} from './content.js';
+import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData,fusionUsesRelic} from './fusions.js';
+import {relicDescription,compatibleWeapons,SYNERGIES,BUILD_TAGS,itemTags} from './content.js';
+import {buildProfile} from './balance.js';
 import {passiveEffect,weaponFacts,weaponExtra} from './item-info.js';
 import {ItemCatalog} from './catalog.js';
+import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,characterTalentStatus} from './talents.js';
 
 const $ = id => document.getElementById(id);
 const number = (value, digits = 1) => Number(value.toFixed(digits)).toLocaleString('zh-CN', {maximumFractionDigits: digits});
@@ -36,7 +38,7 @@ export class CharacterSheet {
     this.sound = sound;
     this.visible = false;
     this.tab = 'attributes';
-    this.tabs = ['attributes', 'items', 'fusion', 'catalog'];
+    this.tabs = ['attributes', 'talents', 'items', 'fusion', 'catalog'];
     this.catalog=new ItemCatalog(this);
     $('sheet-close').addEventListener('click', () => this.close());
     $('sheet-return').addEventListener('click', () => this.close());
@@ -112,7 +114,8 @@ export class CharacterSheet {
     }
     $('sheet-scroll').scrollTop = 0;
     $('status-screen').classList.toggle('catalog-mode',this.tab==='catalog');
-    put('sheet-title',this.tab==='catalog'?'道具图鉴':'角色状态');
+    $('status-screen').classList.toggle('talent-mode',this.tab==='talents');
+    put('sheet-title',this.tab==='catalog'?'道具图鉴':this.tab==='talents'?'角色天赋':'角色状态');
   }
 
   build() {
@@ -125,7 +128,7 @@ export class CharacterSheet {
     const stats = preview ? characterStats(character, passives, meta) : game.stats;
     const hp = preview ? stats.maxHp : Math.max(0, game.player.hp);
     const maxHp = preview ? stats.maxHp : game.player.maxHp;
-    const xp = preview ? 0 : game.xp, nextXp = preview ? 10 : game.xpNext;
+    const xp = preview ? 0 : game.xp, nextXp = preview ? 8 : game.xpNext;
     paintAvatar($('sheet-avatar'), character.id);
     put('sheet-name', character.name);
     put('sheet-level', 'LV. ' + (preview ? 1 : game.level));
@@ -142,6 +145,7 @@ export class CharacterSheet {
     put('sheet-meta-note', preview ? '下次出征生效' : '本次出征时的祭坛加成');
     put('sheet-item-count', Object.keys(weapons).length + Object.keys(passives).length);
     this.buildAttributes(character, stats, passives, meta, preview);
+    this.buildTalents(character,preview);
     this.buildWeapons(character, stats, weapons);
     this.buildPassives(passives,stats,weapons);
     this.buildMeta(meta);
@@ -150,22 +154,56 @@ export class CharacterSheet {
     this.catalog.build({character,stats,weapons,passives,preview});
   }
 
+  buildTalents(character,preview){
+    const game=preview?{character,level:1,talents:{}}:this.game,definition=CHARACTER_TALENTS[character.id];
+    const points=talentPoints(game),learned=Object.keys(game.talents||{}).length,readOnly=preview||this.origin==='over';
+    put('sheet-talent-count',preview?'预览':points>0?'+'+points:learned+'/6');
+    const root=$('sheet-talents');root.replaceChildren();root.style.setProperty('--talent-color',definition.color);
+    const intro=node('div','talent-intro'),identity=node('div','talent-identity');
+    identity.append(artwork(definition.icon),node('div','',definition.style));intro.append(identity,node('h3','',definition.name),node('p','',definition.description));
+    if(!preview)intro.append(node('small','talent-live',characterTalentStatus(this.game)));
+    const budget=node('div','talent-budget');budget.append(node('strong','',preview?'六次成长':points+' 点可用'),node('span','',preview?'出征后赚取天赋点':'已投入 '+learned+' / 6'));intro.append(budget);root.append(intro);
+    const milestones=node('div','talent-milestones');
+    for(const level of TALENT_LEVELS)milestones.append(node('span',game.level>=level?'earned':'','LV.'+level+' · +1'));
+    root.append(milestones,node('p','talent-rules',preview?'每个节点消耗 1 点，依次学习同列天赋；第三层从 LV.18 开放，三种最终专精只能选择一种。':'本局天赋不占装备位，也不消耗升级三选一。依次学习同列天赋；最终专精三选一。本局投入无法撤回，重开后重置。'));
+    const tabs=node('div','talent-branch-tabs');tabs.setAttribute('role','group');tabs.setAttribute('aria-label','天赋分支');
+    const branches=node('div','talent-branches');this.talentBranch??=0;
+    definition.branches.forEach((branch,index)=>{
+      const tab=node('button','',branch.name);tab.setAttribute('aria-pressed',String(index===this.talentBranch));
+      tab.addEventListener('click',()=>{this.talentBranch=index;for(const [i,b] of [...tabs.children].entries())b.setAttribute('aria-pressed',String(i===index));for(const [i,b] of [...branches.children].entries())b.classList.toggle('selected',i===index)});tabs.append(tab);
+      const column=node('section','talent-branch'+(index===this.talentBranch?' selected':''));column.append(node('h4','',branch.name),node('p','',branch.role));
+      branch.nodes.forEach((talent,tier)=>{
+        const state=talentNodeState(game,talent.id),card=node('button','talent-node'+(state.learned?' learned':state.exclusive?' excluded':state.available&&!readOnly?' available':' locked'));
+        card.id='talent-'+talent.id;card.disabled=readOnly||!state.available;card.setAttribute('aria-label',talent.name+'。'+talent.description+'。'+state.reason);
+        const head=node('span','talent-node-head');head.append(artwork(talent.icon),node('b','',talent.name),node('em','',tier===2?'专精':'0'+(tier+1)));
+        card.append(head,node('span','talent-node-description',talent.description),node('span','talent-node-state',state.learned?'✓ 已学会':this.origin==='over'?'远征已结束':state.reason));
+        card.addEventListener('click',()=>this.game.learnTalent(talent.id));column.append(card);
+      });branches.append(column);
+    });root.append(tabs,branches);
+  }
+
   buildAttributes(character, stats, p, m, preview) {
+    const t=stats.talents||{};
     const dashLeft = preview ? 0 : this.game.player.dashCooldown;
     const dashState = !preview && this.game.player.dashTime > 0 ? '正在冲刺' : dashLeft > 0 ? '剩余 ' + seconds(dashLeft) : '已就绪';
     const rows = [
-      ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 8}`, p.vitality && `不灭之心 +${p.vitality * 18}`])],
-      ['power', '武器伤害', percent(stats.damageMultiplier), '倍率', source([`角色基础 ×${number(character.damage, 2)}`, `加成池 +${number(((m.power || 0) * .05 + (p.power || 0) * .15) * 100)}%`, m.power && `祭坛 +${m.power * 5}%`, p.power && `猩红誓约 +${p.power * 15}%`])],
+      ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 5}`, p.vitality && `不灭之心 +${p.vitality * 12}`])],
+      ['power', '武器伤害', percent(stats.damageMultiplier), '倍率', source([`角色基础 ×${number(character.damage, 2)}`, m.power && `祭坛 +${m.power * 3}%`, p.power && `猩红誓约 +${p.power * 12}%`,p.curse&&`禁忌烛冠 +${p.curse*10}%`])],
       ['haste', '施放冷却缩减', percent(1 - stats.haste), '', p.haste ? `时隙沙漏 ${p.haste} 级；再与武器自身冷却相乘。游魂灯的接触间隔不变。` : '暂无冷却祝福；每种武器仍有独立的等级冷却。'],
-      ['speed', '移动速度', number(stats.moveSpeed), '像素 / 秒', source([`角色基础 ${character.speed}`, p.speed ? `夜行之靴 +${p.speed * 8}%` : '暂无额外加成'])],
-      ['armor', '伤害减免', stats.armor, '点 / 次', p.armor ? `旧王护符 ${p.armor} 级；受伤扣除固定数值，最低为 1。` : '暂无护符；固定减伤不等于百分比减伤。'],
-      ['regen', '生命恢复', number(stats.regeneration), '点 / 秒', source([p.regen && `复苏苔芽 +${number(p.regen * .45)}`, m.regen && `春回之息 +${number(m.regen * .1)}`]) || '暂无持续恢复效果。'],
-      ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 38', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .3, 2)}`])],
-      ['magnet', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.magnet && `引魂石 +${p.magnet * 10}%`, m.magnet && `引路之光 +${m.magnet * 10}%`])],
-      ['luck', '暴击率', percent(stats.criticalChance), '', source(['基础 5%', p.luck && `命运四叶 +${p.luck * 8} 个百分点`])],
-      ['blade', '暴击伤害', percent(stats.criticalMultiplier), '倍率', '每次命中独立判定；伤害乘以 2 后取整。'],
-      ['speed', '冲刺冷却', number(stats.dashCooldown, 2), '秒', source([dashState, p.speed ? `夜行之靴缩短 ${p.speed * 8}%` : '基础冷却 2.5 秒'])],
-      ['armor', '冲刺保护', number(stats.dashInvincibility, 2), '秒', `${number(stats.dashDuration, 2)} 秒冲刺，速度 ×${stats.dashSpeedMultiplier}；冲刺起手获得无敌。`],
+      ['speed', '移动速度', number(stats.moveSpeed), '像素 / 秒', source([`角色基础 ${character.speed}`, p.speed && `夜行之靴 +${p.speed * 6}%`,t.r_roam1&&'疾步额外 ×1.1'])],
+      ['armor', '伤害减免', stats.armor, '点 / 次', source([t.w_guard1&&'铁誓 +2','护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'])],
+      ['regen', '生命恢复', number(stats.regeneration,2), '点 / 秒', source([p.regen && `复苏苔芽 +${number(p.regen * .22,2)}`, m.regen && `春回之息 +${number(m.regen * .08,2)}`]) || '暂无持续恢复效果。'],
+      ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 42', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .35, 2)}`,t.s_scholar1&&'观星额外 ×1.2'])],
+      ['growth', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.growth && `记忆冠冕 +${p.growth * 10}%`, m.magnet && `祭坛 +${m.magnet * 4}%`,p.curse&&`禁忌烛冠 +${p.curse*8}%`,t.s_scholar1&&'观星 +8%',t.s_scholar3&&'群星馈赠 +12%'])],
+      ['luck', '暴击率', percent(stats.criticalChance), '', source(['武器直接命中独立判定，基础 5%', p.luck && `命运四叶 +${p.luck * 5} 个百分点`,t.r_sight1&&'猎眼 +8 个百分点'])],
+      ['focus', '暴击伤害', percent(stats.criticalMultiplier), '倍率', source([t.r_sight3&&'绝息 +50 个百分点','持续状态、天赋与遗物的追加伤害不暴击。'])],
+      ['area','武器范围',percent(stats.areaMultiplier),'倍率','包括攻击半径、光束宽度与距离；不增加遗物范围。'],
+      ['duration','持续时间',percent(stats.durationMultiplier),'倍率','增加武器领域、减速与普通敌人冻结时间；首领冻结不变。'],
+      ['amount','额外数量',stats.amount,'个','弹数、环绕物与落雷目标；炮台数量上限仍为 2。'],
+      ['aegis','当前护盾',preview?(character.id==='warden'?8:0):number(this.game.player.shield),'点','护盾先于生命承受伤害，多个来源取较高值。'],
+      ['curse','禁忌等级',stats.curse,'级',stats.curse?`敌人生命 +${stats.curse*12}%，生成频率 +${stats.curse*8}%，速度 +${stats.curse*3}%。`:'未持有禁忌烛冠；怪物按时间变强，不随你的等级额外膨胀。'],
+      ['speed', '冲刺冷却', number(stats.dashCooldown, 2), '秒', source([dashState,'基础 3 秒',p.speed&&`夜行之靴缩短 ${p.speed * 6}%`,t.w_dash1&&'踏阵额外缩短 15%',t.r_roam1&&'疾步额外缩短 10%'])],
+      ['armor', '冲刺保护', number(stats.dashInvincibility, 2), '秒', source([`${number(stats.dashDuration, 2)} 秒冲刺，速度 ×${stats.dashSpeedMultiplier}；冲刺起手获得无敌。`,t.r_roam2&&'借风 +0.12 秒无敌'])],
     ];
     $('sheet-stat-grid').replaceChildren(...rows.map(([key, label, value, unit, detail]) => {
       const card = node('article', 'sheet-stat'), list = node('dl'), term = node('dt');
@@ -184,6 +222,7 @@ export class CharacterSheet {
     words.append(node('h4', '', title), node('small', '', category));
     header.append(artwork(key), words, node('span', 'sheet-badge', badge));
     card.append(header);
+    const tags=node('div','item-tags');for(const tag of itemTags(key)){const chip=node('span','build-tag',BUILD_TAGS[tag].name);chip.style.setProperty('--tag-color',BUILD_TAGS[tag].color);tags.append(chip)}card.append(tags);
     return card;
   }
 
@@ -239,7 +278,7 @@ export class CharacterSheet {
       card.id='recipe-'+key;card.tabIndex=-1;card.style.setProperty('--fusion-color',data.color);
       const head=node('div','fusion-recipe-heading'),title=node('div');
       title.append(node('span','fusion-kicker',recipe.motto),node('h4','',data.name));
-      head.append(title,node('span','fusion-state',state.forged?'◆ 本局已铸成':state.blocked?'本局路线关闭':state.ready?'✦ 材料齐备':tracked===key?'◇ 正在追踪':'已发现 · 材料未齐'));card.append(head);
+      head.append(title,node('span','fusion-state',state.forged?'◆ 本局已铸成':state.blocked?'本局路线关闭':state.ready?'✦ 材料齐备':state.waiting&&state.progress===state.total?'03:00 后可融合':tracked===key?'◇ 正在追踪':'已发现 · 材料未齐'));card.append(head);
       const formula=node('div','fusion-formula');
       state.ingredients.forEach((ingredient,index)=>{
         if(index)formula.append(node('span','fusion-operator','＋'));
@@ -285,23 +324,30 @@ export class CharacterSheet {
 
   buildPassives(passives,stats,weapons) {
     const entries=Object.entries(passives),basics=entries.filter(([key])=>!PASSIVES[key].relic),relics=entries.filter(([key])=>PASSIVES[key].relic);
-    put('sheet-passive-count',basics.length+' / '+Object.values(PASSIVES).filter(v=>!v.relic).length);
-    put('sheet-relic-count',relics.length+' / '+Object.values(PASSIVES).filter(v=>v.relic).length);
+    put('sheet-passive-count',basics.length+' 种');
+    put('sheet-relic-count',relics.length+' 种');
+    const summary=$('sheet-build-summary'),active=relics.filter(([key])=>compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id).length);
+    summary.replaceChildren(node('strong','',`道具位 ${entries.length} / ${PASSIVE_SLOTS} · 属性祝福与联动遗物共享位置`),node('span','',`当前 ${active.length} / ${relics.length} 件遗物具备触发条件。`));
+    if(this.origin!=='menu'){const profile=buildProfile(this.game);summary.append(node('small','build-affinity-summary','本局倾向 · '+(profile.leading.map(tag=>BUILD_TAGS[tag].name).join(' / ')||'尚在探索')+'。近期主动选择会提高相同标签的出现权重，改选其他标签可逐步转型。'))}
+    for(const link of SYNERGIES.filter(link=>link.items.every(key=>passives[key]&&(!PASSIVES[key].relic||compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id).length))))summary.append(node('small','',link.name+' · '+link.desc));
+    if(entries.length<PASSIVE_SLOTS)summary.append(node('small','',`还可选择 ${PASSIVE_SLOTS-entries.length} 种道具。融合消耗的遗物会释放位置；放逐不会释放位置。`));
     const build=([key,level])=>{
       const data=PASSIVES[key],description=data.relic?relicDescription(key,level,stats):passiveEffect(key,level);
       const card=this.itemCard(key,data.name,data.relic?'联动遗物 / '+data.trigger:'被动祝福 / 累计效果','LV. '+level+' / '+data.max);
       if(data.relic)card.classList.add('relic-item');
       card.append(node('p','sheet-effect',description));
       if(data.relic){
-        const linked=compatibleWeapons(key,weapons,passives),status=node('div','relic-synergy'+(linked.length?' active':''));
-        status.append(node('b','',linked.length?'◆ 联动已就绪':'◇ 等待合适的武器'),node('span','',linked.length?linked.map(id=>weaponName(id,weapons[id])).join(' · '):'获得对应武器后自动触发，无需手动开启。'));
-        card.append(status,node('p','sheet-effect-note','本局触发 '+(this.origin==='menu'?0:this.game.relicProcs?.[key]||0)+' 次 · 伤害已计入角色加成。'));
+        const linked=compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id),status=node('div','relic-synergy'+(linked.length?' active':''));
+        const broad=data.families.some(tag=>['guard','dash','pickup'].includes(tag));
+        status.append(node('b','',linked.length?'◆ 联动已就绪':'◇ 等待触发来源'),node('span','',linked.length?(broad?data.trigger:linked.map(id=>weaponName(id,weapons[id])).join(' · ')):'通过武器、道具或角色天赋补齐条件后生效。'));
+        card.append(status,node('p','sheet-effect-note',key==='soulpact'?'持续修正 · 已计入相应武器的伤害与射击间隔。':'本局触发 '+(this.origin==='menu'?0:this.game.relicProcs?.[key]||0)+' 次 · 伤害已计入角色加成。'));
         if(data.catalyst)card.append(node('p','relic-catalyst','◇ 可参与未知融合 · 融合会消耗该道具。'));
         for(const recipe of Object.values(FUSIONS).filter(r=>this.game.discoveredFusions.has(r.id)&&r.ingredients.some(i=>i.id===key))){
           const link=node('button','sheet-recipe-link','已发现路线 · '+WEAPONS[recipe.id].name+' ↗');link.addEventListener('click',()=>{this.selectTab('fusion');$('recipe-'+recipe.id)?.scrollIntoView({block:'nearest'})});card.append(link);
         }
       }
-      if(key==='vitality')card.append(node('p','sheet-effect-note','每次获得时立即恢复 20 点生命，上限为最大生命。'));
+      if(key==='vitality')card.append(node('p','sheet-effect-note','每次获得时立即恢复 12 点生命，上限为最大生命。'));
+      if(this.origin!=='menu'&&this.game.banished?.has(key))card.append(node('p','sheet-effect-note','已放逐：当前效果保留，本局不再升级。'));
       if(key==='haste')card.append(node('p','sheet-effect-note','缩短武器施放冷却；环绕接触、持续伤害和遗物触发冷却不受影响。'));
       const next=node('p','sheet-next');
       next.textContent=level>=data.max?'已满级 · 当前效果持续至被融合消耗或本次远征结束。':'下一级累计：'+(data.relic?relicDescription(key,level+1,stats):passiveEffect(key,level+1));
@@ -321,7 +367,7 @@ export class CharacterSheet {
   buildMeta(meta) {
     $('sheet-meta').replaceChildren(...Object.entries(META).map(([key, info]) => {
       const level = meta[key] || 0;
-      const effects = {vitality: `初始生命 +${level * 8}`, power: `武器伤害加成 +${level * 5}%`, magnet: `经验获取 +${level * 10}%`, regen: `每秒恢复 ${number(level * .1)} 点生命`};
+      const effects = {vitality: `初始生命 +${level * 5}`, power: `武器伤害加成 +${level * 3}%`, magnet: `经验获取 +${level * 4}%`, regen: `每秒恢复 ${number(level * .08,2)} 点生命`};
       const card = node('article', 'sheet-meta-card' + (level ? '' : ' inactive')), words = node('div'), title = node('h4', '', info.name);
       title.append(node('span', '', `LV. ${level} / ${info.max}`));
       words.append(title, node('p', '', level ? effects[key] : '未获得 · 可在营地的余烬祭坛提升'));
@@ -331,14 +377,8 @@ export class CharacterSheet {
   }
 
   buildPickups(stats) {
-    const rows = [
-      ['灵光结晶', `拾取后获得经验；结晶所含经验随敌人而变，当前按 ${percent(stats.xpMultiplier)} 获取。`],
-      ['生命药草', '拾取后立即恢复 16 点生命，不超过最大生命。'],
-      ['引魂之光', '让地面上现有的全部经验结晶向你飞来；不永久改变拾取半径。'],
-      ['古老宝箱', `恢复 14 点生命，并随机强化一件已持有武器：普通武器最高进化，融合武器最高 3 级。所有装备都达到各自上限后改为 ${number(32 * stats.xpMultiplier)} 经验。精英宝箱另赠 25 余烬，首领宝箱赠 60。宝箱不会自动融合。`],
-      ['古老祭坛', `靠近自动点亮，每座仅一次：恢复 25 点生命，获得 15 余烬与 ${number(12 * stats.xpMultiplier)} 经验。`],
-      ['生命甘露', '所有武器与被动都满级后的升级馈赠：恢复 50% 最大生命并获得 30 余烬。'],
-    ];
+    const rows = Object.values(PICKUPS).map(item=>[item.name,item.desc]);
+    rows.push(['古老祭坛',`靠近自动点亮，每座仅一次：恢复 20 点生命，获得 15 余烬与 ${number(12*stats.xpMultiplier)} 经验。`],['余烬余韵','没有可用升级时：恢复 12 点生命并获得 15 余烬。也可跳过升级，获得 10 余烬。']);
     $('sheet-pickups').replaceChildren(...rows.map(([title, description]) => {
       const entry = node('article'); entry.append(node('h4', '', title), node('p', '', description)); return entry;
     }));
