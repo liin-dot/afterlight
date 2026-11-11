@@ -584,9 +584,44 @@ try{
       await evaluate('document.getElementById("start-button").click();const {game}=await import("/src/main.js");game.state="level";game.level=2;game.choices=game.rollUpgrades();game.on("level");');
       await delay(100);await shot('upgrade-mobile');
       assert(await evaluate('return [...document.querySelectorAll(".upgrade-card")].every(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth})'));
-      await evaluate('document.getElementById("level-catalog-button").click();');await delay(100);await shot('catalog-mobile');
+      for(const [width,height] of [[320,568],[378,668],[390,844],[568,320],[667,375],[844,390]]){
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
+        const layouts=await evaluate(`
+          const {game}=await import('/src/main.js'),{upgradePool}=await import('/src/balance.js'),{FUSIONS,fusionChoice}=await import('/src/fusions.js'),{WEAPONS,PASSIVES,META}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js');
+          const discovered=game.discoveredFusions;
+          game.start(game.character,Object.fromEntries(Object.entries(META).map(([key,value])=>[key,value.max])));game.state='level';game.level=30;game.time=240;game.pendingLevels=2;game.weapons={blade:5,meteor:4,frost:4,bolt:5,storm:4};game.passives={};game.choiceHistory=['meteor','frost','bolt'];
+          game.stats=characterStats(game.character,{area:5,amount:3,power:5,haste:5},game.meta);
+          const choices=upgradePool(game).concat(Object.keys(FUSIONS).map(key=>fusionChoice(key,Object.fromEntries(Object.keys(WEAPONS).map(id=>[id,5])),Object.fromEntries(Object.keys(PASSIVES).map(id=>[id,2])))),{key:'heal',weapon:false,current:0,next:1,name:'余烬余韵',description:'恢复 12 点生命，获得 15 余烬。',color:'#c1d49c'}),failures=[];
+          for(const known of [false,true]){
+            game.discoveredFusions=new Set(known?Object.keys(FUSIONS):[]);
+            for(let i=0;i<choices.length;i+=3){
+              game.choices=choices.slice(i,i+3);game.on('level');
+              const modal=document.querySelector('.level-modal'),footer=document.querySelector('.level-footer').getBoundingClientRect();
+              const buttons=[...document.querySelectorAll('#level-screen button')].filter(e=>e.getClientRects().length),cards=[...document.querySelectorAll('.upgrade-card')];
+              const fits=modal.scrollHeight<=modal.clientHeight+1&&modal.scrollWidth<=modal.clientWidth+1&&buttons.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})&&cards.every(e=>{
+                const r=e.getBoundingClientRect();return r.bottom<=footer.top&&e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth+1&&[...e.children].filter(c=>c.getClientRects().length).every(c=>{const s=c.getBoundingClientRect();return s.top>=r.top&&s.bottom<=r.bottom+1&&s.left>=r.left&&s.right<=r.right+1});
+              });
+              if(!fits)failures.push(game.choices.map(c=>c.key).join('/')+(known?' known':''));
+            }
+          }
+          game.discoveredFusions=discovered;game.choices=[choices.find(c=>c.key==='forkseed'),choices.find(c=>c.key==='spore'),choices.find(c=>c.key==='stormcoil')];game.on('level');return failures;
+        `);
+        assert.deepEqual(layouts,[],'mobile upgrade choices, full effects and actions fit '+width+'x'+height);
+        await shot('upgrade-'+width+'x'+height);
+      }
+      await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+      const pendingChoices=await evaluate('const {game}=await import("/src/main.js");return JSON.stringify([game.choices,game.pendingLevels,game.rerolls])');
+      await evaluate('document.getElementById("level-tree-button").click();document.getElementById("sheet-close").click();document.getElementById("level-status-button").click();document.getElementById("sheet-tab-catalog").click();');await delay(100);await shot('catalog-mobile');
       assert(await evaluate('return Number(document.getElementById("catalog-count").textContent.split("/")[0])===document.querySelectorAll(".catalog-item").length'));
-      assert(await evaluate('document.getElementById("sheet-close").click();document.querySelector(".upgrade-card").click();return matchMedia("(pointer: coarse)").matches&&getComputedStyle(document.getElementById("touch-controls")).display!=="none"'));
+      await evaluate('document.getElementById("sheet-close").click();');
+      assert.equal(await evaluate('const {game}=await import("/src/main.js");return JSON.stringify([game.choices,game.pendingLevels,game.rerolls])'),pendingChoices,'mobile references preserve the upgrade choices');
+      assert(await evaluate('document.getElementById("reroll-button").click();const {game}=await import("/src/main.js");return game.rerolls===2&&game.state==="level"'));
+      await evaluate('const {game}=await import("/src/main.js");game.pendingLevels=0;');
+      for(const selector of ['.banish-button','.upgrade-card']){
+        const point=await evaluate('const r=document.querySelector('+JSON.stringify(selector)+').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+        await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        assert(await evaluate('const {game}=await import("/src/main.js");return '+JSON.stringify(selector)+'===".banish-button"?game.banishes===2&&game.state==="level":game.state==="running"'),'touch '+selector+' activates only its intended action');
+      }
       const visuals=await evaluate('const {game}=await import("/src/main.js");const {WEAPONS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");let frames=0;game.passives={area:3,amount:2};game.stats=characterStats(game.character,game.passives,{});game.player.invincible=1000;game.pendingLevels=0;game.xpNext=1e9;game.spawnClock=game.waveClock=1e9;game.bossMilestones=new Set([180,360,600]);for(const [key,data] of Object.entries(WEAPONS)){game.state="running";game.weapons={[key]:data.maxLevel||6};game.timers={};game.projectiles=[];game.zones=[];game.effects=[];game.enemies=[];for(let i=0;i<16;i++){const e=game.spawnEnemy("skeleton",false,30+i*8);e.hp=e.maxHp=1e8;}for(let i=0;i<100;i++){game.update(.05);game.render();frames++;}}game.state="over";return frames;');
       assert.equal(visuals,3600);
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
@@ -644,7 +679,7 @@ try{
       assert(await evaluate('const {game}=await import("/src/main.js");return game.eventsCompleted===1&&!game.activeEvent&&game.player.shield>=12'));
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
       await evaluate('const {game}=await import("/src/main.js");game.player.x=game.shrines[2].x;game.player.y=game.shrines[2].y;game.on("hud");');
-      assert(await evaluate('const card=document.getElementById("world-event-card").getBoundingClientRect(),talent=document.getElementById("hud-talents-button").getBoundingClientRect(),stick=document.getElementById("joystick").getBoundingClientRect();return card.right<=innerWidth&&card.left>=0&&card.top>=talent.bottom&&card.bottom<innerHeight*.32&&card.bottom<stick.top'));
+      assert(await evaluate('const card=document.getElementById("world-event-card").getBoundingClientRect(),talent=document.getElementById("hud-talents-button").getBoundingClientRect();return card.right<=innerWidth&&card.left>=0&&card.top>=talent.bottom&&card.bottom<innerHeight*.32'));
       await shot('event-offer-mobile');
       const eventTouch=await evaluate('const r=document.getElementById("world-event-preview").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
       await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[eventTouch]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(100);
@@ -654,16 +689,50 @@ try{
       assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==="souls"'));
       await shot('event-active-mobile');
       assert(await evaluate('const {game}=await import("/src/main.js");game.player.dashCooldown=0;document.getElementById("touch-dash").click();return game.player.dashCooldown>0'),'dash supports standard button activation');
+      await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
       for(const [width,height] of [[378,668],[320,568],[844,390]]){
         await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
         await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[0]);game.time=8;game.player.invincible=999;game.bannerUntil=game.toastUntil=0;document.getElementById("event-banner").classList.remove("visible");document.getElementById("toast").classList.remove("visible");game.on("hud");');
         assert(await evaluate(`
-          const ids=['status-button','pause-button','hud-talents-button','fusion-tracker','hud-catalog-button','hud-loadout-button','joystick','touch-dash'];
+          const ids=['status-button','pause-button','hud-talents-button','fusion-tracker','hud-catalog-button','hud-loadout-button','touch-dash'];
           const rects=ids.map(id=>document.getElementById(id).getBoundingClientRect());
           const center={left:innerWidth*.28,right:innerWidth*.72,top:innerHeight*.36,bottom:innerHeight*.7};
           return document.documentElement.scrollWidth<=innerWidth&&document.getElementById('world-event-card').classList.contains('hidden')&&rects.every(r=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&(r.right<=center.left||r.left>=center.right||r.bottom<=center.top||r.top>=center.bottom))&&rects.every((r,i)=>rects.slice(i+1).every(s=>r.right<=s.left||r.left>=s.right||r.bottom<=s.top||r.top>=s.bottom));
         `),'compact HUD keeps center clear with separate 44px controls at '+width+'x'+height);
         await shot('hud-'+width+'x'+height);
+        await evaluate('const {game}=await import("/src/main.js");game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;');
+        for(const [x,y] of [[width/2,height/2+1],[1,height*.66],[width-1,height*.66],[1,height-1],[width-1,height-1],[width/2,height*.82]]){
+          const start={x,y,id:1},dx=x<width/2?40:-40,dy=y>height*.85||y<height*.6?-35:35,drag={x:x+dx,y:y+dy,id:1};
+          await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[start]});
+          assert(await evaluate('const {game}=await import("/src/main.js");const r=document.getElementById("joystick").getBoundingClientRect();return Math.hypot(game.stick.x,game.stick.y)<.01&&document.getElementById("joystick").classList.contains("floating")&&Math.abs(r.x+r.width/2-'+x+')<1&&Math.abs(r.y+r.height/2-'+y+')<1'),'floating joystick starts neutrally at any lower-half touch');
+          await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[drag]});
+          assert(await evaluate('const {game}=await import("/src/main.js");const {x,y}=game.player;game.update(.05);return Math.abs(Math.hypot(game.stick.x,game.stick.y)-1)<.01&&(game.player.x-x)*'+dx+'>0&&(game.player.y-y)*'+dy+'>0'),'drag moves the player with capped diagonal speed');
+          await call('Input.dispatchTouchEvent',{type:x===1?'touchCancel':'touchEnd',touchPoints:[]});
+          assert(await evaluate('const {game}=await import("/src/main.js");return !game.stick.x&&!game.stick.y&&!document.getElementById("joystick").classList.contains("floating")'),'release and cancel stop movement');
+        }
+        await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:width/2,y:height*.36,id:1}]});
+        await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:width/2,y:height*.66,id:1}]});
+        assert(await evaluate('const {game}=await import("/src/main.js");return !game.stick.x&&!game.stick.y&&!document.getElementById("joystick").classList.contains("floating")'),'touches starting above halfway do not acquire movement');
+        await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        const anchor={x:width*.25,y:height*.65,id:1},moving={x:width*.25+40,y:height*.65,id:1};
+        await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[anchor]});await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
+        const dash=await evaluate('const {game}=await import("/src/main.js");game.player.dashCooldown=0;const r=document.getElementById("touch-dash").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,id:2}');
+        await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[moving,dash]});
+        assert(await evaluate('const {game}=await import("/src/main.js");return game.player.dashCooldown>0&&game.stick.x>.99&&Math.abs(game.stick.y)<.01'),'second finger can dash while the first keeps moving');
+        await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
+        assert(await evaluate('const {game}=await import("/src/main.js");return game.stick.x>.99'),'releasing dash does not release movement');
+        await shot('floating-joystick-'+width+'x'+height);
+        await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        await evaluate('const {game}=await import("/src/main.js");game.player.dashTime=0;');
+        for(const action of ['pause','level','status','blur','resize']){
+          await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[anchor]});await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
+          await evaluate('const {game}=await import("/src/main.js");const action='+JSON.stringify(action)+';if(action==="pause")game.pause();else if(action==="level"){game.gainXp(game.xpNext);game.update(.016)}else if(action==="status")document.getElementById("status-button").click();else window.dispatchEvent(new Event(action));');
+          assert(await evaluate('const {game}=await import("/src/main.js");return !game.stick.x&&!game.stick.y&&!document.getElementById("joystick").classList.contains("floating")'),'movement resets on '+action);
+          await evaluate('const {game}=await import("/src/main.js");if(game.state==="paused")game.resume();else if(game.state==="status")document.getElementById("sheet-close").click();else if(game.state==="level")game.skipUpgrade();game.pendingLevels=0;game.xpNext=1e9;');
+          await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...moving,x:moving.x+10}]});
+          assert(await evaluate('const {game}=await import("/src/main.js");return !game.stick.x&&!game.stick.y'),'old touch stays released after '+action);
+          await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        }
         assert(await evaluate('const {game}=await import("/src/main.js");document.getElementById("hud-loadout-button").click();return game.state==="status"&&document.getElementById("sheet-tab-items").getAttribute("aria-selected")==="true"'),'compact equipment entry retains full inventory');
         await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.time=60;game.player.x=game.shrines[0].x;game.player.y=game.shrines[0].y;game.on("hud");document.getElementById("world-event-preview").click();');
         const previewTime=await evaluate('const {game}=await import("/src/main.js");return game.time');await delay(150);

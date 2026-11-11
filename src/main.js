@@ -55,6 +55,7 @@ function updateTalentHud(){
  text('hud-talent-progress',progress.label);$('hud-talents-button').classList.toggle('charged',progress.ready);$('hud-talents-button').style.setProperty('--talent-color',CHARACTER_TALENTS[game.character.id].color);
  $('hud-talents-button').setAttribute('aria-label','角色天赋 · '+(points>0?'可用 '+points+' 点 · ':'')+characterTalentStatus(game)+' · '+progress.label);$('hud-talents-button').title=$('hud-talents-button').getAttribute('aria-label')+' [T]';
  text('level-talent-note','获得 '+points+' 个天赋点 · 强化角色专属能力');$('level-talents-button').classList.toggle('hidden',points<=0);
+ text('level-tree-label',points>0?'天赋 +'+points:'天赋树');$('level-tree-button').classList.toggle('ready',points>0);
 }
 function updateEventHud(){
  const event=worldEventStatus(game),card=$('world-event-card'),visible=event.visible&&(event.active||event.canStart);card.classList.toggle('hidden',!visible);$('pause-event').classList.toggle('hidden',!visible);if(!visible)return;
@@ -151,12 +152,12 @@ function buildUpgrades(reveal=true){
  game.choices.forEach((item,index)=>{
   const fusedUpgrade=item.weapon&&WEAPONS[item.key].fusion,unknown=item.fusion&&!game.discoveredFusions.has(item.key),relic=!item.weapon&&PASSIVES[item.key]?.relic;
   const goal=!item.fusion&&FUSIONS[game.trackedFusion]?.ingredients.some(i=>i.id===item.key&&item.current<i.required);
-  const button=document.createElement('button');button.className='upgrade-card'+(item.evolution?' evolution':'')+(item.fusion?' fusion-card':'')+(goal?' tracked-material':'')+(relic?' relic-card':'');button.style.setProperty('--card-color',item.color);
+  const button=document.createElement('button');button.className='upgrade-card'+(item.evolution?' evolution':'')+(item.fusion?' fusion-card':'')+(goal?' tracked-material':'')+(relic?' relic-card':!item.weapon&&PASSIVES[item.key]?' blessing-card':'');button.style.setProperty('--card-color',item.color);
   const rarity=document.createElement('div');rarity.className='rarity';const type=document.createElement('span');type.textContent=item.fusion?(unknown?'◇ 首次共鸣 · 未知融合':fusionUsesRelic(item.key)?'◆ 武器与道具融合':'◆ 双武器融合'):goal?'◇ 已追踪的融合材料':fusedUpgrade?'◆ 融合武器强化':item.evolution?'✦ 传说 · 武器进化':itemRarity(item.weapon?WEAPONS[item.key]:PASSIVES[item.key]).name+' · '+(item.weapon?(item.current?'武器强化':'全新武器'):relic?'联动遗物':'属性祝福');const key=document.createElement('kbd');key.textContent=index+1;rarity.append(type,key);
   const art=document.createElement('canvas');art.width=24;art.height=24;if(!unknown)paintIcon(art,item.key==='heal'?'vitality':item.key);else{art.className='unknown-fusion-art';const g=art.getContext('2d');g.fillStyle='#d0bd92';g.font='20px monospace';g.textAlign='center';g.fillText('?',12,19)}
   const title=document.createElement('h3');title.textContent=unknown?'未命名的力量':item.name;title.style.color=item.fusion?item.color:item.evolution?'#ebc78d':'';
   const category=document.createElement('span');category.className='upgrade-type';category.textContent=unknown?'融合成功后揭晓':item.weapon?WEAPONS[item.key].category:relic?'遗物 / '+PASSIVES[item.key].trigger:'被动 / 永续生效';
-  const description=document.createElement('p');description.textContent=unknown?'这两件装备正在共鸣。选择后消耗下方材料，铸成未知武器，并将它永久记录进融合图谱。'+(fusionUsesRelic(item.key)?'被消耗道具的独立效果会失去。':''):relic?relicDescription(item.key,item.next,game.stats):item.description;const bottom=document.createElement('div');bottom.className='upgrade-bottom';const from=document.createElement('span');from.textContent=item.fusion?(fusionUsesRelic(item.key)?'武器＋道具':'双武器')+' → LV. '+item.next:item.evolution?'LV. 5 → EVOLVED':item.current?'LV. '+item.current+' → LV. '+item.next:'解锁 · LV. 1';const arrow=document.createElement('span');arrow.textContent=item.fusion?'融合 ↗':'选择 ↗';bottom.append(from,arrow);button.append(rarity,art,title,category,description);
+  const description=document.createElement('p');description.textContent=unknown?'消耗下列材料，铸成未知武器并记入图谱。'+(fusionUsesRelic(item.key)?'道具的独立效果随之失去。':''):relic?relicDescription(item.key,item.next,game.stats):item.description;const bottom=document.createElement('div');bottom.className='upgrade-bottom';const from=document.createElement('span');from.textContent=item.fusion?(fusionUsesRelic(item.key)?'武器＋道具':'双武器')+' → LV. '+item.next:item.evolution?'LV. 5 → EVOLVED':item.current?'LV. '+item.current+' → LV. '+item.next:'解锁 · LV. 1';const arrow=document.createElement('span');arrow.textContent=item.fusion?'融合 ↗':'选择 ↗';bottom.append(from,arrow);button.append(rarity,art,title,category,description);
   if(item.reason){const reason=document.createElement('span');reason.className='upgrade-reason';reason.textContent=item.reason;button.append(reason)}
   if(!unknown&&itemTags(item.key).length){
    const tags=document.createElement('div');tags.className='item-tags';
@@ -170,15 +171,15 @@ function buildUpgrades(reveal=true){
    const fields=[['damage','伤害'],['cooldown','间隔'],next.count?['count','数量']:next.radius?['radius','范围']:['range','距离']];
    for(const [key,label] of fields){if(!next[key])continue;const row=document.createElement('span');row.textContent=label+' '+(current?Number(current[key].toFixed(2))+' → ':'')+Number(next[key].toFixed(2))+(key==='cooldown'?'s':'');facts.append(row)}button.append(facts);
   }else if(!item.weapon&&!relic&&PASSIVES[item.key]){const total=document.createElement('div');total.className='upgrade-gains';total.textContent='升级后：'+passiveEffect(item.key,item.next);button.append(total)}
-  if(item.fusion){const ingredients=document.createElement('div');ingredients.className='fusion-card-materials';ingredients.textContent=item.ingredients.map(i=>`${ingredientData(i).name} LV.${i.level}（消耗）`).join(' ＋ ');button.append(ingredients)}
+  if(item.fusion){const ingredients=document.createElement('div');ingredients.className='fusion-card-materials';ingredients.textContent='消耗：'+item.ingredients.map(i=>`${ingredientData(i).name} LV.${i.level}`).join(' ＋ ');button.append(ingredients)}
   if(relic){
    const linked=compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id),note=document.createElement('div');note.className='relic-card-link';
    const broad=PASSIVES[item.key].families.some(tag=>['guard','dash','pickup'].includes(tag));
-   note.textContent=(linked.length?(broad?'触发方式：'+PASSIVES[item.key].trigger:'当前联动：'+linked.map(id=>WEAPONS[id].name).join('、')):'尚缺稳定触发来源')+(PASSIVES[item.key].catalyst?' · 可作为融合材料':'');button.append(note);
+   note.textContent=(linked.length?(broad?'触发方式：'+PASSIVES[item.key].trigger:'当前联动：'+linked.map(id=>WEAPONS[id].name).join('、')):'尚缺稳定触发来源')+(PASSIVES[item.key].catalyst?' · 可作为融合材料':'');note.dataset.compact=linked.length?'联动已就绪':'尚缺触发来源';button.append(note);
   }
   button.append(bottom);
   const option=document.createElement('div');option.className='upgrade-option';option.append(button);
-  if(!item.fusion&&item.key!=='heal'){const banish=document.createElement('button');banish.className='banish-button';banish.textContent='放逐此项';banish.disabled=game.banishes<=0;banish.title='本局不再出现或升级此装备，已有效果保留；刷新候选项。';banish.setAttribute('aria-label','放逐'+item.name+'，本局不再出现，已装备效果保留');banish.addEventListener('click',()=>game.banish(index));option.append(banish)}
+  if(!item.fusion&&item.key!=='heal'){const banish=document.createElement('button');banish.className='banish-button';banish.textContent='放逐';banish.disabled=game.banishes<=0;banish.title='本局不再出现或升级此装备，已有效果保留；刷新候选项。';banish.setAttribute('aria-label','放逐'+item.name+'，本局不再出现，已装备效果保留');banish.addEventListener('click',()=>game.banish(index));option.append(banish)}
   button.addEventListener('click',()=>game.chooseUpgrade(index));$('upgrade-cards').append(option);
  });
  if(reveal){show('level-screen');announce('余烬觉醒，等级 '+game.level+'。选择一种升级。');requestAnimationFrame(()=>$('upgrade-cards').querySelector('button')?.focus({preventScroll:true}))}
@@ -226,7 +227,7 @@ game.on=(event,data)=>{
  if(event==='startRun'){hide('menu');hide('camp-return-note');closeOverlays();show('hud');$('event-banner').classList.remove('visible');$('toast').classList.remove('visible');document.body.classList.add('playing');text('player-name',game.character.name);paintAvatar($('hud-avatar'),game.character.id);document.activeElement?.blur();announce('远征开始。WASD 移动，空格冲刺，Esc 打开菜单。')}
  if(event==='hud')updateHud();
  if(event==='weapons'){storeItemDiscoveries(rememberInventory(save,game));buildDock()}
- if(event==='level')buildUpgrades();
+ if(event==='level'){resetTouchInput();buildUpgrades()}
  if(event==='upgrade'){hide('level-screen');document.activeElement?.blur()}
  if(event==='choose')game.chooseUpgrade(data);
  if(event==='pause'){resetTouchInput();hide('level-screen');pauseStats();openModal('pause-screen')}
@@ -262,7 +263,7 @@ game.on=(event,data)=>{
  if(event==='bannerHide')$('event-banner').classList.remove('visible');
  if(event==='toast'){text('toast',data);$('toast').classList.add('visible')}
  if(event==='toastHide')$('toast').classList.remove('visible');
- if(event==='end')endRun(data);
+ if(event==='end'){resetTouchInput();endRun(data)}
  if(event==='menu'){resetTouchInput();closeOverlays();hide('hud');show('menu');document.body.classList.remove('playing');updateMenu();$('start-button').focus({preventScroll:true})}
  if(event==='closeMenuModal'){for(const id of ['archive-screen','meta-screen'])if(!$(id).classList.contains('hidden'))closeModal(id)}
 };
@@ -295,13 +296,17 @@ document.addEventListener('keydown',e=>{
  if(e.code!=='Tab')return;const active=document.querySelector('.modal-wrap:not(.hidden)');if(!active)return;const focusables=[...active.querySelectorAll('button:not(:disabled):not([tabindex="-1"]),[href],input,summary,[tabindex="0"]')].filter(element=>!element.closest('.hidden')&&element.getClientRects().length);if(!focusables.length)return;const first=focusables[0],last=focusables.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
 });
 
-const joystick=$('joystick'),stick=joystick.querySelector('i');let activePointer=null;
-function resetTouchInput(){const pointer=activePointer;activePointer=null;game.stick={x:0,y:0};stick.style.transform='';if(pointer!==null&&joystick.hasPointerCapture(pointer))joystick.releasePointerCapture(pointer)}
+const movementSurface=$('world'),joystick=$('joystick'),stick=joystick.querySelector('i');let activePointer=null;
+function resetTouchInput(){const pointer=activePointer;activePointer=null;game.stick={x:0,y:0};stick.style.transform='';joystick.classList.remove('floating');joystick.style.left=joystick.style.top='';if(pointer!==null&&movementSurface.hasPointerCapture(pointer))movementSurface.releasePointerCapture(pointer)}
 function updateJoystick(e){const box=joystick.getBoundingClientRect();let x=e.clientX-(box.left+box.width/2),y=e.clientY-(box.top+box.height/2);const d=Math.hypot(x,y),max=box.width*.34;if(d>max){x=x/d*max;y=y/d*max}game.stick={x:x/max,y:y/max};stick.style.transform=`translate(${x}px,${y}px)`}
-joystick.addEventListener('pointerdown',e=>{if(activePointer!==null)return;e.preventDefault();activePointer=e.pointerId;joystick.setPointerCapture(e.pointerId);updateJoystick(e)});
-joystick.addEventListener('pointermove',e=>{if(e.pointerId===activePointer){e.preventDefault();updateJoystick(e)}});
-function resetJoystick(e){if(e.pointerId!==activePointer)return;activePointer=null;game.stick={x:0,y:0};stick.style.transform='';if(joystick.hasPointerCapture(e.pointerId))joystick.releasePointerCapture(e.pointerId)}
-joystick.addEventListener('pointerup',resetJoystick);joystick.addEventListener('pointercancel',resetJoystick);joystick.addEventListener('lostpointercapture',resetJoystick);
+movementSurface.addEventListener('pointerdown',e=>{
+ if(activePointer!==null||game.state!=='running'||!['touch','pen'].includes(e.pointerType)||e.clientY<innerHeight/2||!joystick.getClientRects().length)return;
+ e.preventDefault();activePointer=e.pointerId;joystick.style.left=e.clientX+'px';joystick.style.top=e.clientY+'px';joystick.classList.add('floating');movementSurface.setPointerCapture(e.pointerId);updateJoystick(e);
+});
+movementSurface.addEventListener('pointermove',e=>{if(e.pointerId===activePointer){e.preventDefault();updateJoystick(e)}});
+function resetJoystick(e){if(e.pointerId===activePointer)resetTouchInput()}
+for(const event of ['pointerup','pointercancel','lostpointercapture'])movementSurface.addEventListener(event,resetJoystick);
+window.addEventListener('resize',resetTouchInput);
 $('touch-dash').addEventListener('pointerdown',e=>{e.preventDefault();game.dash()});
 $('touch-dash').addEventListener('click',()=>game.dash());
 
