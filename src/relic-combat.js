@@ -50,7 +50,7 @@ export function onWeaponHit(game,e,kind,critical=false,periodic=false) {
     const v=relicValues('venomfang',p.venomfang,game.stats);poisonEnemy(game,e,v.damage,v.duration);game.relicProcs.venomfang=(game.relicProcs.venomfang||0)+1;
   }
   if(p.deadeye&&critical){
-    const v=relicValues('deadeye',p.deadeye,game.stats);e.markMultiplier=Math.max(e.markUntil>game.time?e.markMultiplier:1,v.multiplier);e.markUntil=game.time+v.duration;game.relicProcs.deadeye=(game.relicProcs.deadeye||0)+1;
+    const v=relicValues('deadeye',p.deadeye,game.stats);game.markEnemy(e,'deadeye',v.multiplier,v.duration);game.relicProcs.deadeye=(game.relicProcs.deadeye||0)+1;
   }
   if(p.embercore&&(tags.includes('melee')||tags.includes('projectile'))) {
     const v=relicValues('embercore',p.embercore,game.stats);
@@ -122,7 +122,7 @@ export function onPlayerDash(game){
   }
 }
 
-export function onXpPickup(game,amount){if(game.passives.harvest)game.harvestCharge+=amount;onCharacterXp(game,amount)}
+export function onXpPickup(game,amount,starLinked=false){if(game.passives.harvest)game.harvestCharge+=amount;onCharacterXp(game,amount,starLinked)}
 
 export function onEnemyKilled(game,e) {
   const p=game.passives;

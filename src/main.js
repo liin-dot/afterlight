@@ -1,7 +1,7 @@
 import {Game,RUN_DURATION} from './game.js';
 import {Sound} from './audio.js';
 import {paintIcon,paintAvatar,fire,glow,drawSprite} from './art.js';
-import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,META,formatTime,readSave,writeSave,mergeItemDiscoveries,catalogItem} from './data.js';
+import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,META,formatTime,readSave,writeSave,refreshSave,catalogItem} from './data.js';
 import {CharacterSheet} from './status.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData,fusionUsesRelic} from './fusions.js';
 import {compatibleWeapons,relicDescription,BUILD_TAGS,itemTags} from './content.js';
@@ -9,7 +9,8 @@ import {rememberItems,rememberInventory,recoverFusionDiscoveries} from './discov
 import {pressureAt,itemRarity,buildProfile} from './balance.js';
 import {weaponStats} from './stats.js';
 import {passiveEffect} from './item-info.js';
-import {CHARACTER_TALENTS,talentPoints,characterTalentStatus} from './talents.js';
+import {CHARACTER_TALENTS,talentPoints,characterTalentStatus,characterTalentProgress} from './talents.js';
+import {worldEventStatus} from './world-events.js';
 
 const $=id=>document.getElementById(id);
 const show=id=>$(id).classList.remove('hidden');
@@ -19,7 +20,7 @@ const sound=new Sound();sound.muted=save.muted;
 const game=new Game($('world'),sound);
 game.discoveredFusions=new Set(save.discoveredFusions);
 const sheet=new CharacterSheet(game,save,sound);
-let selected=0,lastFocus=null,lastBoss=null;
+let selected=0,lastFocus=null,lastBoss=null,buyingMeta=false,settling=false;
 const overlays=['level-screen','pause-screen','end-screen','archive-screen','meta-screen','status-screen'];
 
 function text(id,value){const element=$(id),next=String(value);if(element.textContent!==next)element.textContent=next}
@@ -27,10 +28,11 @@ function closeOverlays(){for(const id of overlays)hide(id)}
 function openModal(id){lastFocus=document.activeElement;show(id);requestAnimationFrame(()=>$(id).querySelector('button:not(:disabled)')?.focus({preventScroll:true}))}
 function closeModal(id){hide(id);if(lastFocus?.isConnected)lastFocus.focus({preventScroll:true})}
 function announce(value){text('announcer',value)}
-function saveProgress(){
- const persisted=writeSave(save);game.itemDiscoveryPersisted=persisted;
+async function saveProgress(change){
+ const result=await writeSave(save,change);game.itemDiscoveryPersisted=result.persisted;
+ if(sound.muted!==save.muted)sound.toggle();
  for(const key of save.discoveredFusions)game.discoveredFusions.add(key);
- return persisted;
+ updateMenu();return result;
 }
 function updateDiscoveryBadges(){
  const count=Object.keys(save.discoveredItems).filter(id=>{const item=catalogItem(id);return item&&(item.category!=='fusion'||game.discoveredFusions.has(item.key))}).length;
@@ -43,13 +45,22 @@ function storeItemDiscoveries(change){
  if(change.fresh.length&&game.state!=='menu')announce('道具图鉴新增：'+change.fresh.map(item=>item.data.name).join('、')+'。按 I 查看。');
 }
 function openItemCatalog(){if(sheet.visible)sheet.selectTab('catalog');else openStatus({tab:'catalog'})}
-function openStatus(options){if(sheet.open(options))resetTouchInput()}
+function openStatus(options){if(!settling&&sheet.open(options))resetTouchInput()}
 function openFusionBook(){if(sheet.visible)sheet.selectTab('fusion');else openStatus({tab:'fusion'})}
 function openTalentTree(){if(sheet.visible)sheet.selectTab('talents');else openStatus({tab:'talents'})}
 function updateTalentHud(){
  const points=talentPoints(game);text('hud-talent-points',points>0?'可用 '+points+' 点':'角色天赋');
  text('hud-talent-state',characterTalentStatus(game));$('hud-talents-button').classList.toggle('ready',points>0);
+ const progress=characterTalentProgress(game),meter=$('hud-talent-meter');meter.max=progress.max;meter.value=progress.value;meter.setAttribute('aria-label',progress.label);
+ text('hud-talent-progress',progress.label);$('hud-talents-button').classList.toggle('charged',progress.ready);$('hud-talents-button').style.setProperty('--talent-color',CHARACTER_TALENTS[game.character.id].color);
  text('level-talent-note','获得 '+points+' 个天赋点 · 强化角色专属能力');$('level-talents-button').classList.toggle('hidden',points<=0);
+}
+function updateEventHud(){
+ const event=worldEventStatus(game),card=$('world-event-card');card.classList.toggle('hidden',!event.visible);if(!event.visible)return;
+ text('world-event-name',event.name);text('world-event-detail',event.detail);text('world-event-reward',event.reward);
+ card.classList.toggle('active',event.active);text('world-event-label',event.active?'挑战进行中':'可选祭坛挑战');
+ const meter=$('world-event-meter');meter.classList.toggle('hidden',!event.active);meter.max=event.max||1;meter.value=event.progress||0;meter.setAttribute('aria-label',event.name+' · '+event.detail);
+ const button=$('world-event-start');button.classList.toggle('hidden',!event.canStart);button.disabled=!event.canStart;
 }
 
 function buildCharacters(){
@@ -64,7 +75,7 @@ function buildCharacters(){
  const innate=CHARACTER_TALENTS[CHARACTERS[selected].id];text('menu-innate-name',innate.name);text('menu-innate-description',innate.hint);$('menu-talents-button').style.setProperty('--talent-color',innate.color);paintIcon($('menu-innate-icon'),innate.icon);
 }
 function updateMenu(){text('meta-count',save.embers+' ✦');text('sound-icon',sound.muted?'♪̸':'♫');$('sound-button').setAttribute('aria-label',sound.muted?'开启声音':'关闭声音');$('sound-button').setAttribute('aria-pressed',String(!sound.muted));text('arsenal-count',Object.values(WEAPONS).filter(w=>!w.fusion).length);text('fusion-count',Object.keys(FUSIONS).length);text('relic-count',Object.keys(PASSIVES).length)}
-function start(){if(game.state!=='menu'&&game.state!=='over')return;resetTouchInput();closeOverlays();sound.init();sound.play('select');game.start(CHARACTERS[selected],save.meta)}
+function start(){if(settling||game.state!=='menu'&&game.state!=='over')return;refreshSave(save);resetTouchInput();closeOverlays();sound.init();sound.play('select');game.start(CHARACTERS[selected],save.meta)}
 function openRunMenu(){
  if(sheet.visible){if(!['running','paused','level'].includes(sheet.origin))return;sheet.close()}
  if(game.state==='paused'){openModal('pause-screen');return}
@@ -74,13 +85,14 @@ function finishRun(destination){
  if(game.state!=='paused')return;
  resetTouchInput();game.end(false,true,destination);
 }
-function toggleSound(){sound.init();sound.toggle();save.muted=sound.muted;saveProgress();updateMenu()}
+function toggleSound(){sound.init();sound.toggle();saveProgress({muted:sound.muted});updateMenu()}
 async function fullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{if(game.state==='running')game.toast('当前浏览器不支持全屏，可以使用浏览器的全屏功能。')}}
 
 function updateHud(){
  const p=game.player;if(!p)return;const hp=Math.max(0,Math.ceil(p.hp));text('health-label',hp+' / '+p.maxHp);$('health-fill').style.width=Math.max(0,p.hp/p.maxHp*100)+'%';$('xp-fill').style.width=Math.min(100,game.xp/game.xpNext*100)+'%';text('xp-label','LEVEL '+String(game.level).padStart(2,'0'));text('level-label','LV. '+game.level);text('timer',formatTime(game.time));text('time-left',game.time<RUN_DURATION?formatTime(RUN_DURATION-game.time):'击败首领');text('kill-count',game.kills.toLocaleString());text('gold-count',game.gold.toLocaleString());
  const phase=game.pressure||pressureAt(game.time);text('phase-label',phase.name);text('threat-label',phase.hint);
  updateTalentHud();
+ updateEventHud();
  text('shield-label',game.player.shield>0?'◇ 护盾 '+Math.ceil(game.player.shield):'');
  $('night-progress-fill').style.width=Math.min(100,game.time/RUN_DURATION*100)+'%';
  text('next-encounter',game.time<180?'03:00 · 墓园看守':game.time<360?'06:00 · 无名葬钟':game.time<600?'10:00 · 蚀月君王':'终局 · 击败君王');
@@ -168,8 +180,8 @@ function pauseStats(){
  text('pause-reward','本局可结算 +'+game.earnedEmbers.toLocaleString()+' 余烬');
  text('restart-description','使用'+game.character.name+'，从 00:00 / LV.1 重开');
 }
-function endRun(result){
- hide('hud');hide('pause-screen');hide('level-screen');const record=result.time>save.best;save.embers+=result.reward;save.best=Math.max(save.best,result.time);save.kills+=result.kills;save.runs++;if(result.won)save.wins++;const persisted=saveProgress();
+async function endRun(result){
+ hide('hud');hide('pause-screen');hide('level-screen');settling=true;refreshSave(save);const record=result.time>save.best;const {persisted}=await saveProgress({result});settling=false;
  if(result.destination==='restart'){
   selected=Math.max(0,CHARACTERS.findIndex(character=>character.id===game.character.id));
   updateMenu();start();
@@ -186,13 +198,14 @@ function endRun(result){
  const fields=[[formatTime(result.time),'守夜时间'],[result.kills.toLocaleString(),'击败敌人'],['LV. '+result.level,'最终等级'],['+'+result.reward.toLocaleString(),'收获余烬']];$('end-stats').replaceChildren();fields.forEach(([value,label],i)=>{let d=document.createElement('div');if(i===3)d.className='gold';let strong=document.createElement('strong');strong.textContent=value;let span=document.createElement('span');span.textContent=label;d.append(strong,span);$('end-stats').append(d)});
  const damage=Object.entries(game.damageByWeapon).sort((a,b)=>b[1]-a[1]),total=damage.reduce((sum,[,value])=>sum+value,0);
  $('end-damage').innerHTML='<h3>本局伤害记录</h3>'+damage.slice(0,3).map(([key,value])=>`<div><span>${WEAPONS[key]?.name||(key==='talent'?'角色天赋':'遗物与次生伤害')}</span><b>${Math.round(value).toLocaleString()} · ${Math.round(value/(total||1)*100)}%</b></div>`).join('')+`<div><span>累计输出 / 承受伤害（不含护盾）</span><b>${Math.round(total).toLocaleString()} / ${game.damageTaken}</b></div>`;
+ const eventRow=document.createElement('div'),eventLabel=document.createElement('span'),eventCount=document.createElement('b');eventLabel.textContent='祭坛挑战 · 完成 / 未完成';eventCount.textContent=(game.eventsCompleted||0)+' / '+(game.eventsFailed||0);eventRow.append(eventLabel,eventCount);$('end-damage').append(eventRow);
  text('record-label',!persisted?'浏览器存储不可用 · 本次成长仅在当前页面保留':result.won?'✦ 黎明守护者 · 额外奖励 250 余烬':record?'✦ 新纪录 · 你又走远了一点':'余烬已存入祭坛');
  const c=$('end-art'),g=c.getContext('2d');g.clearRect(0,0,96,64);g.imageSmoothingEnabled=false;glow(g,49,40,36,result.won?'#e1cb6f33':'#e1a66f22');drawSprite(g,CHARACTERS[selected].id,30,55,{flip:false,alpha:result.won?1:.7});fire(g,65,53,3,result.won?1:.7);
  openModal('end-screen');updateMenu();announce(result.won?'远征胜利。长夜已尽。':'远征结束。获得 '+result.reward+' 余烬。');
 }
 function buildMeta(){
  text('ember-balance',save.embers.toLocaleString());$('meta-upgrades').replaceChildren();for(const [key,info] of Object.entries(META)){
-  const level=save.meta[key]||0,cost=info.cost*(level+1);const row=document.createElement('div');row.className='meta-upgrade';const art=document.createElement('canvas');art.width=24;art.height=24;paintIcon(art,key);const words=document.createElement('div');const heading=document.createElement('h3');heading.textContent=info.name+' '+level+'/'+info.max;const desc=document.createElement('small');desc.textContent=info.desc;words.append(heading,desc);const button=document.createElement('button');button.textContent=level>=info.max?'已满级':cost+' ✦';button.disabled=level>=info.max||save.embers<cost;button.setAttribute('aria-label','升级'+info.name+'，消耗 '+cost+' 余烬');button.addEventListener('click',()=>{if((save.meta[key]||0)>=info.max||save.embers<cost)return;save.embers-=cost;save.meta[key]=(save.meta[key]||0)+1;saveProgress();sound.init();sound.play('chest');buildMeta();updateMenu()});row.append(art,words,button);$('meta-upgrades').append(row);
+  const level=save.meta[key]||0,cost=info.cost*(level+1);const row=document.createElement('div');row.className='meta-upgrade';const art=document.createElement('canvas');art.width=24;art.height=24;paintIcon(art,key);const words=document.createElement('div');const heading=document.createElement('h3');heading.textContent=info.name+' '+level+'/'+info.max;const desc=document.createElement('small');desc.textContent=info.desc;words.append(heading,desc);const button=document.createElement('button');button.textContent=level>=info.max?'已满级':cost+' ✦';button.disabled=buyingMeta||level>=info.max||save.embers<cost;button.setAttribute('aria-label','升级'+info.name+'，消耗 '+cost+' 余烬');button.addEventListener('click',async()=>{if(buyingMeta)return;buyingMeta=true;buildMeta();const {persisted,purchased}=await saveProgress({purchase:key});buyingMeta=false;buildMeta();if(purchased){sound.init();sound.play('chest')}else{const note=persisted?'存档已更新，请按最新价格选择升级。':'浏览器暂未保存，本次购买未扣款。';text('meta-best',note);announce(note)}});row.append(art,words,button);$('meta-upgrades').append(row);
  }text('meta-best',`远征 ${save.runs} 次  ·  最长守夜 ${formatTime(save.best)}  ·  累计击败 ${save.kills.toLocaleString()}  ·  破晓 ${save.wins} 次`);
 }
 
@@ -218,14 +231,18 @@ game.on=(event,data)=>{
  if(event==='talentTree')openTalentTree();
  if(event==='talentPoints')updateTalentHud();
  if(event==='talentLearned'){
-  if(sheet.visible){const scroll=$('sheet-scroll').scrollTop;sheet.build();$('sheet-scroll').scrollTop=scroll;$('sheet-tab-talents').focus({preventScroll:true})}
+  if(sheet.visible){
+   const scroll=$('sheet-scroll').scrollTop;sheet.build();$('sheet-scroll').scrollTop=scroll;
+   const column=$('talent-'+data).closest('.talent-branch'),next=column.querySelector('button:not(:disabled)'),tab=document.querySelectorAll('.talent-branch-tabs button')[sheet.talentBranch];
+   (next||(tab.getClientRects().length?tab:column.querySelector('h4'))).focus({preventScroll:true});if(next)next.scrollIntoView({block:'nearest'});
+  }
   if(game.state==='level'||sheet.visible&&sheet.origin==='level')buildUpgrades(false);
   announce('已学会角色天赋。剩余 '+talentPoints(game)+' 个天赋点。');
  }
  if(event==='itemCatalog')openItemCatalog();
  if(event==='pickup')storeItemDiscoveries(rememberItems(save,{['pickup:'+data]:1}));
  if(event==='fusionProgress')updateFusionTracker();
- if(event==='fusionDiscovered'){save.discoveredFusions=[...game.discoveredFusions];rememberInventory(save,game);recoverFusionDiscoveries(save);game.discoveryPersisted=saveProgress();updateDiscoveryBadges();announce('首次发现 '+WEAPONS[data].name+'，融合图谱与道具图鉴已解锁。')}
+ if(event==='fusionDiscovered'){save.discoveredFusions=[...game.discoveredFusions];rememberInventory(save,game);recoverFusionDiscoveries(save);saveProgress().then(({persisted})=>{game.discoveryPersisted=persisted});updateDiscoveryBadges();announce('首次发现 '+WEAPONS[data].name+'，融合图谱与道具图鉴已解锁。')}
  if(event==='sound')toggleSound();
  if(event==='fullscreen')fullscreen();
  if(event==='banner'){$('event-banner').replaceChildren();const title=document.createTextNode(data.title);const subtitle=document.createElement('small');subtitle.textContent=data.subtitle;$('event-banner').append(title,subtitle);$('event-banner').classList.add('visible')}
@@ -248,12 +265,13 @@ $('restart-button').addEventListener('click',()=>finishRun('restart'));
 $('quit-button').addEventListener('click',()=>finishRun('camp'));
 $('reroll-button').addEventListener('click',()=>game.reroll());
 $('skip-button').addEventListener('click',()=>game.skipUpgrade());
+$('world-event-start').addEventListener('click',()=>game.interact());
 for(const id of ['menu-status-button','status-button','pause-status-button','level-status-button','end-status-button'])$(id).addEventListener('click',()=>openStatus());
 for(const id of ['fusion-tracker','level-fusion-button'])$(id).addEventListener('click',openFusionBook);
 for(const id of ['menu-talents-button','hud-talents-button','level-talents-button','level-tree-button'])$(id).addEventListener('click',openTalentTree);
 for(const id of ['menu-catalog-button','hud-catalog-button','pause-catalog-button','level-catalog-button','end-catalog-button'])$(id).addEventListener('click',openItemCatalog);
 $('archive-button').addEventListener('click',()=>{sound.init();sound.play('select');openModal('archive-screen')});
-$('meta-button').addEventListener('click',()=>{buildMeta();sound.init();sound.play('select');openModal('meta-screen')});
+$('meta-button').addEventListener('click',()=>{refreshSave(save);buildMeta();sound.init();sound.play('select');openModal('meta-screen')});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>closeModal(b.dataset.close)));
 for(const id of ['archive-screen','meta-screen'])$(id).addEventListener('click',e=>{if(e.target===$(id))closeModal(id)});
 
@@ -270,15 +288,14 @@ joystick.addEventListener('pointermove',e=>{if(e.pointerId===activePointer){e.pr
 function resetJoystick(e){if(e.pointerId!==activePointer)return;activePointer=null;game.stick={x:0,y:0};stick.style.transform='';if(joystick.hasPointerCapture(e.pointerId))joystick.releasePointerCapture(e.pointerId)}
 joystick.addEventListener('pointerup',resetJoystick);joystick.addEventListener('pointercancel',resetJoystick);joystick.addEventListener('lostpointercapture',resetJoystick);
 $('touch-dash').addEventListener('pointerdown',e=>{e.preventDefault();game.dash()});
+$('touch-dash').addEventListener('click',()=>game.dash());
 
 window.addEventListener('storage',event=>{
  if(event.key!=='afterlight-save-v1')return;
- const latest=readSave();
- for(const key of latest.discoveredFusions)game.discoveredFusions.add(key);
- save.discoveredItems=mergeItemDiscoveries(save.discoveredItems,latest.discoveredItems);
- save.discoveredFusions=[...game.discoveredFusions];
+ refreshSave(save);if(sound.muted!==save.muted)sound.toggle();
+ for(const key of save.discoveredFusions)game.discoveredFusions.add(key);
  recoverFusionDiscoveries(save);updateDiscoveryBadges();
- if(sheet.visible)sheet.build();updateFusionTracker();
+ if(sheet.visible)sheet.build();updateFusionTracker();updateMenu();if(!$('meta-screen').classList.contains('hidden'))buildMeta();
 });
 if(recoverFusionDiscoveries(save).changed)saveProgress();
 updateDiscoveryBadges();buildCharacters();updateMenu();

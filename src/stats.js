@@ -9,20 +9,21 @@ export function characterStats(character, passives = {}, meta = {}, talents = {}
     maxHp: character.hp + (meta.vitality || 0) * 5 + (passives.vitality || 0) * 12,
     damageMultiplier: character.damage * (1 + (meta.power || 0) * .03 + (passives.power || 0) * .12 + (passives.curse || 0) * .10),
     haste: Math.max(.7, 1 - (passives.haste || 0) * .06),
-    moveSpeed: character.speed * (1 + (passives.speed || 0) * .06) * (talents.r_roam1 ? 1.1 : 1),
-    pickupRadius: 42 * (character.id === 'witch' ? 1.35 : 1) * (1 + (passives.magnet || 0) * .35) * (talents.s_scholar1 ? 1.2 : 1),
-    xpMultiplier: 1 + (passives.growth || 0) * .10 + (meta.magnet || 0) * .04 + (passives.curse || 0) * .08 + (talents.s_scholar1 ? .08 : 0) + (talents.s_scholar3 ? .12 : 0),
-    armor: (passives.armor || 0) * 2 + (talents.w_guard1 ? 2 : 0),
-    regeneration: (passives.regen || 0) * .22 + (meta.regen || 0) * .08,
-    criticalChance: .05 + (passives.luck || 0) * .05 + (talents.r_sight1 ? .08 : 0),
-    criticalMultiplier: 2 + (passives.focus || 0) * .25 + (talents.r_sight3 ? .5 : 0),
+    moveSpeed: character.speed * (1 + (passives.speed || 0) * .06),
+    pickupRadius: 42 * (character.id === 'witch' ? 1.35 : 1) * (1 + (passives.magnet || 0) * .35),
+    xpMultiplier: 1 + (passives.growth || 0) * .10 + (meta.magnet || 0) * .04 + (passives.curse || 0) * .08,
+    armor: (passives.armor || 0) * 2,
+    regeneration: (passives.regen || 0) * .22,
+    recovery: (meta.regen || 0) * .08,
+    criticalChance: .05 + (passives.luck || 0) * .05,
+    criticalMultiplier: 2 + (passives.focus || 0) * .25,
     areaMultiplier: 1 + (passives.area || 0) * .10,
     durationMultiplier: 1 + (passives.duration || 0) * .15,
     amount: passives.amount || 0,
     curse: passives.curse || 0,
-    dashCooldown: 3 * (1 - (passives.speed || 0) * .06) * (talents.w_dash1 ? .85 : 1) * (talents.r_roam1 ? .9 : 1),
+    dashCooldown: 3 * (1 - (passives.speed || 0) * .06),
     dashDuration: .22,
-    dashInvincibility: .38 + (talents.r_roam2 ? .12 : 0),
+    dashInvincibility: .38,
     dashSpeedMultiplier: 4.7,
   };
 }
@@ -62,8 +63,8 @@ function baseWeaponStats(kind, level, stats, character) {
     case 'solar': return {...common, damage:damage(110 + level * 60), radius:94 + level * 12, arc:Math.PI * 2, burnDamage:damage(40 + level * 15), innerRadius:32, duration:1.8, hitInterval:.45};
     case 'thunderbolt': return {...common, damage:damage(70 + level * 22), count:3 + level + (character.id === 'ranger' ? 1 : 0), pierce:2 + level, homing:true, chainDamage:damage(40 + level * 15), chainCount:2 + level, chainRange:150};
     case 'glacier': return {...common, damage:damage(30 + level * 12), count:4 + level, radius:53 + level * 6, outerOffset:0, hitInterval:.38, fieldRadius:105 + level * 12, fieldDamage:damage(20 + level * 10), fieldInterval:.6, fieldDuration:3, pullSpeed:80, freeze:1.1, bossFreeze:.35, blastDamage:damage(100 + level * 40)};
-    case 'blade': return {...common, damage: damage(evolved ? 125 : 14 + 14 * level), radius: 51 + level * 8, arc: evolved ? Math.PI * 2 : 1.6 + level * .23};
-    case 'bolt': return {...common, damage: damage(17 + level * 8), count: (evolved ? 6 : 1 + Math.floor(level / 2)) + (character.id === 'ranger' ? 1 : 0), pierce: 1 + Math.floor(level / 2), homing: evolved};
+    case 'blade': return {...common, damage: damage(evolved ? 75 : 20 + 6 * (level - 1)), radius: 51 + level * 8, arc: evolved ? Math.PI * 2 : 1.6 + level * .23};
+    case 'bolt': return {...common, damage: damage(evolved ? 40 : 10 + 2 * (level - 1)), count: (evolved ? 6 : 1 + Math.floor((level - 1) / 2)) + (character.id === 'ranger' ? 1 : 0), pierce: 1 + Math.floor(level / 2), homing: evolved};
     case 'orbit': return {...common, damage: damage(evolved ? 65 : 8 + level * 7), count: evolved ? 6 : 2 + Math.floor((level - 1) / 2), radius: 37 + level * 6, outerOffset: evolved ? 25 : 0, hitInterval: .38};
     case 'storm': return {...common, damage: damage(evolved ? 190 : 38 + level * 20), count: evolved ? 9 : level + 1, chainRange: 180};
     case 'flame': return {...common, damage: damage(20 + level * 8), count: evolved ? 3 : level >= 4 ? 2 : 1, burnDamage: damage(6 + level * 4), radius: 21 + level * 5, duration: 2.1 + level * .35, hitInterval: .45};
@@ -79,17 +80,12 @@ export function weaponStats(kind,level,stats,character){
   for(const key of ['duration','fieldDuration','slowDuration','freeze','poisonDuration','lifetime'])if(values[key]!==undefined)values[key]*=duration;
   if(values.count!==undefined)values.count+=stats.amount||0;
   if(values.fusion){
-    for(const key of Object.keys(values))if(key==='damage'||key.endsWith('Damage'))values[key]*=.86;
+    for(const key of Object.keys(values))if(key==='damage'||key.endsWith('Damage'))values[key]*=.78+level*.12;
     values.cooldown*=1.08;
   }
-  const t=stats.talents||{},tags=WEAPON_FAMILIES[kind]||[];
-  const bonus=1+(tags.includes('melee')&&t.w_flame1?.15:0)+(tags.includes('projectile')&&t.r_shot1?.12:0);
+  const tags=WEAPON_FAMILIES[kind]||[];
   const pact=(tags.includes('spirit')||tags.includes('summon'))?stats.soulpact?.multiplier||1:1;
-  for(const key of Object.keys(values))if(key==='damage'||key.endsWith('Damage'))values[key]*=bonus*pact;
+  for(const key of Object.keys(values))if(key==='damage'||key.endsWith('Damage'))values[key]*=pact;
   if(tags.includes('summon')&&values.fireInterval)values.fireInterval*=stats.soulpact?.interval||1;
-  if(t.r_shot2&&tags.includes('projectile')){
-    if(values.pierce!==undefined)values.pierce++;
-    if(values.bounces!==undefined)values.bounces++;
-  }
   return values;
 }

@@ -11,7 +11,7 @@ export const WEAPONS = {
  thunderbolt:{name:'雷棘贯星',fusion:true,maxLevel:3,color:'#c9b9f2',category:'融合 / 追踪与连锁',desc:'弩矢追踪并穿透敌群，每枚箭矢首次命中时向附近敌人传导连锁雷霆。',upgrades:['融合为雷霆连弩，追踪箭矢触发连锁闪电。','增加一枚弩矢、一次穿透与一个连锁目标。','箭雨达到极境，再次提升数量、穿透与雷击伤害。'],cooldown:1.5},
  glacier:{name:'寂星寒狱',fusion:true,maxLevel:3,color:'#a1e0e1',category:'融合 / 环绕与寒域',desc:'寒晶绕身自动迎敌；周期展开寒域，牵引与冻结敌人，寒域消散时引发冰爆。',upgrades:['融合为寒晶星环，并解锁引力寒域。','增加一颗寒晶，扩大寒域并强化冰爆。','寒狱达到极境，再增一颗寒晶并缩短寒域冷却。'],cooldown:4.4},
  blade:{name:'余烬长刃',evolution:'终焉·日轮',color:'#e2bf80',category:'近战 / 扇形斩击',desc:'朝最近的敌人挥出弧形剑气。',upgrades:['解锁自动扇形斩击。','提高伤害与攻击距离。','挥砍更快、范围更广。','提高伤害与攻击距离。','剑气覆盖更大范围。','进化：全周日轮斩，重创周围敌人。'],cooldown:1.1},
- bolt:{name:'荆棘连弩',evolution:'终焉·万箭',color:'#c4d29b',category:'远程 / 穿透弩矢',desc:'发射穿刺黑暗的弩矢。',upgrades:['解锁自动弩矢。','增加弩矢与穿透目标。','提高弩矢伤害与射速。','再次增加弩矢与穿透。','提高弩矢伤害与射速。','进化：追踪箭雨，多重穿透。'],cooldown:1.05},
+ bolt:{name:'荆棘连弩',evolution:'终焉·万箭',color:'#c4d29b',category:'远程 / 穿透弩矢',desc:'发射穿刺黑暗的弩矢。',upgrades:['解锁自动弩矢。','提高伤害与穿透目标。','增加一枚弩矢，提高伤害与射速。','提高伤害并再次增加穿透。','增加一枚弩矢，提高伤害与射速。','进化：追踪箭雨，多重穿透。'],cooldown:1.05},
  orbit:{name:'游魂灯',evolution:'终焉·星环',color:'#a2d5c5',category:'法术 / 环绕守护',desc:'让不灭的灵魂围绕你旋转。',upgrades:['解锁环绕游魂，接触敌人造成伤害。','提高环绕半径与接触伤害。','增加游魂数量与伤害。','提高环绕半径与接触伤害。','增加游魂数量与伤害。','进化：内外双环反向旋转。'],cooldown:0},
  storm:{name:'天谴雷符',evolution:'终焉·神罚',color:'#d4c3eb',category:'法术 / 连锁落雷',desc:'唤来紫色雷霆，击穿成群敌人。',upgrades:['解锁多目标落雷。','增加落雷目标与伤害。','增加落雷目标与伤害。','增加落雷目标与伤害。','增加落雷目标，冷却缩短。','进化：密集神罚轰击敌阵。'],cooldown:4.1},
  flame:{name:'炼狱火种',evolution:'终焉·焚世',color:'#eaa16b',category:'元素 / 持续燃烧',desc:'投掷火种，在地面留下燃烧区域。',upgrades:['解锁火种，生成持续火焰。','提高火焰伤害与范围。','火焰持续更久，范围更广。','增加每轮火种数量。','提高火焰伤害与范围。','进化：更多火种，飞行时留下烈焰之路。'],cooldown:3.1},
@@ -38,11 +38,11 @@ export const META = {
  vitality:{name:'长明之躯',desc:'每级 +5 初始生命',max:5,cost:50},
  power:{name:'余烬之力',desc:'每级 +3% 武器伤害',max:5,cost:65},
  magnet:{name:'引路之光',desc:'每级 +4% 经验获取',max:5,cost:55},
- regen:{name:'春回之息',desc:'每级 +0.08 生命 / 秒',max:5,cost:75},
+ regen:{name:'春回之息',desc:'连续 6 秒未受攻击后，每级恢复 0.08 生命 / 秒',max:5,cost:75},
 };
 export const PICKUPS = {
  xp:{name:'灵光结晶',color:'#b3cc89',desc:'拾取后获得经验。不同敌人掉落的结晶包含不同经验，较大的结晶也可能由多颗合并而成。',source:'击败敌人后掉落。'},
- heal:{name:'生命药草',color:'#bfd394',desc:'拾取后立即恢复 16 点生命，不超过最大生命。',source:'击败敌人时有机会掉落。'},
+ heal:{name:'生命药草',color:'#bfd394',desc:'拾取后立即恢复 12 点生命，不超过最大生命。',source:'击败敌人时有机会掉落；共享 20 秒间隔，地面最多保留一株。'},
  magnet:{name:'引魂之光',color:'#a6d9e2',desc:'让地面上现有的全部经验结晶向你飞来；不会永久改变拾取范围。',source:'击败普通敌人时有机会掉落。'},
  chest:{name:'古老宝箱',color:'#e0bd78',desc:'精英宝箱强化一次已持有装备并赠 25 余烬；首领宝箱强化两次、恢复 10 生命并赠 60 余烬。包括武器与道具，排除满级或已放逐装备；无可强化装备时每次改为 24 基础经验。不自动融合。',source:'击败精英或首领后掉落。'},
  hourglass:{name:'凝时碎砂',color:'#b5dce7',desc:'立即冻结当前普通敌人 3 秒，首领仅冻结 0.3 秒。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
@@ -50,12 +50,12 @@ export const PICKUPS = {
  ward:{name:'灯盾残片',color:'#c2d9b1',desc:'护盾补至 20 点，先于生命承受伤害；不与已有护盾相加。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
 };
 export const ENEMIES = {
- skeleton:{hp:26,speed:29,damage:9,xp:2,r:7,score:1},
- ghoul:{hp:50,speed:24,damage:13,xp:3,r:9,score:1},
- bat:{hp:18,speed:55,damage:7,xp:1,r:7,score:1},
- ghost:{hp:44,speed:27,damage:11,xp:3,r:8,score:2},
- knight:{hp:115,speed:22,damage:19,xp:7,r:10,score:3},
- reaper:{hp:84,speed:42,damage:16,xp:5,r:9,score:2},
+ skeleton:{hp:32,speed:29,damage:12,xp:2,r:7,score:1},
+ ghoul:{hp:50,speed:24,damage:15,xp:3,r:9,score:1},
+ bat:{hp:26,speed:55,damage:9,xp:1,r:7,score:1},
+ ghost:{hp:44,speed:27,damage:14,xp:3,r:8,score:2},
+ knight:{hp:115,speed:22,damage:21,xp:7,r:10,score:3},
+ reaper:{hp:84,speed:42,damage:19,xp:5,r:9,score:2},
 };
 export const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
 const normalizeDiscoveries = value => Array.isArray(value) ? [...new Set(value.filter(key => Object.hasOwn(WEAPONS,key) && WEAPONS[key].fusion))] : [];
@@ -81,17 +81,35 @@ export function mergeItemDiscoveries(...records) {
  for(const record of records)for(const [id,level] of Object.entries(normalizeItemDiscoveries(record)))merged[id]=Math.max(merged[id]||0,level);
  return merged;
 }
-export function readSave(){
- try{
-  const d=JSON.parse(localStorage.getItem('afterlight-save-v1')||'{}')||{};
-  return {embers:Math.max(0,Number(d.embers)||0),best:Math.max(0,Number(d.best)||0),kills:Math.max(0,Number(d.kills)||0),runs:Math.max(0,Number(d.runs)||0),wins:Math.max(0,Number(d.wins)||0),meta:Object.fromEntries(Object.keys(META).map(k=>[k,Math.max(0,Math.min(5,Math.floor(Number(d.meta?.[k])||0)))])),muted:!!d.muted,discoveredFusions:normalizeDiscoveries(d.discoveredFusions),discoveredItems:normalizeItemDiscoveries(d.discoveredItems)};
- }catch{return {embers:0,best:0,kills:0,runs:0,wins:0,meta:{},muted:false,discoveredFusions:[],discoveredItems:{}}}
+export function readSave(fallback={}){
+  let d;try{d=JSON.parse(localStorage.getItem('afterlight-save-v1')||'{}')||{}}catch{d=fallback}
+  const amount=(value,integer=true)=>{const n=typeof value==='number'||typeof value==='string'?Number(value):0;return Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER,integer?Math.floor(n):n)):0};
+  return {embers:amount(d.embers),best:amount(d.best,false),kills:amount(d.kills),runs:amount(d.runs),wins:amount(d.wins),meta:Object.fromEntries(Object.keys(META).map(k=>[k,Math.min(META[k].max,amount(d.meta?.[k]))])),muted:!!d.muted,discoveredFusions:normalizeDiscoveries(d.discoveredFusions),discoveredItems:normalizeItemDiscoveries(d.discoveredItems)};
 }
-export function writeSave(save){
- try{
-  let previous={};try{previous=JSON.parse(localStorage.getItem('afterlight-save-v1')||'{}')||{}}catch{}
-  save.discoveredFusions=normalizeDiscoveries([...(save.discoveredFusions||[]),...normalizeDiscoveries(previous.discoveredFusions)]);
-  save.discoveredItems=mergeItemDiscoveries(previous.discoveredItems,save.discoveredItems);
-  localStorage.setItem('afterlight-save-v1',JSON.stringify(save));return true;
- }catch{return false}
+let saveQueue=Promise.resolve(),lastStored=null,pendingMuted;
+const pending={embers:0,best:0,kills:0,runs:0,wins:0};
+export function refreshSave(save){
+ const latest=readSave(lastStored||save);lastStored=structuredClone(latest);
+ for(const key of ['embers','kills','runs','wins'])latest[key]=Math.min(Number.MAX_SAFE_INTEGER,latest[key]+pending[key]);
+ latest.best=Math.max(latest.best,pending.best);if(pendingMuted!==undefined)latest.muted=pendingMuted;
+ latest.discoveredFusions=normalizeDiscoveries([...latest.discoveredFusions,...(save.discoveredFusions||[])]);
+ latest.discoveredItems=mergeItemDiscoveries(latest.discoveredItems,save.discoveredItems);
+ return Object.assign(save,latest);
+}
+export function writeSave(save,change={}){
+ const commit=(persist=true)=>{
+  if(change.result){const r=change.result;pending.embers+=r.reward;pending.best=Math.max(pending.best,r.time);pending.kills+=r.kills;pending.runs++;if(r.won)pending.wins++}
+  if(Object.hasOwn(change,'muted'))pendingMuted=!!change.muted;
+  refreshSave(save);
+  const next=structuredClone(save),info=META[change.purchase],level=next.meta[change.purchase]||0;
+  const purchased=Object.hasOwn(META,change.purchase)&&level<info.max&&next.embers>=info.cost*(level+1);
+  if(purchased){next.embers-=info.cost*(level+1);next.meta[change.purchase]=level+1}
+  if(!persist)return {persisted:false,purchased:false};
+  try{localStorage.setItem('afterlight-save-v1',JSON.stringify(next))}catch{return {persisted:false,purchased:false}}
+  lastStored=structuredClone(next);for(const key of Object.keys(pending))pending[key]=0;pendingMuted=undefined;Object.assign(save,next);
+  return {persisted:true,purchased};
+ };
+ // ponytail: without Web Locks, writes serialize within one page only; use IndexedDB for cross-tab transactions on those browsers.
+ const task=async()=>{if(!globalThis.navigator?.locks)return commit();try{return await navigator.locks.request('afterlight-save-v1',()=>commit())}catch{return commit(false)}};
+ const result=saveQueue.then(task);saveQueue=result.catch(()=>{});return result;
 }

@@ -32,7 +32,7 @@ function detonate(game,z){
   for(const e of nearby(game,z.x,z.y,v.radius)){
     if(v.freeze)e.freeze=Math.max(e.freeze,e.boss?v.bossFreeze:v.freeze);
     if(v.poisonDamage)poisonEnemy(game,e,v.poisonDamage,v.poisonDuration);
-    if(v.vulnerability){e.markMultiplier=Math.max(e.markUntil>game.time?e.markMultiplier:1,v.vulnerability);e.markUntil=game.time+3}
+    if(v.vulnerability)game.markEnemy(e,z.source,v.vulnerability,3);
     game.hit(e,v.damage,z.x,z.y,95,true,z.source);
   }
   if(v.duration>0)game.zones.push({kind:'aftermath',source:z.source,x:z.x,y:z.y,r:v.radius,t:v.duration,max:v.duration,tick:0,values:v,seed:game.time});

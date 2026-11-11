@@ -6,7 +6,7 @@ import {relicDescription,compatibleWeapons,SYNERGIES,BUILD_TAGS,itemTags} from '
 import {buildProfile} from './balance.js';
 import {passiveEffect,weaponFacts,weaponExtra} from './item-info.js';
 import {ItemCatalog} from './catalog.js';
-import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,characterTalentStatus} from './talents.js';
+import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,characterTalentStatus,characterTalentSummary} from './talents.js';
 
 const $ = id => document.getElementById(id);
 const number = (value, digits = 1) => Number(value.toFixed(digits)).toLocaleString('zh-CN', {maximumFractionDigits: digits});
@@ -160,50 +160,50 @@ export class CharacterSheet {
     put('sheet-talent-count',preview?'预览':points>0?'+'+points:learned+'/6');
     const root=$('sheet-talents');root.replaceChildren();root.style.setProperty('--talent-color',definition.color);
     const intro=node('div','talent-intro'),identity=node('div','talent-identity');
-    identity.append(artwork(definition.icon),node('div','',definition.style));intro.append(identity,node('h3','',definition.name),node('p','',definition.description));
-    if(!preview)intro.append(node('small','talent-live',characterTalentStatus(this.game)));
+    identity.append(artwork(definition.icon),node('small','talent-root-label','初始被动 · 开局已拥有'),node('div','',definition.style));intro.append(identity,node('h3','',definition.name),node('p','',definition.description),node('p','talent-flow',definition.loop));
+    if(!preview)intro.append(node('small','talent-live',characterTalentStatus(this.game)),node('p','talent-current','当前效果 · '+characterTalentSummary(this.game)));
     const budget=node('div','talent-budget');budget.append(node('strong','',preview?'六次成长':points+' 点可用'),node('span','',preview?'出征后赚取天赋点':'已投入 '+learned+' / 6'));intro.append(budget);root.append(intro);
     const milestones=node('div','talent-milestones');
     for(const level of TALENT_LEVELS)milestones.append(node('span',game.level>=level?'earned':'','LV.'+level+' · +1'));
-    root.append(milestones,node('p','talent-rules',preview?'每个节点消耗 1 点，依次学习同列天赋；第三层从 LV.18 开放，三种最终专精只能选择一种。':'本局天赋不占装备位，也不消耗升级三选一。依次学习同列天赋；最终专精三选一。本局投入无法撤回，重开后重置。'));
+    root.append(milestones,node('p','talent-rules','以下三路均强化「'+definition.name+'」。每节点 1 点，沿同列依次学习；LV.18 开放最终专精，三选一。'+(preview?'最多投入 6 点，可跨分支组合前两层。':'不占装备位或装备升级机会；本局不可撤回，重开重置。')));
     const tabs=node('div','talent-branch-tabs');tabs.setAttribute('role','group');tabs.setAttribute('aria-label','天赋分支');
     const branches=node('div','talent-branches');this.talentBranch??=0;
     definition.branches.forEach((branch,index)=>{
       const tab=node('button','',branch.name);tab.setAttribute('aria-pressed',String(index===this.talentBranch));
       tab.addEventListener('click',()=>{this.talentBranch=index;for(const [i,b] of [...tabs.children].entries())b.setAttribute('aria-pressed',String(i===index));for(const [i,b] of [...branches.children].entries())b.classList.toggle('selected',i===index)});tabs.append(tab);
-      const column=node('section','talent-branch'+(index===this.talentBranch?' selected':''));column.append(node('h4','',branch.name),node('p','',branch.role));
+      const column=node('section','talent-branch'+(index===this.talentBranch?' selected':'')),heading=node('h4','',branch.name);heading.tabIndex=-1;column.append(heading,node('p','',branch.role));
       branch.nodes.forEach((talent,tier)=>{
         const state=talentNodeState(game,talent.id),card=node('button','talent-node'+(state.learned?' learned':state.exclusive?' excluded':state.available&&!readOnly?' available':' locked'));
         card.id='talent-'+talent.id;card.disabled=readOnly||!state.available;card.setAttribute('aria-label',talent.name+'。'+talent.description+'。'+state.reason);
-        const head=node('span','talent-node-head');head.append(artwork(talent.icon),node('b','',talent.name),node('em','',tier===2?'专精':'0'+(tier+1)));
+        const head=node('span','talent-node-head');head.append(artwork(talent.icon),node('b','',talent.name),node('em','',['强化','联动','专精'][tier]));
         card.append(head,node('span','talent-node-description',talent.description),node('span','talent-node-state',state.learned?'✓ 已学会':this.origin==='over'?'远征已结束':state.reason));
-        card.addEventListener('click',()=>this.game.learnTalent(talent.id));column.append(card);
+        card.addEventListener('click',()=>{this.talentBranch=index;this.game.learnTalent(talent.id)});column.append(card);
       });branches.append(column);
     });root.append(tabs,branches);
   }
 
   buildAttributes(character, stats, p, m, preview) {
-    const t=stats.talents||{};
     const dashLeft = preview ? 0 : this.game.player.dashCooldown;
     const dashState = !preview && this.game.player.dashTime > 0 ? '正在冲刺' : dashLeft > 0 ? '剩余 ' + seconds(dashLeft) : '已就绪';
     const rows = [
       ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 5}`, p.vitality && `不灭之心 +${p.vitality * 12}`])],
       ['power', '武器伤害', percent(stats.damageMultiplier), '倍率', source([`角色基础 ×${number(character.damage, 2)}`, m.power && `祭坛 +${m.power * 3}%`, p.power && `猩红誓约 +${p.power * 12}%`,p.curse&&`禁忌烛冠 +${p.curse*10}%`])],
       ['haste', '施放冷却缩减', percent(1 - stats.haste), '', p.haste ? `时隙沙漏 ${p.haste} 级；再与武器自身冷却相乘。游魂灯的接触间隔不变。` : '暂无冷却祝福；每种武器仍有独立的等级冷却。'],
-      ['speed', '移动速度', number(stats.moveSpeed), '像素 / 秒', source([`角色基础 ${character.speed}`, p.speed && `夜行之靴 +${p.speed * 6}%`,t.r_roam1&&'疾步额外 ×1.1'])],
-      ['armor', '伤害减免', stats.armor, '点 / 次', source([t.w_guard1&&'铁誓 +2','护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'])],
-      ['regen', '生命恢复', number(stats.regeneration,2), '点 / 秒', source([p.regen && `复苏苔芽 +${number(p.regen * .22,2)}`, m.regen && `春回之息 +${number(m.regen * .08,2)}`]) || '暂无持续恢复效果。'],
-      ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 42', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .35, 2)}`,t.s_scholar1&&'观星额外 ×1.2'])],
-      ['growth', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.growth && `记忆冠冕 +${p.growth * 10}%`, m.magnet && `祭坛 +${m.magnet * 4}%`,p.curse&&`禁忌烛冠 +${p.curse*8}%`,t.s_scholar1&&'观星 +8%',t.s_scholar3&&'群星馈赠 +12%'])],
-      ['luck', '暴击率', percent(stats.criticalChance), '', source(['武器直接命中独立判定，基础 5%', p.luck && `命运四叶 +${p.luck * 5} 个百分点`,t.r_sight1&&'猎眼 +8 个百分点'])],
-      ['focus', '暴击伤害', percent(stats.criticalMultiplier), '倍率', source([t.r_sight3&&'绝息 +50 个百分点','持续状态、天赋与遗物的追加伤害不暴击。'])],
+      ['speed', '移动速度', number(stats.moveSpeed), '像素 / 秒', source([`角色基础 ${character.speed}`, p.speed && `夜行之靴 +${p.speed * 6}%`])],
+      ['armor', '伤害减免', stats.armor, '点 / 次', '护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'],
+      ['regen', '持续恢复', number(stats.regeneration,2), '点 / 秒', p.regen ? '复苏苔芽在战斗中持续恢复。' : '需要本局选择恢复道具。'],
+      ['regen', '避伤恢复', number(stats.recovery,2), '点 / 秒', '春回之息：连续 6 秒未受攻击后生效；护盾受击也会打断。'],
+      ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 42', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .35, 2)}`])],
+      ['growth', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.growth && `记忆冠冕 +${p.growth * 10}%`, m.magnet && `祭坛 +${m.magnet * 4}%`,p.curse&&`禁忌烛冠 +${p.curse*8}%`])],
+      ['luck', '暴击率', percent(stats.criticalChance), '', source(['武器直接命中独立判定，基础 5%', p.luck && `命运四叶 +${p.luck * 5} 个百分点`])],
+      ['focus', '暴击伤害', percent(stats.criticalMultiplier), '倍率', '持续状态、天赋与遗物的追加伤害不暴击。'],
       ['area','武器范围',percent(stats.areaMultiplier),'倍率','包括攻击半径、光束宽度与距离；不增加遗物范围。'],
       ['duration','持续时间',percent(stats.durationMultiplier),'倍率','增加武器领域、减速与普通敌人冻结时间；首领冻结不变。'],
       ['amount','额外数量',stats.amount,'个','弹数、环绕物与落雷目标；炮台数量上限仍为 2。'],
       ['aegis','当前护盾',preview?(character.id==='warden'?8:0):number(this.game.player.shield),'点','护盾先于生命承受伤害，多个来源取较高值。'],
       ['curse','禁忌等级',stats.curse,'级',stats.curse?`敌人生命 +${stats.curse*12}%，生成频率 +${stats.curse*8}%，速度 +${stats.curse*3}%。`:'未持有禁忌烛冠；怪物按时间变强，不随你的等级额外膨胀。'],
-      ['speed', '冲刺冷却', number(stats.dashCooldown, 2), '秒', source([dashState,'基础 3 秒',p.speed&&`夜行之靴缩短 ${p.speed * 6}%`,t.w_dash1&&'踏阵额外缩短 15%',t.r_roam1&&'疾步额外缩短 10%'])],
-      ['armor', '冲刺保护', number(stats.dashInvincibility, 2), '秒', source([`${number(stats.dashDuration, 2)} 秒冲刺，速度 ×${stats.dashSpeedMultiplier}；冲刺起手获得无敌。`,t.r_roam2&&'借风 +0.12 秒无敌'])],
+      ['speed', '冲刺冷却', number(stats.dashCooldown, 2), '秒', source([dashState,'基础 3 秒',p.speed&&`夜行之靴缩短 ${p.speed * 6}%`])],
+      ['armor', '冲刺保护', number(stats.dashInvincibility, 2), '秒', `${number(stats.dashDuration, 2)} 秒冲刺，速度 ×${stats.dashSpeedMultiplier}；冲刺起手获得无敌。`],
     ];
     $('sheet-stat-grid').replaceChildren(...rows.map(([key, label, value, unit, detail]) => {
       const card = node('article', 'sheet-stat'), list = node('dl'), term = node('dt');
@@ -367,7 +367,7 @@ export class CharacterSheet {
   buildMeta(meta) {
     $('sheet-meta').replaceChildren(...Object.entries(META).map(([key, info]) => {
       const level = meta[key] || 0;
-      const effects = {vitality: `初始生命 +${level * 5}`, power: `武器伤害加成 +${level * 3}%`, magnet: `经验获取 +${level * 4}%`, regen: `每秒恢复 ${number(level * .08,2)} 点生命`};
+      const effects = {vitality: `初始生命 +${level * 5}`, power: `武器伤害加成 +${level * 3}%`, magnet: `经验获取 +${level * 4}%`, regen: `连续 6 秒未受攻击后，每秒恢复 ${number(level * .08,2)} 点生命`};
       const card = node('article', 'sheet-meta-card' + (level ? '' : ' inactive')), words = node('div'), title = node('h4', '', info.name);
       title.append(node('span', '', `LV. ${level} / ${info.max}`));
       words.append(title, node('p', '', level ? effects[key] : '未获得 · 可在营地的余烬祭坛提升'));

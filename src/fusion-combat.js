@@ -46,7 +46,7 @@ export function updateFusion(game,kind,v,dt) {
   if(kind==='glacier') {
     const x=p.x,y=p.y-8;
     for(const e of game.grid.near(x,y,v.fieldRadius+28))if(Math.hypot(e.x-x,e.y-y)<v.fieldRadius+e.r){e.freeze=Math.max(e.freeze,e.boss?v.bossFreeze:v.freeze);e.slow=Math.max(e.slow,v.fieldDuration)}
-    game.zones.push({kind:'glacier',x,y,r:v.fieldRadius,t:v.fieldDuration,max:v.fieldDuration,tick:0,hitInterval:v.fieldInterval,damage:v.fieldDamage,pullSpeed:v.pullSpeed,blastDamage:v.blastDamage,seed:game.time});
+    game.zones.push({kind:'glacier',x,y,r:v.fieldRadius,t:v.fieldDuration,max:v.fieldDuration,tick:0,hitInterval:v.fieldInterval,damage:v.fieldDamage,pullSpeed:v.pullSpeed,pullRadius:v.radius,blastDamage:v.blastDamage,seed:game.time});
     game.effects.push({type:'frost',x,y,r:v.fieldRadius,t:.8,max:.8,evolved:true});
     game.sound.play('frost');game.burst(x,y,26,'#c1e6e9',130);
   }
@@ -83,8 +83,8 @@ export function updateFusionZone(game,z,dt) {
   if(z.kind==='glacier') {
     for(const e of enemies) {
       const dx=z.x-e.x,dy=z.y-e.y,d=Math.hypot(dx,dy);
-      if(d<z.r+e.r&&d>12&&e.state!=='charge') {
-        const shift=Math.min(d-12,z.pullSpeed*dt*(e.boss?.12:1));
+      if(d<z.r+e.r&&d>z.pullRadius&&e.state!=='charge') {
+        const shift=Math.min(d-z.pullRadius,z.pullSpeed*dt*(e.boss?.12:1));
         e.x+=dx/d*shift;e.y+=dy/d*shift;
         e.slow=Math.max(e.slow,.6);
       }

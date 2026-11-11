@@ -6,7 +6,8 @@ import {updateFusion,chainArrow,updateFusionZone,drawFusionZone,drawFusionWeapon
 import {updateExpandedWeapon,updateExpandedProjectile,updateExpandedZone,drawExpandedProjectile,drawExpandedZone,drawExpandedEffect} from './expanded-combat.js';
 import {onWeaponHit,onEnemyKilled,onWeaponCast,onPlayerHurt,onPlayerDash,onXpPickup,updateRelicStates} from './relic-combat.js';
 import {RUN_DURATION,pressureAt,xpForLevel,weightedPick,upgradePool,rollUpgradeChoices,recordUpgradeChoice} from './balance.js';
-import {talentPoints,talentNodeState,resetCharacterTalents,updateCharacterTalents,onCharacterHit,onCharacterProjectileHit,characterHitMultiplier,onCharacterDash,onCharacterHurt,drawCharacterTalents} from './talents.js';
+import {talentPoints,talentNodeState,resetCharacterTalents,updateCharacterTalents,onCharacterLearn,onCharacterHit,onCharacterProjectileHit,characterHitMultiplier,onCharacterDash,onCharacterHurt,drawCharacterTalents} from './talents.js';
+import {EVENT_TYPES,resetWorldEvents,startWorldEvent,updateWorldEvents,drawWorldEvents,nearestWorldEvent} from './world-events.js';
 
 export {RUN_DURATION};
 
@@ -52,6 +53,7 @@ export class Game{
   if(this.state==='running'&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();this.keys.add(e.code);
   if(e.repeat)return;
   if(e.code==='Space'&&this.state==='running')this.dash();
+  if(e.code==='KeyE'&&this.state==='running'){e.preventDefault();this.interact()}
   if(e.code==='Escape'||e.code==='KeyP'){if(['running','level'].includes(this.state))this.pause();else if(this.state==='paused')this.resume();else if(this.state==='menu')this.on('closeMenuModal')}
   if(e.code==='KeyM')this.on('sound');if(e.code==='KeyF')this.on('fullscreen');
   if(this.state==='level'&&['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(e.code))this.on('choose',Number(e.code.slice(-1))-1);
@@ -63,12 +65,12 @@ export class Game{
   this.fusions={};this.consumedWeapons=new Set();this.consumedPassives=new Set();this.notifiedFusions=new Set();this.trackedFusion=this.discoveredFusions?.has(this.plannedFusion)?this.plannedFusion:null;
   this.relicTimers={};this.relicProcs={};this.echoCasts=0;
   this.choiceHistory=[];this.stormCharge=0;
-  this.xpNext=xpForLevel(1);this.waveClock=42;this.banished=new Set();this.banishes=3;this.lastHealDrop=-12;this.lastUtilityDrop=-30;this.lastHurt=-8;this.harvestCharge=0;this.damageByWeapon={};this.damageTaken=0;this.lastPhase=0;this.pressure=pressureAt(0);
+  this.xpNext=xpForLevel(1);this.waveClock=42;this.banished=new Set();this.banishes=3;this.lastHealDrop=-20;this.lastUtilityDrop=-30;this.lastHurt=-8;this.harvestCharge=0;this.damageByWeapon={};this.damageTaken=0;this.lastPhase=0;this.pressure=pressureAt(0);
   this.stats=characterStats(character,this.passives,this.meta);
   const maxHp=this.stats.maxHp;this.player={x:0,y:37,hp:maxHp,maxHp,r:7,flip:false,walk:0,moving:false,invincible:1,dashTime:0,dashCooldown:0,dashX:0,dashY:1,lastX:0,lastY:1,trailClock:0};
   this.player.shield=0;
   resetCharacterTalents(this);
-  this.shrines=Array.from({length:8},(_,i)=>{const a=i*2.39996,r=330+Math.floor(i/2)*290;return {x:Math.cos(a)*r,y:Math.sin(a)*r,used:false}});
+  resetWorldEvents(this);
   this.grid.rebuild([]);this.sound.init();this.on('startRun');this.on('weapons');this.on('hud');this.banner('最后一盏灯，为你而燃','SURVIVE UNTIL DAWN',3.5);this.toast('保持移动，武器会自动攻击。拾取绿色结晶来升级。',5);
   for(let i=0;i<6;i++)this.spawnEnemy('skeleton',false,125+i*12);
  }
@@ -82,6 +84,7 @@ export class Game{
  get moveSpeed(){return this.stats.moveSpeed}
  get pickupRadius(){return this.stats.pickupRadius}
  get xpMultiplier(){return this.stats.xpMultiplier}
+ interact(){return startWorldEvent(this)}
  pause(){if(!['running','level'].includes(this.state))return;this.pauseReturn=this.state;this.state='paused';this.keys.clear();this.stick={x:0,y:0};this.on('pause')}
  resume(){if(this.state!=='paused')return;this.state=this.pauseReturn==='level'?'level':'running';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};this.on('resume',this.state)}
  returnToMenu(){this.state='menu';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};this.on('menu')}
@@ -96,7 +99,7 @@ export class Game{
   const len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}p.moving=len>.1;
   if(p.moving){p.lastX=dx/(Math.hypot(dx,dy)||1);p.lastY=dy/(Math.hypot(dx,dy)||1);if(Math.abs(dx)>.1)p.flip=dx<0;p.walk+=dt*9;}
   if(p.dashTime>0){p.dashTime-=dt;p.x+=p.dashX*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.y+=p.dashY*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.trailClock-=dt;if(p.trailClock<=0){p.trailClock=.028;this.afterimages.push({x:p.x,y:p.y,flip:p.flip,t:.27,max:.27})}}else{p.x+=dx*this.moveSpeed*dt;p.y+=dy*this.moveSpeed*dt}
-  p.hp=Math.min(p.maxHp,p.hp+this.stats.regeneration*dt);
+  p.hp=Math.min(p.maxHp,p.hp+(this.stats.regeneration+(this.time-this.lastHurt>=6?this.stats.recovery:0))*dt);
   this.camera.x=lerp(this.camera.x,p.x,1-Math.exp(-dt*7));this.camera.y=lerp(this.camera.y,p.y-8,1-Math.exp(-dt*7));
   this.pressure=pressureAt(this.time,this.stats.curse);
   if(this.pressure.index!==this.lastPhase){this.lastPhase=this.pressure.index;if(![3,6,10].includes(this.lastPhase))this.banner(this.pressure.name,this.pressure.hint,3);this.checkFusionReadiness()}
@@ -105,7 +108,7 @@ export class Game{
   for(const milestone of [180,360,RUN_DURATION])if(this.time>=milestone&&!this.bossMilestones.has(milestone)){this.bossMilestones.add(milestone);this.spawnBoss(milestone)}
   for(const e of this.enemies)this.updateEnemy(e,dt);
   this.grid.rebuild(this.enemies);updateRelicStates(this);updateCharacterTalents(this,dt,Math.hypot(p.x-oldX,p.y-oldY));this.updateWeapons(dt);this.updateProjectiles(dt);this.updateZones(dt);this.updateHazards(dt);this.updateDrops(dt);
-  for(const s of this.shrines){if(!s.used&&distance(p,s)<24){s.used=true;p.hp=Math.min(p.maxHp,p.hp+20);this.gold+=15;this.gainXp(12);this.effects.push({type:'pulse',x:s.x,y:s.y-12,r:80,t:.8,max:.8,color:'#bbd49a'});this.burst(s.x,s.y-20,35,'#cde6a5',70);this.sound.play('chest');this.toast('古老祭坛已点亮 · 生命 +20 · 余烬 +15')}}
+  updateWorldEvents(this,dt);
   for(const a of this.afterimages)a.t-=dt;this.afterimages=this.afterimages.filter(a=>a.t>0);
   for(const fx of this.effects)fx.t-=dt;this.effects=this.effects.filter(e=>e.t>0);
   for(const part of this.particles){part.t-=dt;part.x+=part.vx*dt;part.y+=part.vy*dt;part.vx*=Math.exp(-dt*3);part.vy+=part.gravity*dt}this.particles=this.particles.filter(e=>e.t>0);
@@ -129,7 +132,7 @@ export class Game{
   if(this.waveCount%3===0&&this.enemies.length<this.pressure.cap){this.spawnEnemy('knight',true);this.banner('提灯精英 · 追猎开始','击败精英夺取一次装备强化',2.7)}else this.banner('鸦群掠过长夜','寻找缺口，避开怪潮正面',2.7);
  }
  spawnBoss(milestone){
-  const final=milestone===RUN_DURATION;const e=this.spawnEnemy(final?'reaper':'knight');const a=Math.random()*TAU;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=final?'蚀月君王':milestone===360?'无名葬钟':'墓园看守';e.hp=(final?26000:milestone===360?10500:3200)*(1+(this.stats.curse||0)*.12);e.maxHp=e.hp;e.speed=final?42:28;e.damage=final?36:milestone===360?28:22;e.xp=final?180:90;e.r=final?23:19;e.scale=final?2.7:2.25;e.score=100;e.attack=3;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
+  const final=milestone===RUN_DURATION;const e=this.spawnEnemy(final?'reaper':'knight');const a=Math.random()*TAU;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=final?'蚀月君王':milestone===360?'无名葬钟':'墓园看守';e.hp=(final?26000:milestone===360?10500:3200)*(1+(this.stats.curse||0)*.12);e.maxHp=e.hp;e.speed=final?42:28;e.damage=final?44:milestone===360?34:26;e.xp=final?180:90;e.r=final?23:19;e.scale=final?2.7:2.25;e.score=100;e.attack=3;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
   if(final)this.finalSpawned=true;this.sound.play('boss');this.shake=5;this.banner(e.name+' · 降临',final?'THE ECLIPSE SOVEREIGN':'GUARDIAN OF THE GRAVE',4);this.effects.push({type:'pulse',x:e.x,y:e.y,r:100,t:1,max:1,color:'#d69a77'});this.burst(e.x,e.y-30,40,'#a78eaa',80);this.on('hud');
  }
  updateEnemy(e,dt){
@@ -154,7 +157,7 @@ export class Game{
   // Light local separation keeps dense hordes readable without blocking the player.
   if(!e.boss&&e.freeze<=0){let contacts=0;for(const other of this.grid.near(e.x,e.y,24)){if(other.id===e.id||other.dead)continue;const sx=e.x-other.x,sy=e.y-other.y,sep=Math.hypot(sx,sy)||.1,desired=(e.r+other.r)*.76;if(sep<desired){const force=(desired-sep)*dt*3;e.x+=sx/sep*force;e.y+=sy/sep*force;if(++contacts>=7)break}}}
   e.x+=e.knockX*dt;e.y+=e.knockY*dt;e.knockX*=Math.exp(-dt*13);e.knockY*=Math.exp(-dt*13);
-  if(distance(e,this.player)<e.r+this.player.r&&this.player.invincible<=0)this.hurt(e.damage,e.x,e.y);
+  if(e.freeze<=0&&distance(e,this.player)<e.r+this.player.r&&this.player.invincible<=0)this.hurt(e.damage,e.x,e.y);
  }
  closest(x=this.player.x,y=this.player.y,range=420,exclude=null){let best=null,ds=range*range;for(const e of this.enemies){if(e.dead||(exclude&&exclude.has(e.id)))continue;const d=(e.x-x)**2+(e.y-y)**2;if(d<ds){ds=d;best=e}}return best}
  updateWeapons(dt){
@@ -192,10 +195,10 @@ export class Game{
    const oldX=b.x,oldY=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;if(b.trail){b.trail.push({x:b.x,y:b.y});if(b.trail.length>5)b.trail.shift()}
    if(b.enemy){if(distance(b,{x:this.player.x,y:this.player.y-9})<11){this.hurt(b.damage,b.x,b.y);b.t=0;this.burst(b.x,b.y,8,'#be90ad',40)}continue}
    if(b.type==='flame'&&b.lvl===6){b.trailClock-=dt;if(b.trailClock<0){b.trailClock=.20;this.addFire({...b,lvl:3},true)}}
-   for(const e of this.grid.near(b.x,b.y,36)){if(b.hit.has(e.id))continue;
+   for(const e of this.grid.near(b.x,b.y,36)){if(e.dead||b.hit.has(e.id))continue;
     // Sweep each projectile through its previous position to avoid tunnelling.
     const vx=b.x-oldX,vy=b.y-oldY,den=vx*vx+vy*vy||1,u=clamp(((e.x-oldX)*vx+(e.y-9-oldY)*vy)/den,0,1);const dd=Math.hypot(e.x-(oldX+vx*u),e.y-9-(oldY+vy*u));
-    if(dd<e.r+b.r){b.hit.add(e.id);onCharacterProjectileHit(this,b,e);this.hit(e,b.damage,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!b.talent);chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
+    if(dd<e.r+b.r){b.hit.add(e.id);const multiplier=onCharacterProjectileHit(this,b,e);this.hit(e,b.damage*multiplier,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!b.talent);chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
    }
   }this.projectiles=this.projectiles.filter(b=>b.t>0);
  }
@@ -206,10 +209,14 @@ export class Game{
   this.zones=this.zones.filter(z=>z.t>0).slice(-128);
  }
  updateHazards(dt){for(const h of this.hazards){h.t-=dt;if(h.t<=0&&!h.visualOnly){this.effects.push({type:'enemyBlast',x:h.x,y:h.y,r:h.r,t:.5,max:.5});this.burst(h.x,h.y,18,'#b6756c',100);if(distance(h,this.player)<h.r+this.player.r)this.hurt(h.damage,h.x,h.y);this.shake=Math.max(this.shake,3)}}this.hazards=this.hazards.filter(h=>h.t>0)}
+ markEnemy(e,source,multiplier,duration){
+  e.marks??={};e.marks[source]={multiplier,until:this.time+duration};
+  e.markUntil=Math.max(e.markUntil||0,this.time+duration);
+ }
  hit(e,damage,fromX,fromY,knock=50,feedback=true,source=null,periodic=false){
   if(e.dead)return;const critical=!!source&&!periodic&&Math.random()<this.stats.criticalChance;
   const execute=source&&!periodic&&this.passives.executioner&&e.hp/e.maxHp<=.3?1+this.passives.executioner*(e.boss?.1:.2):1;
-  const marked=e.markUntil>this.time?e.markMultiplier:1;
+  const marked=e.markUntil>this.time?Object.values(e.marks).reduce((best,mark)=>mark.until>this.time?Math.max(best,mark.multiplier):best,1):1;
   const dmg=Math.max(1,Math.round(damage*(critical?this.stats.criticalMultiplier:1)*execute*marked*characterHitMultiplier(this,e,source,periodic)));
   this.damageByWeapon[source||'reaction']=(this.damageByWeapon[source||'reaction']||0)+Math.min(Math.max(0,e.hp),dmg);
   if(execute>1)this.relicProcs.executioner=(this.relicProcs.executioner||0)+1;
@@ -218,24 +225,26 @@ export class Game{
   if(feedback){this.sound.play('hit');this.burst(e.x,e.y-10,critical?6:3,critical?'#efd096':'#a3ab78',40)}
   if(critical&&feedback){this.shake=Math.max(this.shake,1.6);this.hitstop=Math.max(this.hitstop,.022)}
   onWeaponHit(this,e,source,critical,periodic);
-  onCharacterHit(this,e,source,critical,periodic);
+  onCharacterHit(this,e,source,periodic);
   if(e.hp<=0&&!e.dead)this.kill(e);
  }
  kill(e){
-  if(e.dead)return;e.dead=true;this.kills++;this.gold+=e.score;this.burst(e.x,e.y-10,8,e.kind==='ghost'?'#8db7a4':'#9e9c72',45);this.drops.push({type:'xp',x:e.x,y:e.y,r:3,value:e.xp,age:0,vx:0,vy:0,attracted:false});
+  if(e.dead)return;e.dead=true;this.kills++;this.gold+=e.score;this.burst(e.x,e.y-10,8,e.kind==='ghost'?'#8db7a4':'#9e9c72',45);
+  const starLinked=!!this.talents.s_scholar1&&e.starMarkedUntil>this.time;
+  this.drops.push({type:'xp',x:e.x,y:e.y,r:3,value:e.xp,age:0,vx:0,vy:0,attracted:starLinked,starLinked});
   const low=this.player.hp<this.player.maxHp*.45,heals=this.drops.filter(d=>d.type==='heal'&&!d.dead).length;
-  if(heals<2&&this.time-this.lastHealDrop>=12&&(Math.random()<(low?.018:.006)||low&&this.time-this.lastHealDrop>=48&&heals===0)){
-   this.drops.push({type:'heal',x:e.x+6,y:e.y,age:0,r:5,value:16});this.lastHealDrop=this.time;
+  if(heals<1&&this.time-this.lastHealDrop>=20&&(Math.random()<(low?.012:.004)||low&&this.time-this.lastHealDrop>=75)){
+   this.drops.push({type:'heal',x:e.x+6,y:e.y,age:0,r:5,value:12});this.lastHealDrop=this.time;
   }
   if(!e.boss&&this.time-this.lastUtilityDrop>=30&&Math.random()<.004){
    const type=weightedPick([{type:'magnet',weight:4},{type:'hourglass',weight:3},{type:'nova',weight:2},{type:'ward',weight:3}]).type;
    this.drops.push({type,x:e.x-5,y:e.y,age:0,r:5,value:0});this.lastUtilityDrop=this.time;
   }
-  if(e.elite||e.boss){this.drops.push({type:'chest',x:e.x,y:e.y,age:0,r:10,value:e.boss?60:25});this.effects.push({type:'pulse',x:e.x,y:e.y,r:e.boss?140:70,t:.7,max:.7,color:'#dec799'});this.shake=e.boss?7:3;this.hitstop=e.boss?.12:.045;this.burst(e.x,e.y-20,50,'#e1bf87',120);this.sound.play('chest');if(e.boss){this.banner(e.name+' · 已被击败','THE LIGHT PREVAILS',3);for(const enemy of this.enemies)if(!enemy.dead&&!enemy.boss&&distance(enemy,e)<180)this.hit(enemy,250,e.x,e.y,120,false)}}
+  if((e.elite||e.boss)&&!e.eventGuardian){this.drops.push({type:'chest',x:e.x,y:e.y,age:0,r:10,value:e.boss?60:25});this.effects.push({type:'pulse',x:e.x,y:e.y,r:e.boss?140:70,t:.7,max:.7,color:'#dec799'});this.shake=e.boss?7:3;this.hitstop=e.boss?.12:.045;this.burst(e.x,e.y-20,50,'#e1bf87',120);this.sound.play('chest');if(e.boss){this.banner(e.name+' · 已被击败','THE LIGHT PREVAILS',3);for(const enemy of this.enemies)if(!enemy.dead&&!enemy.boss&&distance(enemy,e)<180)this.hit(enemy,250,e.x,e.y,120,false)}}
   if(e.final)this.finalDefeated=true;
   onEnemyKilled(this,e);
  }
- hurt(amount,x,y){const p=this.player;if(p.invincible>0||this.state!=='running')return;const dmg=Math.max(1,Math.round(Math.max(amount*.3,amount-this.stats.armor))),absorbed=Math.min(p.shield||0,dmg);p.shield-=absorbed;p.hp-=dmg-absorbed;this.lastHurt=this.time;this.damageTaken+=dmg-absorbed;p.invincible=.75;this.shake=5;this.flash=.23;this.sound.play('hurt');this.burst(p.x,p.y-11,12,absorbed?'#c1d9c1':'#bd7968',60);this.texts.push({x:p.x,y:p.y-30,text:absorbed===dmg?'格挡':'−'+(dmg-absorbed),t:.9,max:.9,critical:true,color:absorbed?'#c4e4d0':'#ef9d85'});const shieldBroke=absorbed>0&&p.shield===0;onCharacterHurt(this);onPlayerHurt(this,shieldBroke);this.on('hud')}
+ hurt(amount,x,y){const p=this.player;if(p.invincible>0||this.state!=='running')return;const dmg=Math.max(1,Math.round(Math.max(amount*.3,amount-this.stats.armor))),absorbed=Math.min(p.shield||0,dmg);p.shield-=absorbed;p.hp-=dmg-absorbed;this.lastHurt=this.time;this.damageTaken+=dmg-absorbed;p.invincible=.6;this.shake=5;this.flash=.23;this.sound.play('hurt');this.burst(p.x,p.y-11,12,absorbed?'#c1d9c1':'#bd7968',60);this.texts.push({x:p.x,y:p.y-30,text:absorbed===dmg?'格挡':'−'+(dmg-absorbed),t:.9,max:.9,critical:true,color:absorbed?'#c4e4d0':'#ef9d85'});const shieldBroke=absorbed>0&&p.shield===0;onCharacterHurt(this);onPlayerHurt(this,shieldBroke);this.on('hud')}
  updateDrops(dt){
   const p=this.player,r=this.pickupRadius;
   for(const d of this.drops){
@@ -247,7 +256,7 @@ export class Game{
    d.x+=(p.x-d.x)/(dist||1)*step;d.y+=(p.y-d.y)/(dist||1)*step;
    if(dist>=12)continue;
    d.dead=true;this.on('pickup',d.type);
-   if(d.type==='xp'){this.gainXp(d.value);onXpPickup(this,d.value);this.sound.play('xp')}
+   if(d.type==='xp'){this.gainXp(d.value);onXpPickup(this,d.value,d.starLinked);this.sound.play('xp')}
    if(d.type==='heal'){p.hp=Math.min(p.maxHp,p.hp+d.value);this.burst(p.x,p.y-10,10,'#b8d699',40);this.texts.push({x:p.x,y:p.y-30,text:'+'+d.value,t:1,max:1,color:'#badd9a'});this.sound.play('select')}
    if(d.type==='magnet'){for(const drop of this.drops)if(drop.type==='xp')drop.attracted=true;this.sound.play('chest');this.toast('引魂之光 · 所有经验正向你汇聚')}
    if(d.type==='chest')this.openChest(d.value);
@@ -309,6 +318,7 @@ export class Game{
   const active=['running','paused','level'].includes(this.state)||this.state==='status'&&['running','paused','level'].includes(this.statusReturn);
   const node=talentNodeState(this,id);if(!active||!node.available)return false;
   this.talents[id]=true;this.stats=characterStats(this.character,this.passives,this.meta,this.talents);
+  onCharacterLearn(this);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.sound.play('select');this.on('talentLearned',id);this.on('hud');return true;
  }
@@ -325,7 +335,7 @@ export class Game{
   this.stats=characterStats(this.character,this.passives,this.meta,this.talents);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.checkFusionReadiness();
-  this.effects.push({type:'pulse',x:this.player.x,y:this.player.y,r:85,t:.7,max:.7,color:item.color});this.burst(this.player.x,this.player.y-10,30,item.color,80);this.player.invincible=Math.max(this.player.invincible,1);this.sound.play('select');this.keys.clear();this.state='running';this.on('upgrade');this.on('weapons');this.on('hud');
+  this.effects.push({type:'pulse',x:this.player.x,y:this.player.y,r:85,t:.7,max:.7,color:item.color});this.burst(this.player.x,this.player.y-10,30,item.color,80);this.player.invincible=Math.max(this.player.invincible,.45);this.sound.play('select');this.keys.clear();this.state='running';this.on('upgrade');this.on('weapons');this.on('hud');
  }
  burst(x,y,count,color,speed=50){for(let i=0;i<count&&this.particles.length<650;i++){const a=Math.random()*TAU,s=speed*(.2+Math.random()*.8),t=.2+Math.random()*.5;this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,t,max:t,color,size:Math.random()<.7?1:2,gravity:20})}}
  banner(title,subtitle,duration=3){this.bannerUntil=this.time+duration;this.on('banner',{title,subtitle})}
@@ -333,6 +343,7 @@ export class Game{
  get earnedEmbers(){return this.gold+Math.floor(this.time/10)}
  end(won,abandoned=false,destination='result'){
   if(this.ended||!this.player||!['running','paused','level'].includes(this.state))return;
+  if(this.activeEvent){this.activeEvent.state='failed';this.activeEvent.used=true;this.activeEvent=null;this.eventsFailed++}
   this.ended=true;this.state='over';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};
   this.reward=this.earnedEmbers+(won?250:0);this.result={won,abandoned,destination,time:this.time,kills:this.kills,level:this.level,reward:this.reward};
   this.sound.play(abandoned?'select':won?'win':'death');this.on('end',this.result);
@@ -345,7 +356,7 @@ export class Game{
   this.landscape.drawFloor(g,cam,w,h,t);const decor=this.landscape.getObjects(cam,w,h);
   // Subtle cool moonlight travels diagonally through the canopy.
   g.save();g.globalAlpha=.05;g.fillStyle='#b7c5a0';for(let i=0;i<3;i++){const x=w*.6+i*110+Math.sin(t*.08)*10;g.beginPath();g.moveTo(x,0);g.lineTo(x+70,0);g.lineTo(x-85,h);g.lineTo(x-160,h);g.closePath();g.fill()}g.restore();
-  if(!menu){this.drawZones(g,ox,oy,t);this.drawHazards(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
+  if(!menu){this.drawZones(g,ox,oy,t);drawWorldEvents(this,g,ox,oy);this.drawHazards(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
   // Shadows are drawn beneath all sprites, maintaining a coherent depth plane.
   for(const obj of decor)shadow(g,obj.x+ox,obj.y+oy,obj.kind==='tree'?28:obj.kind==='arch'?53:10,.20);
   if(!menu){for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+40&&Math.abs(e.y-cam.y)<h/2+50)shadow(g,e.x+ox,e.y+oy,e.r*1.3,.3);shadow(g,this.player.x+ox,this.player.y+oy,12,.44)}
@@ -372,6 +383,8 @@ export class Game{
    if(o.hp<o.maxHp&&!o.boss&&o.category==='enemy'){const width=o.elite?26:16;g.fillStyle='#102219';g.fillRect(x-width/2,y+5,width,2);g.fillStyle=o.elite?'#b8a46f':'#a49468';g.fillRect(x-width/2,y+5,width*Math.max(0,o.hp/o.maxHp),1)}
    if(o.boss&&o.state==='windup')diamond(g,x,y-43*o.scale,5,'#edb783');
    if(o.markUntil>this.time)diamond(g,x,y-25*o.scale,3,'#d6aed5');
+   if(o.starMarkedUntil>this.time)diamond(g,x-6,y-29*o.scale,3,'#b7d9e8');
+   if(o.windMarkedUntil>this.time)diamond(g,x+6,y-29*o.scale,3,'#c9d69e');
   }
   // Pools of light and floating ash tie the hand-drawn scenery together.
   glow(g,ox,oy-6,92+Math.sin(t*7)*4,'#e9983e34');glow(g,ox,oy-6,32,'#f4c26a32');
@@ -410,6 +423,11 @@ export class Game{
   g.restore();
  }}
  drawCompass(g,cam,w,h){
+  const event=nearestWorldEvent(this),target=event?.guardian&&!event.guardian.dead?event.guardian:event;
+  if(target&&this.time>=45&&(this.time<540||this.activeEvent)&&!this.enemies.some(e=>e.boss&&!e.dead)){
+   const x=target.x-cam.x,y=target.y-cam.y;
+   if(Math.abs(x)>w/2-35||Math.abs(y)>h/2-50){const a=Math.atan2(y,x),scale=Math.min((w/2-25)/Math.max(1,Math.abs(x)),(h/2-55)/Math.max(1,Math.abs(y))),px=w/2+x*scale,py=h/2+y*scale,color=EVENT_TYPES[event.kind].color;g.fillStyle=color;g.beginPath();g.moveTo(px+Math.cos(a)*6,py+Math.sin(a)*6);g.lineTo(px+Math.cos(a+2.4)*5,py+Math.sin(a+2.4)*5);g.lineTo(px+Math.cos(a-2.4)*5,py+Math.sin(a-2.4)*5);g.fill();pixelText(g,'祭坛',px,py-12,color,8)}
+  }
   const boss=this.enemies.find(e=>e.boss&&!e.dead);if(boss){const x=boss.x-cam.x,y=boss.y-cam.y;if(Math.abs(x)>w/2-30||Math.abs(y)>h/2-40){const a=Math.atan2(y,x),scale=Math.min((w/2-23)/Math.max(1,Math.abs(x)),(h/2-50)/Math.max(1,Math.abs(y)));const px=w/2+x*scale,py=h/2+y*scale;g.fillStyle='#d5a786';g.beginPath();g.moveTo(px+Math.cos(a)*7,py+Math.sin(a)*7);g.lineTo(px+Math.cos(a+2.4)*5,py+Math.sin(a+2.4)*5);g.lineTo(px+Math.cos(a-2.4)*5,py+Math.sin(a-2.4)*5);g.fill();pixelText(g,'BOSS',px,py-12,'#c7a085',7)}}
  }
  drawAtmosphere(g,w,h,t,menu){
