@@ -21,8 +21,8 @@ export function nearestWorldEvent(game){
   return nearest;
 }
 
-function unavailable(game,s){
-  if(game.state!=='running'||!game.player||game.player.hp<=0)return '仅可在战斗中开启';
+function unavailable(game,s,preview=false){
+  if((game.state!=='running'&&!(preview&&game.state==='paused'&&game.pauseReturn==='running'))||!game.player||game.player.hp<=0)return '仅可在战斗中开启';
   if(game.activeEvent)return '先完成当前事件';
   if(!s||s.state!=='idle')return '附近没有可用祭坛';
   if(game.time<45)return '开局 45 秒后开放';
@@ -70,9 +70,9 @@ export function updateWorldEvents(game,dt){
 export function worldEventStatus(game){
   const s=nearestWorldEvent(game),empty={visible:false,name:'战场事件',detail:'',reward:'',progress:0,max:1,canStart:false,active:false};
   if(!s||!game.player||game.time>=540&&!game.activeEvent)return empty;
-  const type=EVENT_TYPES[s.kind],active=s===game.activeEvent,d=Math.round(distance(game.player,s));
-  const detail=active?(s.kind==='vigil'?(distance(game.player,s)<=80?'守护中':'返回灯圈继续守护')+' · '+s.progress.toFixed(1)+'/12 秒':s.kind==='hunt'?'击败精英守卫':'已回收 '+s.progress+'/6 魂光')+' · 剩余 '+Math.min(45,Math.max(0,Math.ceil(s.endsAt-game.time)))+' 秒':d>45?'距离 '+d+' · '+unavailable(game,s):unavailable(game,s)||type.hint+' · 限时 45 秒';
-  return {visible:true,name:type.name,detail,reward:type.reward,progress:s.progress,max:s.goal,canStart:!unavailable(game,s),active};
+  const type=EVENT_TYPES[s.kind],active=s===game.activeEvent,d=Math.round(distance(game.player,s)),blocked=unavailable(game,s,true);
+  const detail=active?(s.kind==='vigil'?(distance(game.player,s)<=80?'守护中':'返回灯圈继续守护')+' · '+s.progress.toFixed(1)+'/12 秒':s.kind==='hunt'?'击败精英守卫':'已回收 '+s.progress+'/6 魂光')+' · 剩余 '+Math.min(45,Math.max(0,Math.ceil(s.endsAt-game.time)))+' 秒':d>45?'距离 '+d+' · '+blocked:blocked||type.hint+' · 限时 45 秒';
+  return {visible:true,name:type.name,detail,reward:type.reward,progress:s.progress,max:s.goal,canStart:!blocked,active};
 }
 
 export function drawWorldEvents(game,g,ox,oy){

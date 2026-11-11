@@ -53,7 +53,7 @@ export class Game{
   if(this.state==='running'&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();this.keys.add(e.code);
   if(e.repeat)return;
   if(e.code==='Space'&&this.state==='running')this.dash();
-  if(e.code==='KeyE'&&this.state==='running'){e.preventDefault();this.interact()}
+  if(e.code==='KeyE'&&['running','paused'].includes(this.state)){e.preventDefault();this.on('worldEvent')}
   if(e.code==='Escape'||e.code==='KeyP'){if(['running','level'].includes(this.state))this.pause();else if(this.state==='paused')this.resume();else if(this.state==='menu')this.on('closeMenuModal')}
   if(e.code==='KeyM')this.on('sound');if(e.code==='KeyF')this.on('fullscreen');
   if(this.state==='level'&&['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(e.code))this.on('choose',Number(e.code.slice(-1))-1);

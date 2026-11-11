@@ -348,6 +348,7 @@ try{
   const bossTrial=trialGame('souls');assert(bossTrial.interact());bossTrial.spawnBoss(180);updateWorldEvents(bossTrial,.05);assert.equal(bossTrial.eventsFailed,1);assert.equal(bossTrial.activeEvent,null);assert.equal(bossTrial.xp,0);
   const fullTrial=trialGame('hunt');fullTrial.pressure.cap=0;assert(!fullTrial.interact(),'guardian start must obey the enemy cap');fullTrial.pressure.cap=2;assert(fullTrial.interact());fullTrial.time=65;updateWorldEvents(fullTrial,.05);assert.equal(fullTrial.enemies.length,2,'reinforcements must obey the enemy cap');
   const maxTrial=trialGame('hunt');equip(maxTrial,{blade:6});assert(maxTrial.interact());maxTrial.kill(maxTrial.activeEvent.guardian);updateWorldEvents(maxTrial,.05);assert.equal(maxTrial.weapons.blade,6);assert.equal(maxTrial.xp,24,'maxed equipment converts the hunt reward to the chest XP fallback');assert(EVENT_TYPES.hunt.reward.includes('经验 +24'));
+  const previewTrial=trialGame('vigil');previewTrial.pause();assert(worldEventStatus(previewTrial).canStart,'paused preview retains the available challenge');assert(!previewTrial.interact(),'preview does not start combat while paused');previewTrial.pauseReturn='level';assert(!worldEventStatus(previewTrial).canStart,'pending upgrades cannot start an event');
   console.log('PASS: 36 weapons / 72 live attacks, 20 fusions, 27 innate-driven talent nodes, three optional shrine events, lamp/wick gates, star XP collection, wind pursuit, tag weights and growth parity.');
 
   if(process.argv.includes('--pressure')){
@@ -633,7 +634,9 @@ try{
       assert(await evaluate('return !document.getElementById("world-event-start").disabled&&document.getElementById("world-event-detail").textContent.includes("12 秒")'));
       await shot('event-offer-desktop');
       await call('Input.dispatchKeyEvent',{type:'keyDown',key:'e',code:'KeyE'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'e',code:'KeyE'});
-      assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==="vigil"&&document.getElementById("world-event-start").disabled'));
+      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="paused"&&!game.activeEvent&&!document.getElementById("pause-event").classList.contains("hidden")&&document.getElementById("world-event-detail").textContent.includes("援兵")'),'preview shows risk and pauses before accepting');
+      await call('Input.dispatchKeyEvent',{type:'keyDown',key:'e',code:'KeyE'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'e',code:'KeyE'});
+      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="running"&&game.activeEvent?.kind==="vigil"'));
       await evaluate('const {game}=await import("/src/main.js");game.pause();');
       const frozenEvent=await evaluate('const {game}=await import("/src/main.js");return [game.time,game.activeEvent.progress]');await delay(250);
       assert.deepEqual(await evaluate('const {game}=await import("/src/main.js");return [game.time,game.activeEvent.progress]'),frozenEvent,'paused event clocks must stop');
@@ -641,13 +644,33 @@ try{
       assert(await evaluate('const {game}=await import("/src/main.js");return game.eventsCompleted===1&&!game.activeEvent&&game.player.shield>=12'));
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
       await evaluate('const {game}=await import("/src/main.js");game.player.x=game.shrines[2].x;game.player.y=game.shrines[2].y;game.on("hud");');
-      assert(await evaluate('const card=document.getElementById("world-event-card").getBoundingClientRect(),talent=document.getElementById("hud-talents-button").getBoundingClientRect(),stick=document.getElementById("joystick").getBoundingClientRect();return card.right<=innerWidth&&card.left>=talent.right&&card.bottom<stick.top'));
+      assert(await evaluate('const card=document.getElementById("world-event-card").getBoundingClientRect(),talent=document.getElementById("hud-talents-button").getBoundingClientRect(),stick=document.getElementById("joystick").getBoundingClientRect();return card.right<=innerWidth&&card.left>=0&&card.top>=talent.bottom&&card.bottom<innerHeight*.32&&card.bottom<stick.top'));
       await shot('event-offer-mobile');
-      const eventTouch=await evaluate('const r=document.getElementById("world-event-start").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+      const eventTouch=await evaluate('const r=document.getElementById("world-event-preview").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
       await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[eventTouch]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(100);
+      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="paused"&&!game.activeEvent&&document.getElementById("world-event-reward").textContent.includes("重铸")'));
+      await shot('event-preview-mobile');
+      await evaluate('document.getElementById("world-event-start").click();');
       assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==="souls"'));
       await shot('event-active-mobile');
       assert(await evaluate('const {game}=await import("/src/main.js");game.player.dashCooldown=0;document.getElementById("touch-dash").click();return game.player.dashCooldown>0'),'dash supports standard button activation');
+      for(const [width,height] of [[378,668],[320,568],[844,390]]){
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
+        await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[0]);game.time=8;game.player.invincible=999;game.bannerUntil=game.toastUntil=0;document.getElementById("event-banner").classList.remove("visible");document.getElementById("toast").classList.remove("visible");game.on("hud");');
+        assert(await evaluate(`
+          const ids=['status-button','pause-button','hud-talents-button','fusion-tracker','hud-catalog-button','hud-loadout-button','joystick','touch-dash'];
+          const rects=ids.map(id=>document.getElementById(id).getBoundingClientRect());
+          const center={left:innerWidth*.28,right:innerWidth*.72,top:innerHeight*.36,bottom:innerHeight*.7};
+          return document.documentElement.scrollWidth<=innerWidth&&document.getElementById('world-event-card').classList.contains('hidden')&&rects.every(r=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&(r.right<=center.left||r.left>=center.right||r.bottom<=center.top||r.top>=center.bottom))&&rects.every((r,i)=>rects.slice(i+1).every(s=>r.right<=s.left||r.left>=s.right||r.bottom<=s.top||r.top>=s.bottom));
+        `),'compact HUD keeps center clear with separate 44px controls at '+width+'x'+height);
+        await shot('hud-'+width+'x'+height);
+        assert(await evaluate('const {game}=await import("/src/main.js");document.getElementById("hud-loadout-button").click();return game.state==="status"&&document.getElementById("sheet-tab-items").getAttribute("aria-selected")==="true"'),'compact equipment entry retains full inventory');
+        await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.time=60;game.player.x=game.shrines[0].x;game.player.y=game.shrines[0].y;game.on("hud");document.getElementById("world-event-preview").click();');
+        const previewTime=await evaluate('const {game}=await import("/src/main.js");return game.time');await delay(150);
+        assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.time'),previewTime,'preview must freeze battle');
+        await evaluate('document.getElementById("resume-button").click();');
+        assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="running"&&!game.activeEvent'),'cancel preview must not start a challenge');
+      }
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});
       await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("meta-button").click();');
       assert(await evaluate('return document.getElementById("meta-upgrades").textContent.includes("连续 6 秒未受攻击")'));await shot('recovery-altar');

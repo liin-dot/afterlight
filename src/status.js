@@ -77,14 +77,11 @@ export class CharacterSheet {
     this.sound.init();
     this.sound.play('select');
     put('announcer', '角色状态已打开。角色属性与道具效果可切换，按 C 或 Esc 返回。');
-    requestAnimationFrame(() => {
-      if (!this.visible) return;
-      $('sheet-tab-' + this.tab).focus({preventScroll: true});
-      if (weapon) {
-        const card = $('sheet-weapon-' + weapon);
-        if (card) { card.classList.add('focused'); card.scrollIntoView({block: 'nearest'}); }
-      }
-    });
+    $('sheet-tab-' + this.tab).focus({preventScroll: true});
+    if (weapon) {
+      const card = $('sheet-weapon-' + weapon);
+      if (card) { card.classList.add('focused'); card.scrollIntoView({block: 'nearest'}); }
+    }
     return true;
   }
 

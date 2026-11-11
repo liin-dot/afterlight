@@ -49,18 +49,26 @@ function openStatus(options){if(!settling&&sheet.open(options))resetTouchInput()
 function openFusionBook(){if(sheet.visible)sheet.selectTab('fusion');else openStatus({tab:'fusion'})}
 function openTalentTree(){if(sheet.visible)sheet.selectTab('talents');else openStatus({tab:'talents'})}
 function updateTalentHud(){
- const points=talentPoints(game);text('hud-talent-points',points>0?'可用 '+points+' 点':'角色天赋');
+ const points=talentPoints(game);text('hud-talent-points',points>0?'天赋 +'+points:'天赋');
  text('hud-talent-state',characterTalentStatus(game));$('hud-talents-button').classList.toggle('ready',points>0);
  const progress=characterTalentProgress(game),meter=$('hud-talent-meter');meter.max=progress.max;meter.value=progress.value;meter.setAttribute('aria-label',progress.label);
  text('hud-talent-progress',progress.label);$('hud-talents-button').classList.toggle('charged',progress.ready);$('hud-talents-button').style.setProperty('--talent-color',CHARACTER_TALENTS[game.character.id].color);
+ $('hud-talents-button').setAttribute('aria-label','角色天赋 · '+(points>0?'可用 '+points+' 点 · ':'')+characterTalentStatus(game)+' · '+progress.label);$('hud-talents-button').title=$('hud-talents-button').getAttribute('aria-label')+' [T]';
  text('level-talent-note','获得 '+points+' 个天赋点 · 强化角色专属能力');$('level-talents-button').classList.toggle('hidden',points<=0);
 }
 function updateEventHud(){
- const event=worldEventStatus(game),card=$('world-event-card');card.classList.toggle('hidden',!event.visible);if(!event.visible)return;
- text('world-event-name',event.name);text('world-event-detail',event.detail);text('world-event-reward',event.reward);
+ const event=worldEventStatus(game),card=$('world-event-card'),visible=event.visible&&(event.active||event.canStart);card.classList.toggle('hidden',!visible);$('pause-event').classList.toggle('hidden',!visible);if(!visible)return;
+ text('world-event-name',event.name);text('pause-event-name',event.name);text('world-event-detail',event.detail);text('world-event-reward',event.reward);
+ text('world-event-summary',event.active?event.detail:'附近有祭坛 · 查看目标与奖励');
+ $('world-event-preview').setAttribute('aria-label',event.name+' · '+(event.active?event.detail:'查看挑战目标、风险和奖励')+' · 打开后暂停');
  card.classList.toggle('active',event.active);text('world-event-label',event.active?'挑战进行中':'可选祭坛挑战');
  const meter=$('world-event-meter');meter.classList.toggle('hidden',!event.active);meter.max=event.max||1;meter.value=event.progress||0;meter.setAttribute('aria-label',event.name+' · '+event.detail);
  const button=$('world-event-start');button.classList.toggle('hidden',!event.canStart);button.disabled=!event.canStart;
+}
+function previewWorldEvent(){
+ const event=worldEventStatus(game);if(!event.active&&!event.canStart)return;
+ if(game.state==='paused'){if(event.canStart){game.resume();game.interact()}return}
+ if(game.state!=='running')return;openRunMenu();requestAnimationFrame(()=>$('pause-event').focus({preventScroll:true}));
 }
 
 function buildCharacters(){
@@ -114,11 +122,13 @@ function buildDock(){
  }
  for(let i=Object.keys(game.passives).length;i<PASSIVE_SLOTS;i++){const slot=document.createElement('div');slot.className='passive-slot empty';slot.title='空余道具位';passiveDock.append(slot)}
  updateFusionTracker();
+ text('hud-loadout-count',Object.keys(game.weapons).length+'/'+WEAPON_SLOTS+' 武器 · '+Object.keys(game.passives).length+'/'+PASSIVE_SLOTS+' 道具');
 }
 function updateFusionTracker(){
  if(!game.weapons)return;
  const ready=Object.keys(FUSIONS).filter(key=>fusionState(key,game.weapons,game.passives,game).ready),key=game.trackedFusion;
  $('fusion-tracker').classList.toggle('ready',ready.length>0);
+ text('fusion-tracker-compact',ready.length?'融合可用':key?'融合追踪':'融合');
  if(key&&FUSIONS[key]&&game.discoveredFusions.has(key)){
   const progress=fusionState(key,game.weapons,game.passives,game);
   text('fusion-tracker-title',WEAPONS[key].name);
@@ -127,6 +137,7 @@ function updateFusionTracker(){
   text('fusion-tracker-title',ready.length?'装备正在共鸣':'融合手记 · '+game.discoveredFusions.size+'/'+Object.keys(FUSIONS).length);
   text('fusion-tracker-detail',ready.length?'下次升级可尝试融合':'亲手铸成，才会记入图谱');
  }
+ $('fusion-tracker').setAttribute('aria-label',$('fusion-tracker-title').textContent+' · '+$('fusion-tracker-detail').textContent+' · 查看融合图谱');$('fusion-tracker').title=$('fusion-tracker').getAttribute('aria-label')+' [G]';
 }
 function buildUpgrades(reveal=true){
  text('new-level','等级 '+game.level);text('rerolls-left',game.rerolls);$('reroll-button').disabled=game.rerolls===0;$('upgrade-cards').replaceChildren();
@@ -175,7 +186,8 @@ function buildUpgrades(reveal=true){
 function pauseStats(){
  const active=Object.values(game.weapons).filter(n=>n===6).length;
  $('pause-stats').innerHTML=`<span><b>${formatTime(game.time)}</b>守夜时间</span><span><b>${game.kills.toLocaleString()}</b>击败敌人</span><span><b>+${Math.round((game.damageMultiplier-1)*100)}%</b>额外伤害</span><span><b>${active}</b>进化武器</span>`;
- text('pause-context',game.pauseReturn==='level'?'升级选择已保留，返回后继续选择。':'战斗已暂停，准备好再出发。');
+ text('pause-context',game.pauseReturn==='level'?'升级选择已保留，返回后继续选择。':(game.pressure||pressureAt(game.time)).hint+' · 下一场 '+$('next-encounter').textContent+(game.stats.curse?' · 禁忌 '+game.stats.curse:''));
+ updateEventHud();
  text('resume-label',game.pauseReturn==='level'?'返回升级选择':'继续守夜');
  text('pause-reward','本局可结算 +'+game.earnedEmbers.toLocaleString()+' 余烬');
  text('restart-description','使用'+game.character.name+'，从 00:00 / LV.1 重开');
@@ -229,6 +241,7 @@ game.on=(event,data)=>{
  if(event==='closeStatus')sheet.close();
  if(event==='fusionBook')openFusionBook();
  if(event==='talentTree')openTalentTree();
+ if(event==='worldEvent')previewWorldEvent();
  if(event==='talentPoints')updateTalentHud();
  if(event==='talentLearned'){
   if(sheet.visible){
@@ -265,7 +278,9 @@ $('restart-button').addEventListener('click',()=>finishRun('restart'));
 $('quit-button').addEventListener('click',()=>finishRun('camp'));
 $('reroll-button').addEventListener('click',()=>game.reroll());
 $('skip-button').addEventListener('click',()=>game.skipUpgrade());
-$('world-event-start').addEventListener('click',()=>game.interact());
+$('world-event-preview').addEventListener('click',previewWorldEvent);
+$('world-event-start').addEventListener('click',previewWorldEvent);
+$('hud-loadout-button').addEventListener('click',()=>openStatus({tab:'items'}));
 for(const id of ['menu-status-button','status-button','pause-status-button','level-status-button','end-status-button'])$(id).addEventListener('click',()=>openStatus());
 for(const id of ['fusion-tracker','level-fusion-button'])$(id).addEventListener('click',openFusionBook);
 for(const id of ['menu-talents-button','hud-talents-button','level-talents-button','level-tree-button'])$(id).addEventListener('click',openTalentTree);
