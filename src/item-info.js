@@ -30,7 +30,7 @@ export function weaponFacts(kind, values) {
     if (kind === 'glacier') facts.push(['寒晶数量', v.count + ' 颗'], ['接触间隔', seconds(v.hitInterval)], ['环绕半径', v.radius + ' 像素'], ['寒域半径 / 持续', v.fieldRadius + ' 像素 / ' + seconds(v.fieldDuration)], ['寒域持续伤害', `${damage(v.fieldDamage)} / ${seconds(v.fieldInterval)}`], ['终结冰爆伤害', damage(v.blastDamage)], ['敌人 / 首领冻结', `${seconds(v.freeze)} / ${seconds(v.bossFreeze)}`], ['牵引与减速', '牵引至寒晶环 · 减速 55%']);
     if (kind === 'blade') facts.push(['斩击半径', v.radius + ' 像素'], ['斩击角度', number(v.arc * 180 / Math.PI) + '°']);
     if (kind === 'bolt') facts.push(['每轮弩矢', v.count + ' 枚'], ['每矢最多命中', v.pierce + ' 个敌人']);
-    if (kind === 'orbit') facts.push(['游魂数量', v.count + ' 盏'], ['环绕半径', v.evolved ? `${v.radius} / ${v.radius + v.outerOffset} 像素` : v.radius + ' 像素'], ['同一敌人命中间隔', seconds(v.hitInterval)]);
+    if (kind === 'orbit') facts.push(['游魂数量', v.count + ' 盏'], ['环绕半径', v.evolved ? `${v.radius} / ${v.radius + v.outerOffset} 像素` : v.radius + ' 像素'], ['游魂接触半径', v.contactRadius + ' 像素'], ['同一敌人命中间隔', seconds(v.hitInterval)]);
     if (kind === 'storm') facts.push(['最多落雷目标', v.count + ' 个'], ['连锁搜索范围', v.chainRange + ' 像素']);
     if (kind === 'flame') facts.push(['每轮火种', v.count + ' 颗'], ['燃烧伤害', `${damage(v.burnDamage)} / ${seconds(v.hitInterval)}`], ['燃烧半径', v.radius + ' 像素'], ['火焰持续', seconds(v.duration)]);
     if (kind === 'frost') facts.push(['冲击半径', v.radius + ' 像素'], ['减速效果', `${percent(1 - v.slowMultiplier)} · ${seconds(v.slowDuration)}`]);

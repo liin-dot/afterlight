@@ -20,13 +20,20 @@ const sound=new Sound();sound.muted=save.muted;
 const game=new Game($('world'),sound);
 game.discoveredFusions=new Set(save.discoveredFusions);
 const sheet=new CharacterSheet(game,save,sound);
-let selected=0,lastFocus=null,lastBoss=null,buyingMeta=false,settling=false;
+let selected=0,lastFocus=null,lastBoss=null,buyingMeta=false,settling=false,campPage='home';
 const overlays=['level-screen','pause-screen','end-screen','archive-screen','meta-screen','status-screen'];
+const touchInput=matchMedia('(pointer:coarse)');
 
 function text(id,value){const element=$(id),next=String(value);if(element.textContent!==next)element.textContent=next}
 function closeOverlays(){for(const id of overlays)hide(id)}
 function openModal(id){lastFocus=document.activeElement;show(id);requestAnimationFrame(()=>$(id).querySelector('button:not(:disabled)')?.focus({preventScroll:true}))}
 function closeModal(id){hide(id);if(lastFocus?.isConnected)lastFocus.focus({preventScroll:true})}
+function openCampPage(page){
+ const previous=campPage;campPage=page;
+ for(const name of ['home','prepare','library'])$('camp-'+name).classList.toggle('hidden',name!==page);
+ $('menu').scrollTop=0;
+ (page==='prepare'?$('characters').querySelector('[aria-pressed="true"]'):page==='library'?$('menu-catalog-button'):$(previous==='library'?'camp-library-button':'play-button')).focus({preventScroll:true});
+}
 function announce(value){text('announcer',value)}
 async function saveProgress(change){
  const result=await writeSave(save,change);game.itemDiscoveryPersisted=result.persisted;
@@ -37,7 +44,7 @@ async function saveProgress(change){
 function updateDiscoveryBadges(){
  const count=Object.keys(save.discoveredItems).filter(id=>{const item=catalogItem(id);return item&&(item.category!=='fusion'||game.discoveredFusions.has(item.key))}).length;
  const total=Object.keys(WEAPONS).length+Object.keys(PASSIVES).length+Object.keys(PICKUPS).length;
- text('menu-catalog-count',count+'/'+total);text('hud-catalog-count',count);
+ text('menu-catalog-count',count+'/'+total);text('hud-catalog-count',count);text('menu-fusion-count',game.discoveredFusions.size+'/'+Object.keys(FUSIONS).length);
 }
 function storeItemDiscoveries(change){
  if(!change.changed)return;
@@ -58,18 +65,16 @@ function updateTalentHud(){
  text('level-tree-label',points>0?'天赋 +'+points:'天赋树');$('level-tree-button').classList.toggle('ready',points>0);
 }
 function updateEventHud(){
- const event=worldEventStatus(game),card=$('world-event-card'),visible=event.visible&&(event.active||event.canStart);card.classList.toggle('hidden',!visible);$('pause-event').classList.toggle('hidden',!visible);if(!visible)return;
- text('world-event-name',event.name);text('pause-event-name',event.name);text('world-event-detail',event.detail);text('world-event-reward',event.reward);
- text('world-event-summary',event.active?event.detail:'附近有祭坛 · 查看目标与奖励');
- $('world-event-preview').setAttribute('aria-label',event.name+' · '+(event.active?event.detail:'查看挑战目标、风险和奖励')+' · 打开后暂停');
- card.classList.toggle('active',event.active);text('world-event-label',event.active?'挑战进行中':'可选祭坛挑战');
+ const reward=game.eventReward,notice=$('event-reward-toast');notice.classList.toggle('hidden',!reward);
+ if(reward){text('event-reward-toast',reward.name+' · 完成\n'+reward.rewards.join(' · '));notice.style.opacity=Math.min(1,Math.max(0,reward.expiresAt-game.time))}
+ const event=worldEventStatus(game),card=$('world-event-card'),visible=event.visible&&(event.active||event.canStart);card.classList.toggle('hidden',!visible);
+ const button=$('world-event-start'),host=touchInput.matches?$('touch-controls'):card.querySelector('.world-event-heading');
+ if(button.parentElement!==host)host.append(button);
+ button.classList.toggle('hidden',!event.canStart);button.disabled=!event.canStart;
+ if(!visible)return;
+ text('world-event-name',event.name);text('world-event-detail',event.detail);text('world-event-reward','奖励：'+event.reward);
+ button.setAttribute('aria-label','接受任务：'+event.name);card.classList.toggle('active',event.active);
  const meter=$('world-event-meter');meter.classList.toggle('hidden',!event.active);meter.max=event.max||1;meter.value=event.progress||0;meter.setAttribute('aria-label',event.name+' · '+event.detail);
- const button=$('world-event-start');button.classList.toggle('hidden',!event.canStart);button.disabled=!event.canStart;
-}
-function previewWorldEvent(){
- const event=worldEventStatus(game);if(!event.active&&!event.canStart)return;
- if(game.state==='paused'){if(event.canStart){game.resume();game.interact()}return}
- if(game.state!=='running')return;openRunMenu();requestAnimationFrame(()=>$('pause-event').focus({preventScroll:true}));
 }
 
 function buildCharacters(){
@@ -78,12 +83,16 @@ function buildCharacters(){
   const b=document.createElement('button');b.className='character-card'+(selected===index?' active':'');b.setAttribute('aria-pressed',String(selected===index));b.setAttribute('aria-label',character.name+'：'+character.description.replace(/<[^>]*>/g,''));
   const portrait=document.createElement('canvas');portrait.width=32;portrait.height=44;paintAvatar(portrait,character.id);
   const label=document.createElement('span');const strong=document.createElement('strong');strong.textContent=character.name;const small=document.createElement('small');small.textContent=character.english;label.append(strong,small);b.append(portrait,label);
-  b.addEventListener('click',()=>{selected=index;game.character=character;buildCharacters();sound.init();sound.play('select')});$('characters').append(b);
+  b.addEventListener('click',()=>{selected=index;game.character=character;buildCharacters();$('characters').children[index].focus({preventScroll:true});sound.init();sound.play('select')});$('characters').append(b);
  });
  $('character-description').innerHTML=CHARACTERS[selected].description;text('character-tag',CHARACTERS[selected].tag);
+ text('camp-start-context',CHARACTERS[selected].name+' · 从 LV.1 开始远征');
  const innate=CHARACTER_TALENTS[CHARACTERS[selected].id];text('menu-innate-name',innate.name);text('menu-innate-description',innate.hint);$('menu-talents-button').style.setProperty('--talent-color',innate.color);paintIcon($('menu-innate-icon'),innate.icon);
 }
-function updateMenu(){text('meta-count',save.embers+' ✦');text('sound-icon',sound.muted?'♪̸':'♫');$('sound-button').setAttribute('aria-label',sound.muted?'开启声音':'关闭声音');$('sound-button').setAttribute('aria-pressed',String(!sound.muted));text('arsenal-count',Object.values(WEAPONS).filter(w=>!w.fusion).length);text('fusion-count',Object.keys(FUSIONS).length);text('relic-count',Object.keys(PASSIVES).length)}
+function updateMenu(){
+ text('meta-count',save.embers.toLocaleString()+' ✦');
+ text('sound-icon',sound.muted?'♪̸':'♫');$('sound-button').setAttribute('aria-label',sound.muted?'开启声音':'关闭声音');$('sound-button').setAttribute('aria-pressed',String(!sound.muted));
+}
 function start(){if(settling||game.state!=='menu'&&game.state!=='over')return;refreshSave(save);resetTouchInput();closeOverlays();sound.init();sound.play('select');game.start(CHARACTERS[selected],save.meta)}
 function openRunMenu(){
  if(sheet.visible){if(!['running','paused','level'].includes(sheet.origin))return;sheet.close()}
@@ -218,12 +227,23 @@ async function endRun(result){
 }
 function buildMeta(){
  text('ember-balance',save.embers.toLocaleString());$('meta-upgrades').replaceChildren();for(const [key,info] of Object.entries(META)){
-  const level=save.meta[key]||0,cost=info.cost*(level+1);const row=document.createElement('div');row.className='meta-upgrade';const art=document.createElement('canvas');art.width=24;art.height=24;paintIcon(art,key);const words=document.createElement('div');const heading=document.createElement('h3');heading.textContent=info.name+' '+level+'/'+info.max;const desc=document.createElement('small');desc.textContent=info.desc;words.append(heading,desc);const button=document.createElement('button');button.textContent=level>=info.max?'已满级':cost+' ✦';button.disabled=buyingMeta||level>=info.max||save.embers<cost;button.setAttribute('aria-label','升级'+info.name+'，消耗 '+cost+' 余烬');button.addEventListener('click',async()=>{if(buyingMeta)return;buyingMeta=true;buildMeta();const {persisted,purchased}=await saveProgress({purchase:key});buyingMeta=false;buildMeta();if(purchased){sound.init();sound.play('chest')}else{const note=persisted?'存档已更新，请按最新价格选择升级。':'浏览器暂未保存，本次购买未扣款。';text('meta-best',note);announce(note)}});row.append(art,words,button);$('meta-upgrades').append(row);
+  const level=save.meta[key]||0,cost=info.cost*(level+1),maxed=level>=info.max;
+  const row=document.createElement('div');row.className='meta-upgrade';const art=document.createElement('canvas');art.width=24;art.height=24;paintIcon(art,key);
+  const words=document.createElement('div'),heading=document.createElement('h3'),desc=document.createElement('small'),status=document.createElement('span');
+  heading.textContent=info.name+' · '+level+' / '+info.max;desc.textContent=info.desc;status.className='meta-upgrade-status';status.textContent=maxed?'已达最高等级':save.embers<cost?'还差 '+(cost-save.embers).toLocaleString()+' 余烬':'可升至 '+(level+1)+' 级';words.append(heading,desc,status);
+  const button=document.createElement('button');button.dataset.meta=key;button.textContent=maxed?'已满级':'强化 '+cost+' ✦';button.disabled=buyingMeta||maxed||save.embers<cost;button.setAttribute('aria-label',maxed?info.name+'已满级':'升级'+info.name+'，消耗 '+cost+' 余烬');
+  button.addEventListener('click',async()=>{
+   if(buyingMeta)return;buyingMeta=true;text('meta-feedback','正在保存强化…');buildMeta();
+   const {persisted,purchased}=await saveProgress({purchase:key});buyingMeta=false;buildMeta();
+   text('meta-feedback',purchased?info.name+'已强化至 '+save.meta[key]+' 级，下次出征生效。':persisted?'存档已更新，请按最新价格选择升级。':'浏览器暂未保存，本次购买未扣款。');
+   if(purchased){sound.init();sound.play('chest')}
+   if(!$('meta-screen').classList.contains('hidden'))($('meta-upgrades').querySelector('[data-meta="'+key+'"]:not(:disabled)')||$('meta-screen').querySelector('[data-close]')).focus({preventScroll:true});
+  });row.append(art,words,button);$('meta-upgrades').append(row);
  }text('meta-best',`远征 ${save.runs} 次  ·  最长守夜 ${formatTime(save.best)}  ·  累计击败 ${save.kills.toLocaleString()}  ·  破晓 ${save.wins} 次`);
 }
 
 game.on=(event,data)=>{
- if(event==='start')start();
+ if(event==='start')openCampPage('prepare');
  if(event==='startRun'){hide('menu');hide('camp-return-note');closeOverlays();show('hud');$('event-banner').classList.remove('visible');$('toast').classList.remove('visible');document.body.classList.add('playing');text('player-name',game.character.name);paintAvatar($('hud-avatar'),game.character.id);document.activeElement?.blur();announce('远征开始。WASD 移动，空格冲刺，Esc 打开菜单。')}
  if(event==='hud')updateHud();
  if(event==='weapons'){storeItemDiscoveries(rememberInventory(save,game));buildDock()}
@@ -242,13 +262,13 @@ game.on=(event,data)=>{
  if(event==='closeStatus')sheet.close();
  if(event==='fusionBook')openFusionBook();
  if(event==='talentTree')openTalentTree();
- if(event==='worldEvent')previewWorldEvent();
  if(event==='talentPoints')updateTalentHud();
  if(event==='talentLearned'){
   if(sheet.visible){
    const scroll=$('sheet-scroll').scrollTop;sheet.build();$('sheet-scroll').scrollTop=scroll;
-   const column=$('talent-'+data).closest('.talent-branch'),next=column.querySelector('button:not(:disabled)'),tab=document.querySelectorAll('.talent-branch-tabs button')[sheet.talentBranch];
-   (next||(tab.getClientRects().length?tab:column.querySelector('h4'))).focus({preventScroll:true});if(next)next.scrollIntoView({block:'nearest'});
+   const column=$('talent-'+data).closest('.talent-branch'),next=column.querySelector('button:not(:disabled)');
+   sheet.reveal(next||$('talent-'+data));
+   (next||(sheet.mobile.matches?column.querySelector('.mobile-picker'):column.querySelector('h4'))).focus({preventScroll:true});
   }
   if(game.state==='level'||sheet.visible&&sheet.origin==='level')buildUpgrades(false);
   announce('已学会角色天赋。剩余 '+talentPoints(game)+' 个天赋点。');
@@ -263,12 +283,14 @@ game.on=(event,data)=>{
  if(event==='bannerHide')$('event-banner').classList.remove('visible');
  if(event==='toast'){text('toast',data);$('toast').classList.add('visible')}
  if(event==='toastHide')$('toast').classList.remove('visible');
+ if(event==='eventReward')announce(data.name+'完成。已获得：'+data.rewards.join('；')+'。');
  if(event==='end'){resetTouchInput();endRun(data)}
- if(event==='menu'){resetTouchInput();closeOverlays();hide('hud');show('menu');document.body.classList.remove('playing');updateMenu();$('start-button').focus({preventScroll:true})}
- if(event==='closeMenuModal'){for(const id of ['archive-screen','meta-screen'])if(!$(id).classList.contains('hidden'))closeModal(id)}
+ if(event==='menu'){resetTouchInput();closeOverlays();hide('hud');show('menu');document.body.classList.remove('playing');updateMenu();openCampPage('home')}
+ if(event==='closeMenuModal'){const modal=['archive-screen','meta-screen'].find(id=>!$(id).classList.contains('hidden'));if(modal)closeModal(modal);else if(campPage!=='home')openCampPage('home')}
 };
 
 $('start-button').addEventListener('click',start);
+document.querySelectorAll('[data-camp-target]').forEach(button=>button.addEventListener('click',()=>{openCampPage(button.dataset.campTarget);sound.init();sound.play('select')}));
 $('retry-button').addEventListener('click',start);
 $('home-button').addEventListener('click',()=>game.returnToMenu());
 $('sound-button').addEventListener('click',toggleSound);
@@ -279,21 +301,26 @@ $('restart-button').addEventListener('click',()=>finishRun('restart'));
 $('quit-button').addEventListener('click',()=>finishRun('camp'));
 $('reroll-button').addEventListener('click',()=>game.reroll());
 $('skip-button').addEventListener('click',()=>game.skipUpgrade());
-$('world-event-preview').addEventListener('click',previewWorldEvent);
-$('world-event-start').addEventListener('click',previewWorldEvent);
+for(const type of ['pointerdown','click'])$('world-event-start').addEventListener(type,e=>{
+ const touch=e.pointerType==='touch'||e.pointerType==='pen';if((type==='pointerdown')!==touch)return;
+ // Touch responds on press while another finger moves; its later click must not act twice.
+ e.preventDefault();game.interact();updateEventHud();
+});
 $('hud-loadout-button').addEventListener('click',()=>openStatus({tab:'items'}));
 for(const id of ['menu-status-button','status-button','pause-status-button','level-status-button','end-status-button'])$(id).addEventListener('click',()=>openStatus());
-for(const id of ['fusion-tracker','level-fusion-button'])$(id).addEventListener('click',openFusionBook);
+for(const id of ['menu-fusion-button','fusion-tracker','level-fusion-button'])$(id).addEventListener('click',openFusionBook);
 for(const id of ['menu-talents-button','hud-talents-button','level-talents-button','level-tree-button'])$(id).addEventListener('click',openTalentTree);
 for(const id of ['menu-catalog-button','hud-catalog-button','pause-catalog-button','level-catalog-button','end-catalog-button'])$(id).addEventListener('click',openItemCatalog);
 $('archive-button').addEventListener('click',()=>{sound.init();sound.play('select');openModal('archive-screen')});
-$('meta-button').addEventListener('click',()=>{refreshSave(save);buildMeta();sound.init();sound.play('select');openModal('meta-screen')});
+$('meta-button').addEventListener('click',()=>{refreshSave(save);buildMeta();text('meta-feedback','');sound.init();sound.play('select');openModal('meta-screen')});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>closeModal(b.dataset.close)));
 for(const id of ['archive-screen','meta-screen'])$(id).addEventListener('click',e=>{if(e.target===$(id))closeModal(id)});
+sheet.mobilePages(document.querySelector('.guide-grid'),'选择手记主题',[...document.querySelectorAll('.guide-grid article')].map((article,i)=>[String(i),article.querySelector('h3').textContent,[article]]));
+sheet.mobilePages($('end-report'),'选择结算内容',[['summary','远征概览',[$('end-stats')]],['damage','战斗记录',[$('end-damage')]]]);
 
 // Keep keyboard focus inside dialogs without interfering with gameplay shortcuts.
 document.addEventListener('keydown',e=>{
- if(e.code!=='Tab')return;const active=document.querySelector('.modal-wrap:not(.hidden)');if(!active)return;const focusables=[...active.querySelectorAll('button:not(:disabled):not([tabindex="-1"]),[href],input,summary,[tabindex="0"]')].filter(element=>!element.closest('.hidden')&&element.getClientRects().length);if(!focusables.length)return;const first=focusables[0],last=focusables.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+ if(e.code!=='Tab')return;const active=document.querySelector('.modal-wrap:not(.hidden)');if(!active)return;const focusables=[...active.querySelectorAll('button:not(:disabled):not([tabindex="-1"]),[href],input,select,summary,[tabindex="0"]')].filter(element=>!element.closest('.hidden')&&element.getClientRects().length);if(!focusables.length)return;const first=focusables[0],last=focusables.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
 });
 
 const movementSurface=$('world'),joystick=$('joystick'),stick=joystick.querySelector('i');let activePointer=null;

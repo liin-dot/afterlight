@@ -65,7 +65,7 @@ function baseWeaponStats(kind, level, stats, character) {
     case 'glacier': return {...common, damage:damage(30 + level * 12), count:4 + level, radius:53 + level * 6, outerOffset:0, hitInterval:.38, fieldRadius:105 + level * 12, fieldDamage:damage(20 + level * 10), fieldInterval:.6, fieldDuration:3, pullSpeed:80, freeze:1.1, bossFreeze:.35, blastDamage:damage(100 + level * 40)};
     case 'blade': return {...common, damage: damage(evolved ? 75 : 20 + 6 * (level - 1)), radius: 51 + level * 8, arc: evolved ? Math.PI * 2 : 1.6 + level * .23};
     case 'bolt': return {...common, damage: damage(evolved ? 40 : 10 + 2 * (level - 1)), count: (evolved ? 6 : 1 + Math.floor((level - 1) / 2)) + (character.id === 'ranger' ? 1 : 0), pierce: 1 + Math.floor(level / 2), homing: evolved};
-    case 'orbit': return {...common, damage: damage(evolved ? 65 : 8 + level * 7), count: evolved ? 6 : 2 + Math.floor((level - 1) / 2), radius: 37 + level * 6, outerOffset: evolved ? 25 : 0, hitInterval: .38};
+    case 'orbit': return {...common, damage: damage(evolved ? 65 : 8 + level * 7), count: evolved ? 6 : 2 + Math.floor((level - 1) / 2), radius: 45 + level * 6, contactRadius: 20, outerOffset: evolved ? 25 : 0, hitInterval: .38};
     case 'storm': return {...common, damage: damage(evolved ? 190 : 38 + level * 20), count: evolved ? 9 : level + 1, chainRange: 180};
     case 'flame': return {...common, damage: damage(20 + level * 8), count: evolved ? 3 : level >= 4 ? 2 : 1, burnDamage: damage(6 + level * 4), radius: 21 + level * 5, duration: 2.1 + level * .35, hitInterval: .45};
     case 'frost': return {...common, damage: damage(evolved ? 110 : 10 + level * 9), radius: 66 + level * 12, slowDuration: 2.8 + level * .35, slowMultiplier: .45, freeze: evolved ? 2 : 0, bossFreeze: evolved ? .7 : 0};
@@ -76,7 +76,7 @@ function baseWeaponStats(kind, level, stats, character) {
 export function weaponStats(kind,level,stats,character){
   const values=baseWeaponStats(kind,level,stats,character);
   const area=stats.areaMultiplier||1,duration=stats.durationMultiplier||1;
-  for(const key of ['radius','range','width','innerRadius','outerOffset','fieldRadius','splashRadius','blastRadius','shieldRadius'])if(values[key]!==undefined)values[key]=Math.round(values[key]*area);
+  for(const key of ['radius','contactRadius','range','width','innerRadius','outerOffset','fieldRadius','splashRadius','blastRadius','shieldRadius'])if(values[key]!==undefined)values[key]=Math.round(values[key]*area);
   for(const key of ['duration','fieldDuration','slowDuration','freeze','poisonDuration','lifetime'])if(values[key]!==undefined)values[key]*=duration;
   if(values.count!==undefined)values.count+=stats.amount||0;
   if(values.fusion){

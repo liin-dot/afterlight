@@ -25,14 +25,14 @@ export const CHARACTER_TALENTS={
       ]},
     ]},
   witch:{name:'伴星契约',color:'#b7d9e8',icon:'orbit',style:'伴星召唤 · 控制与灵光',
-    description:'自带一颗不占武器位的伴星，每 1.8 秒向附近敌人发射追踪星火。星火伤害随角色等级成长，天赋可增加伴星、控制或灵光联动。',
+    description:'自带一颗不占武器位的伴星，每 1.3 秒向 420 范围内的敌人发射追踪星火。星火伤害随角色等级成长，天赋可增加伴星、控制或灵光联动。',
     loop:'伴星发射 → 星火命中 → 火力、寒月或引星回收',
     hint:'让伴星负责追击，用环绕武器清理近敌。',families:['spirit','cold','summon'],items:['area','duration','growth','rime'],
     branches:[
       {name:'星群',role:'增加伴星 → 星火穿透 → 密集齐射',nodes:[
         {id:'s_swarm1',name:'双星',icon:'amount',description:'伴星数量由 1 提高至 2，每颗伴星独立发射一枚星火。'},
         {id:'s_swarm2',name:'星芒',icon:'prism',description:'星火伤害 +25%，每枚星火可以穿透并命中两个敌人。'},
-        {id:'s_swarm3',name:'星海',icon:'glacier',description:'伴星数量提高至 4，发射间隔由 1.8 秒缩短至 1.4 秒。'},
+        {id:'s_swarm3',name:'星海',icon:'glacier',description:'伴星数量提高至 4，发射间隔由 1.3 秒缩短至 1 秒。'},
       ]},
       {name:'寒月',role:'星火减速 → 易伤 → 冰爆冻结',nodes:[
         {id:'s_frost1',name:'月痕',icon:'frostbrand',description:'星火命中使敌人减速 55%，持续 1.4 秒。'},
@@ -90,7 +90,7 @@ const emberLimit=t=>t.w_flame1?5:6;
 const windLimit=t=>t.r_roam1?60:80;
 const windInterval=t=>t.r_roam1?1:1.5;
 const wellLimit=t=>t.s_scholar3?20:30;
-const starInterval=t=>t.s_swarm3?1.4:1.8;
+const starInterval=t=>t.s_swarm3?1:1.3;
 const starDamage=game=>(10+game.level*.8)*game.stats.damageMultiplier*(game.talents.s_swarm2?1.25:1);
 const windDamage=game=>(16+game.level)*game.stats.damageMultiplier*(game.talents.r_shot1?1.25:1);
 const emberDamage=game=>(24+game.level*2)*game.stats.damageMultiplier*(game.talents.w_flame1?1.3:1);
@@ -141,7 +141,7 @@ export function updateCharacterTalents(game,dt,moved){
   if(game.character.id==='witch'){
     if(t.s_scholar2)onCharacterXp(game,0);
     s.starClock-=dt;
-    if(s.starClock<=0){const target=game.closest(p.x,p.y,360);if(target){for(let i=0;i<starCount(t);i++){const star=starPosition(game,i);fireStar(game,star.x,star.y,Math.atan2(target.y-8-star.y,target.x-star.x))}s.starClock=starInterval(t);s.procs++}}
+    if(s.starClock<=0){const target=game.closest(p.x,p.y,420);if(target){for(let i=0;i<starCount(t);i++){const star=starPosition(game,i);fireStar(game,star.x,star.y,Math.atan2(target.y-8-star.y,target.x-star.x))}s.starClock=starInterval(t);s.procs++}}
   }
   if(game.character.id==='ranger'){
     if(moved>.05){s.charge=Math.min(windLimit(t),s.charge+moved);s.still=0}else{s.still+=dt;if(s.still>2)s.charge=Math.max(0,s.charge-dt*40)}

@@ -101,6 +101,20 @@ try{
       assert(first.dead,'two orbit contacts plus one star must finish an opening skeleton');
     }
   }
+  // Cover the old inner edge and the wider outer edge through one half-turn, with real orbit contacts.
+  for(const area of [0,3])for(const radius of area?[35,66,96,104]:[25,51,75,83])for(let angle=0;angle<Math.PI*2;angle+=Math.PI/4){
+    const orbit=start(CHARACTERS[1]);orbit.enemies=[];equip(orbit,{orbit:1},{area});orbit.stats.criticalChance=0;
+    const enemy=target(orbit,Math.cos(angle)*radius,37+Math.sin(angle)*radius);orbit.grid.rebuild(orbit.enemies);
+    for(let i=0;i<105;i++)orbit.updateWeapons(.01);
+    assert.equal(enemy.hp<enemy.maxHp,radius<(area?100:80),'orbit coverage and rotation cadence: '+[area,radius,angle]);
+  }
+  const companion=start(CHARACTERS[1]);companion.enemies=[];companion.stats.criticalChance=0;
+  const distant=target(companion,425,37);companion.grid.rebuild(companion.enemies);
+  updateCharacterTalents(companion,.5,0);assert.equal(companion.projectiles.length,0,'companion waits outside its range');
+  distant.x=400;companion.grid.rebuild(companion.enemies);
+  for(let i=0;i<90;i++){companion.time+=.05;updateCharacterTalents(companion,.05,0);companion.updateProjectiles(.05)}
+  assert.equal(companion.characterState.procs,4,'the base companion fires four volleys in 4.5 seconds');
+  assert(distant.maxHp-distant.hp>=33,'distant companion projectiles must actually connect');
   assert.equal(Object.keys(WEAPONS).length,36);assert.equal(Object.keys(PASSIVES).length,38);assert.equal(Object.keys(PICKUPS).length,7);
   // Use one real close-range volley: checking a single arrow misses the level-two burst regression.
   for(const power of [0,5])for(const [time,level] of [[20,2],[40,3],[60,4],[90,5]])for(const kind of ['skeleton','bat']){
@@ -190,6 +204,36 @@ try{
   frozenContact.freeze=0;contact.updateEnemy(frozenContact,.05);assert.equal(contact.player.hp,contactHp-15);
   contact.hurt(15,0,0);assert.equal(contact.player.hp,contactHp-15,'one attack cannot bypass the hit protection window');
   contact.player.invincible-=.61;contact.hurt(15,0,0);assert.equal(contact.player.hp,contactHp-30,'remaining in contact is punished after a short recovery window');
+  // Enemy fire stays sparse even after minute seven, while shots still reach and damage the player.
+  for(const at of [60,419.95,420,540,600]){
+    const fire=start();fire.time=at;fire.enemies=[];fire.player.invincible=0;
+    const ghost=fire.spawnEnemy('ghost');Object.assign(ghost,{x:204,y:37,speed:0,attack:0});
+    fire.projectiles=Array.from({length:20},()=>({enemy:false,t:10}));fire.updateEnemy(ghost,.05);
+    const shots=fire.projectiles.filter(b=>b.enemy);assert.equal(shots.length,1,'player projectiles do not consume the hostile shot budget');assert(ghost.attack>=6.5);
+    fire.projectiles=shots;const before=fire.player.hp;for(let i=0;i<64;i++)fire.updateProjectiles(.05);
+    assert(fire.player.hp<before,'shorter-lived shots must still hit from the edge of ghost firing range');assert.equal(fire.projectiles.length,0);
+  }
+  const crossfire=start();crossfire.time=540;crossfire.enemies=[];crossfire.weapons={};crossfire.player.invincible=1000;
+  crossfire.spawnClock=crossfire.waveClock=crossfire.xpNext=Infinity;crossfire.bossMilestones=new Set([180,360,600]);
+  for(let i=0;i<40;i++){const ghost=crossfire.spawnEnemy('ghost'),angle=i*Math.PI/20;Object.assign(ghost,{x:Math.cos(angle)*170,y:37+Math.sin(angle)*170,speed:0})}
+  let crossfirePeak=0;
+  for(let i=0;i<400;i++){
+    crossfire.update(.05);const count=crossfire.projectiles.filter(b=>b.enemy).length;crossfirePeak=Math.max(crossfirePeak,count);
+    assert(count<=6,'forty late ghosts must not fill the screen with projectiles');
+  }
+  assert(crossfirePeak>0,'the crowd still makes occasional ranged attacks');
+  for(const milestone of [180,360,600]){
+    const fight=start();fight.time=milestone;fight.enemies=[];fight.player.invincible=1000;fight.spawnBoss(milestone);
+    const boss=fight.enemies[0];Object.assign(boss,{x:180,y:37,speed:0,attack:0});
+    const random=Math.random;try{Math.random=()=>.95;fight.updateEnemy(boss,.05)}finally{Math.random=random}
+    assert.equal(fight.projectiles.length,milestone===600?8:6);
+    const angles=fight.projectiles.map(b=>(Math.atan2(b.vy,b.vx)+Math.PI*2)%(Math.PI*2)).sort((a,b)=>a-b);
+    assert(Math.max(...angles.map((angle,i)=>(angles[(i+1)%angles.length]-angle+Math.PI*2)%(Math.PI*2)))>=Math.PI*.59,'a contiguous escape gap remains in each ring');
+    const ghost=fight.spawnEnemy('ghost');Object.assign(ghost,{x:-170,y:37,speed:0,attack:0});fight.updateEnemy(ghost,.05);
+    assert.equal(fight.projectiles.length,angles.length,'ghosts hold fire during a dense boss ring');assert(ghost.attack>0);
+    fight.updateProjectiles(3.21);assert.equal(fight.projectiles.length,0);assert(boss.attack>3.21,'a boss ring expires before its next attack');
+    ghost.attack=0;fight.updateEnemy(ghost,.05);assert.equal(fight.projectiles.length,1,'expired boss fire frees the ghost shot budget');
+  }
   const glacier=start();glacier.enemies=[];equip(glacier,{glacier:3});const pulled=target(glacier,110,glacier.player.y-8);glacier.grid.rebuild(glacier.enemies);
   const glacierStats=weaponStats('glacier',3,glacier.stats,glacier.character);updateFusion(glacier,'glacier',glacierStats,.05);const coldZone=glacier.zones.find(z=>z.kind==='glacier');
   updateFusionZone(glacier,coldZone,2);assert(Math.abs(Math.hypot(pulled.x-coldZone.x,pulled.y-coldZone.y)-glacierStats.radius)<1e-8,'cold fields pull enemies to the crystal ring, not into the player');
@@ -252,7 +296,7 @@ try{
   const carried=start();carried.level=4;carried.state='status';carried.statusReturn='running';carried.characterState.charge=6;assert(carried.learnTalent('w_flame1'));assert.equal(carried.characterState.charge,5);assert.equal(carried.characterState.procs,0,'learning clamps stored charge without attacking inside the menu');
   carried.start(CHARACTERS[2]);carried.level=4;carried.characterState.charge=80;assert(carried.learnTalent('r_roam1'));assert.equal(carried.characterState.charge,60);assert.equal(carried.projectiles.length,0);
   const stars=start(CHARACTERS[1]);stars.level=30;stars.enemies=[];target(stars);for(const id of ['s_swarm1','s_swarm2','s_swarm3'])assert(stars.learnTalent(id));
-  updateCharacterTalents(stars,2,0);assert.equal(stars.projectiles.length,4);assert(stars.projectiles.every(b=>b.pierce===2));assert.equal(stars.characterState.starClock,1.4);
+  updateCharacterTalents(stars,2,0);assert.equal(stars.projectiles.length,4);assert(stars.projectiles.every(b=>b.pierce===2));assert.equal(stars.characterState.starClock,1);
   const cold=start(CHARACTERS[1]);cold.level=30;cold.enemies=[];const coldTarget=target(cold),coldBoss=target(cold,60,37);coldBoss.boss=true;cold.grid.rebuild(cold.enemies);for(const id of ['s_frost1','s_frost2','s_frost3'])assert(cold.learnTalent(id));
   onCharacterProjectileHit(cold,{talent:'star'},coldTarget);assert.equal(coldTarget.slow,1.4);assert.equal(coldTarget.freeze,1.2);assert.equal(coldBoss.freeze,.25);assert.equal(coldTarget.marks.moon.multiplier,1.12);assert(compatibleWeapons('rime',cold.weapons,{},cold.talents).length);
   const scholar=start(CHARACTERS[1]);scholar.level=30;scholar.xpNext=1e9;scholar.enemies=[];scholar.characterState.starClock=100;
@@ -340,15 +384,31 @@ try{
     const game=trialGame(kind);game.update(.05);assert.equal(game.player.hp,40);assert.equal(game.gold,0);assert.equal(game.xp,0);assert.equal(game.eventsCompleted,0,'passing a shrine must not grant free healing or rewards');
     assert(worldEventStatus(game).detail.includes(EVENT_TYPES[kind].hint));assert(game.interact());assert(!startWorldEvent(game));const shrine=game.activeEvent;
     if(kind==='vigil'){game.player.x+=100;updateWorldEvents(game,2);assert.equal(shrine.progress,0);game.player.x-=100;for(let i=0;i<120;i++){game.time+=.1;updateWorldEvents(game,.1)}updateWorldEvents(game,.01)}
-    if(kind==='hunt'){const guard=shrine.guardian;assert(guard.eventGuardian);game.hit(guard,1e9,0,0,0,false);assert(guard.dead);assert(!game.drops.some(d=>d.type==='chest'),'the guardian must not also drop a second reward chest');updateWorldEvents(game,.05);assert.equal(game.weapons.blade,2);assert.equal(game.gold,guard.score+25)}
-    if(kind==='souls'){game.rerolls=5;for(const mote of shrine.motes){Object.assign(game.player,{x:mote.x,y:mote.y});updateWorldEvents(game,.05)}assert.equal(game.xp,30);assert.equal(game.rerolls,5,'event rerolls respect their cap')}
-    assert.equal(shrine.state,'complete');assert(shrine.used);assert.equal(game.eventsCompleted,1);assert.equal(game.activeEvent,null);const earned=[game.gold,game.xp,game.player.shield,game.rerolls,game.weapons.blade];updateWorldEvents(game,30);assert(!game.interact());assert.deepEqual([game.gold,game.xp,game.player.shield,game.rerolls,game.weapons.blade],earned,'events pay once');if(kind==='vigil'){assert.equal(game.player.shield,12);assert.equal(game.gold,20)}
+    if(kind==='hunt'){const guard=shrine.guardian;assert(guard.eventGuardian);game.hit(guard,1e9,0,0,0,false);assert(guard.dead);assert(!game.drops.some(d=>d.type==='chest'),'the guardian must not also drop a second reward chest');updateWorldEvents(game,.05);assert.equal(game.weapons.blade,2);assert.equal(game.gold,guard.score+25);assert.deepEqual(game.eventReward.rewards,[WEAPONS.blade.name+' · LV.1 → LV.2','余烬 +25'])}
+    if(kind==='souls'){game.rerolls=5;for(const mote of shrine.motes){Object.assign(game.player,{x:mote.x,y:mote.y});updateWorldEvents(game,.05)}assert.equal(game.xp,30);assert.equal(game.rerolls,5,'event rerolls respect their cap');assert.deepEqual(game.eventReward.rewards,['经验 +30','重铸已满（5 / 5），未增加'])}
+    assert.equal(shrine.state,'complete');assert(shrine.used);assert.equal(game.eventsCompleted,1);assert.equal(game.activeEvent,null);
+    if(kind==='vigil'){assert.equal(game.player.shield,12);assert.equal(game.gold,20);assert.deepEqual(game.eventReward.rewards,['护盾 +12 · 已补至 12','余烬 +20'])}
+    assert.equal(game.eventReward.name,EVENT_TYPES[kind].name);assert(!worldEventStatus(game).canStart);
+    const receipt=game.eventReward,earned=[game.gold,game.xp,game.player.shield,game.rerolls,game.weapons.blade];
+    game.toast('另一条战斗提示');game.time=receipt.expiresAt-.5;updateWorldEvents(game,.05);assert.equal(game.eventReward,receipt);
+    game.pause();assert(!game.interact());updateWorldEvents(game,10);assert.equal(game.eventReward,receipt);game.resume();
+    game.shrines.push({kind:'souls',x:game.player.x,y:game.player.y,state:'idle',used:false,progress:0,goal:6});
+    assert(game.interact(),'reward notification must not block the next shrine');assert.equal(game.eventReward,receipt);
+    game.time=receipt.expiresAt;updateWorldEvents(game,.05);assert.equal(game.eventReward,null,'reward notice expires after four seconds without confirmation');
+    assert.deepEqual([game.gold,game.xp,game.player.shield,game.rerolls,game.weapons.blade],earned,'notification expiry must not pay twice');
   }
   const expiredTrial=trialGame('vigil');assert(expiredTrial.interact());expiredTrial.state='paused';updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.activeEvent.progress,0);expiredTrial.state='running';expiredTrial.player.hp=0;updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.eventsCompleted,0);expiredTrial.player.hp=40;expiredTrial.time=105;updateWorldEvents(expiredTrial,.05);assert.equal(expiredTrial.eventsFailed,1);assert.equal(expiredTrial.player.hp,40);assert.equal(expiredTrial.gold,0,'timeout does not award or take health');
   const bossTrial=trialGame('souls');assert(bossTrial.interact());bossTrial.spawnBoss(180);updateWorldEvents(bossTrial,.05);assert.equal(bossTrial.eventsFailed,1);assert.equal(bossTrial.activeEvent,null);assert.equal(bossTrial.xp,0);
   const fullTrial=trialGame('hunt');fullTrial.pressure.cap=0;assert(!fullTrial.interact(),'guardian start must obey the enemy cap');fullTrial.pressure.cap=2;assert(fullTrial.interact());fullTrial.time=65;updateWorldEvents(fullTrial,.05);assert.equal(fullTrial.enemies.length,2,'reinforcements must obey the enemy cap');
   const maxTrial=trialGame('hunt');equip(maxTrial,{blade:6});assert(maxTrial.interact());maxTrial.kill(maxTrial.activeEvent.guardian);updateWorldEvents(maxTrial,.05);assert.equal(maxTrial.weapons.blade,6);assert.equal(maxTrial.xp,24,'maxed equipment converts the hunt reward to the chest XP fallback');assert(EVENT_TYPES.hunt.reward.includes('经验 +24'));
-  const previewTrial=trialGame('vigil');previewTrial.pause();assert(worldEventStatus(previewTrial).canStart,'paused preview retains the available challenge');assert(!previewTrial.interact(),'preview does not start combat while paused');previewTrial.pauseReturn='level';assert(!worldEventStatus(previewTrial).canStart,'pending upgrades cannot start an event');
+  assert.deepEqual(maxTrial.eventReward.rewards,['经验 +24（无可强化装备）','余烬 +25']);maxTrial.start(maxTrial.character);assert.equal(maxTrial.eventReward,null,'restart clears the old reward receipt');
+  const shieldTrial=trialGame('vigil');shieldTrial.player.shield=20;assert(shieldTrial.interact());updateWorldEvents(shieldTrial,12);assert.equal(shieldTrial.player.shield,20);assert.equal(shieldTrial.eventReward.rewards[0],'护盾保持 20（未增加）');
+  const boostedTrial=trialGame('souls');equip(boostedTrial,{blade:1},{growth:5});boostedTrial.xpNext=xpForLevel(1);assert(boostedTrial.interact());for(const mote of boostedTrial.activeEvent.motes){Object.assign(boostedTrial.player,{x:mote.x,y:mote.y});updateWorldEvents(boostedTrial,.05)}
+  assert.equal(boostedTrial.level,3);assert.equal(boostedTrial.pendingLevels,2);assert.equal(boostedTrial.xp,3);assert.deepEqual(boostedTrial.eventReward.rewards,['经验 +45','重铸 +1 · 3 → 4'],'XP receipts include bonuses even when the reward crosses levels');
+  const pendingReward=boostedTrial.eventReward;boostedTrial.update(.01);assert.equal(boostedTrial.state,'level');assert.equal(boostedTrial.eventReward,pendingReward);assert(!boostedTrial.interact());boostedTrial.chooseUpgrade(0);assert.equal(boostedTrial.eventReward,pendingReward,'choosing an upgrade preserves the receipt');
+  const chestTrial=start();equip(chestTrial,{blade:6},{growth:5});chestTrial.player.hp=chestTrial.player.maxHp-5;const chestRewards=chestTrial.openChest(60);
+  assert.deepEqual(chestRewards,['经验 +36（无可强化装备）','经验 +36（无可强化装备）','生命 +5','余烬 +60'],'all chest callers share actual XP and capped healing receipts');
+  const pausedTrial=trialGame('vigil');pausedTrial.pause();assert(!worldEventStatus(pausedTrial).canStart,'paused runs cannot accept a task');assert(!pausedTrial.interact(),'paused interaction cannot start a task');pausedTrial.pauseReturn='level';assert(!worldEventStatus(pausedTrial).canStart,'pending upgrades cannot start an event');
   console.log('PASS: 36 weapons / 72 live attacks, 20 fusions, 27 innate-driven talent nodes, three optional shrine events, lamp/wick gates, star XP collection, wind pursuit, tag weights and growth parity.');
 
   if(process.argv.includes('--pressure')){
@@ -483,8 +543,9 @@ try{
       game.on=(event,type)=>{if(event==='pickup'&&type==='xp')pickup=true};
       const gainXp=game.gainXp;game.gainXp=function(amount){
         if(pickup){rawCollectedXp+=amount;collectedXp+=amount*this.xpMultiplier;pickup=false}
-        gainXp.call(this,amount);
+        const gained=gainXp.call(this,amount);
         for(const level of [2,3,4])if(this.level>=level&&levelTimes[level]===null)levelTimes[level]=Number(this.time.toFixed(2));
+        return gained;
       };
       const hit=game.hit;game.hit=function(e,damage,x,y,knock,feedback,source,periodic){
         if(!e.dead&&!e.elite&&!e.boss&&e.hp===e.maxHp&&source===character.weapon&&!periodic&&['skeleton','bat'].includes(e.kind)){
@@ -553,7 +614,12 @@ try{
       await new Promise((done,fail)=>{socket.addEventListener('open',done,{once:true});socket.addEventListener('error',fail,{once:true})});
       let id=0;const pending=new Map(),errors=[];
       socket.addEventListener('message',event=>{const packet=JSON.parse(event.data);if(packet.method==='Runtime.exceptionThrown')errors.push(packet.params.exceptionDetails);if(packet.id){const item=pending.get(packet.id);pending.delete(packet.id);if(packet.error)item.reject(new Error(JSON.stringify(packet.error)));else item.resolve(packet.result)}});
-      const call=(method,params={})=>new Promise((resolve,reject)=>{const next=++id;pending.set(next,{resolve,reject});socket.send(JSON.stringify({id:next,method,params}))});
+      const call=async(method,params={})=>{
+        const result=await new Promise((resolve,reject)=>{const next=++id;pending.set(next,{resolve,reject});socket.send(JSON.stringify({id:next,method,params}))});
+        // Give taps a real press duration; same-frame start/end can suppress Chrome's click event.
+        if(method==='Input.dispatchTouchEvent'&&params.type==='touchStart')await delay(60);
+        return result;
+      };
       const evaluate=async code=>{const r=await call('Runtime.evaluate',{expression:'(async()=>{'+code+'})()',awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value};
       const shot=async name=>{await delay(350);const r=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});writeFileSync('artifacts/'+name+'.png',Buffer.from(r.data,'base64'))};
       await call('Page.enable');await call('Runtime.enable');
@@ -562,7 +628,64 @@ try{
       for(let i=0;i<50;i++){if(await evaluate('return document.readyState!=="loading"'))break;await delay(100)}
       assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.state'),'menu');
       await delay(600);await shot('camp-desktop');
-      assert(await evaluate('document.getElementById("start-button").click();const {game}=await import("/src/main.js");return game.state==="running"'));
+      for(const [width,height] of [[1920,1080],[1366,768],[1280,720],[1024,768],[1024,600],[900,700],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
+        const mobile=width<701||height<500;
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});
+        await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();');await delay(60);
+        assert(await evaluate('const menu=document.getElementById("menu"),buttons=[...menu.querySelectorAll("button")].filter(b=>b.getClientRects().length),top=document.getElementById("masthead").getBoundingClientRect().bottom;return menu.scrollWidth<=menu.clientWidth&&menu.scrollHeight<=menu.clientHeight+1&&buttons.length===3&&!document.getElementById("characters").getClientRects().length&&buttons.every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44&&r.top>=top&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})'),'three-entry home fits without scrolling at '+width+'x'+height);
+        await shot('camp-'+width+'x'+height);
+        const entry=await evaluate('const b=document.getElementById("meta-button"),r=b.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {x,y,hit:document.elementFromPoint(x,y)?.closest("button")===b}');
+        assert(entry.hit,'altar is not covered by another layer');
+        if(mobile){await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:entry.x,y:entry.y}]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}
+        else for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,x:entry.x,y:entry.y,button:'left',clickCount:1});
+        assert(await evaluate('return !document.getElementById("meta-screen").classList.contains("hidden")&&document.getElementById("meta-screen").getAttribute("role")==="dialog"'),'real pointer activation opens the altar');
+        assert(await evaluate('return [...document.querySelectorAll(".meta-upgrade button")].every(b=>b.disabled)&&document.getElementById("meta-upgrades").textContent.includes("还差 50 余烬")'),'zero-balance upgrades explain their disabled state');
+        assert(await evaluate(`
+          const panel=document.querySelector('.meta-panel'),r=panel.getBoundingClientRect(),rows=[...panel.querySelectorAll('.meta-upgrade')];
+          return rows.length===4&&panel.scrollHeight<=panel.clientHeight+1&&panel.scrollWidth<=panel.clientWidth+1&&r.top>=12&&r.bottom<=innerHeight-12&&r.left>=12&&r.right<=innerWidth-12&&[...panel.querySelectorAll('h2,p,.ember-balance,h3,small,.meta-upgrade-status,button,#meta-best')].filter(e=>e.getClientRects().length).every(e=>{const s=e.getBoundingClientRect();return s.top>=r.top&&s.bottom<=r.bottom&&s.left>=r.left&&s.right<=r.right&&e.scrollWidth<=e.clientWidth+1})&&[...panel.querySelectorAll('button')].every(b=>{const s=b.getBoundingClientRect();return s.width>=44&&s.height>=44&&document.elementFromPoint(s.x+s.width/2,s.y+s.height/2)?.closest('button')===b});
+        `),'all four altar upgrades, full effects, balance and close button fit without scrolling at '+width+'x'+height);
+        if([1366,390,370,320].includes(width)||height===320)await shot('camp-altar-'+width+'x'+height);
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+        assert(await evaluate('return document.getElementById("meta-screen").classList.contains("hidden")&&document.activeElement.id==="meta-button"'),'closing the altar restores its entry focus');
+        for(const [entryId,page] of [['play-button','prepare'],['camp-library-button','library']]){
+          const point=await evaluate('const r=document.getElementById('+JSON.stringify(entryId)+').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+          if(mobile){await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}
+          else for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+          assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="menu"&&!document.getElementById('+JSON.stringify('camp-'+page)+').classList.contains("hidden")&&document.getElementById("camp-home").classList.contains("hidden")'),'opening '+page+' stays in camp');
+          assert(await evaluate('const menu=document.getElementById("menu"),top=document.getElementById("masthead").getBoundingClientRect().bottom;return menu.scrollWidth<=menu.clientWidth&&menu.scrollHeight<=menu.clientHeight+1&&[...menu.querySelectorAll("button")].filter(b=>b.getClientRects().length).every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44&&r.top>=top&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})'),page+' actions fit without scrolling at '+width+'x'+height);
+          if(width===1280||width===390||width===320||height===320)await shot('camp-'+page+'-'+width+'x'+height);
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+          assert(await evaluate('return !document.getElementById("camp-home").classList.contains("hidden")&&document.activeElement.id==='+JSON.stringify(entryId)),'Escape returns one menu level and restores focus');
+        }
+      }
+      await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});
+      for(const [parent,entry,tab] of [['play-button','menu-status-button','attributes'],['play-button','menu-talents-button','talents'],['camp-library-button','menu-catalog-button','catalog'],['camp-library-button','menu-fusion-button','fusion']]){
+        await evaluate('document.getElementById('+JSON.stringify(parent)+').click();document.getElementById('+JSON.stringify(entry)+').focus();');
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+        assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="status"&&document.getElementById('+JSON.stringify('sheet-tab-'+tab)+').getAttribute("aria-selected")==="true"'),'camp keyboard entry opens '+tab);
+        await evaluate('document.getElementById("sheet-close").click();');
+        assert(await evaluate('return document.activeElement.id==='+JSON.stringify(entry)+'&&document.getElementById("camp-home").classList.contains("hidden")'),'sheet returns to its originating submenu');
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+      }
+      assert(await evaluate('document.getElementById("camp-library-button").click();document.getElementById("archive-button").click();const visible=!document.getElementById("archive-screen").classList.contains("hidden");document.querySelector("#archive-screen [data-close]").click();return visible&&!document.getElementById("camp-library").classList.contains("hidden")'),'camp guide returns to the library');
+      await evaluate('document.querySelector("#camp-library .camp-back").click();document.activeElement.blur();');
+      await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="menu"&&!document.getElementById("camp-prepare").classList.contains("hidden")'),'Enter opens character selection instead of skipping it');
+      assert(await evaluate('document.querySelectorAll("#characters button")[2].click();const {game}=await import("/src/main.js");const selected=game.character.id==="ranger"&&document.activeElement.getAttribute("aria-pressed")==="true"&&document.getElementById("camp-start-context").textContent.includes("荒野客");document.querySelector("#characters button").click();return selected'),'selection keeps focus and updates the departure context');
+      assert(await evaluate('const {game}=await import("/src/main.js");document.getElementById("start-button").click();game.gold=138;game.time=120;game.end(false,true,"camp");for(let i=0;i<50&&game.state!=="menu";i++)await new Promise(r=>setTimeout(r,10));return game.state==="menu"&&document.getElementById("meta-count").textContent==="150 ✦"&&!document.getElementById("camp-home").classList.contains("hidden")'),'settlement returns to the home menu with the updated balance');
+      await evaluate('document.getElementById("meta-button").click();');await delay(300);
+      const purchase=await evaluate('const b=document.querySelector("[data-meta=vitality]");b.scrollIntoView({block:"center"});const r=b.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+      for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,x:purchase.x,y:purchase.y,button:'left',clickCount:1});
+      assert(await evaluate('const {readSave}=await import("/src/data.js");for(let i=0;i<50&&!document.getElementById("meta-feedback").textContent.includes("已强化");i++)await new Promise(r=>setTimeout(r,10));const save=readSave();return save.embers===100&&save.meta.vitality===1&&document.getElementById("ember-balance").textContent==="100"&&document.getElementById("meta-count").textContent==="100 ✦"&&document.getElementById("meta-feedback").textContent.includes("下次出征生效")&&document.activeElement.dataset.meta==="vitality"'),'real purchase persists, updates both balances and preserves keyboard focus');
+      await shot('camp-altar-purchased');
+      for(const [width,height] of [[370,665],[320,568],[568,320]]){
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
+        assert(await evaluate('const panel=document.querySelector(".meta-panel"),r=panel.getBoundingClientRect(),feedback=document.getElementById("meta-feedback").getBoundingClientRect();return panel.scrollHeight<=panel.clientHeight+1&&panel.scrollWidth<=panel.clientWidth+1&&r.top>=12&&r.bottom<=innerHeight-12&&feedback.height>0&&feedback.top>=r.top&&feedback.bottom<=r.bottom&&[...panel.querySelectorAll("button")].every(b=>{const s=b.getBoundingClientRect();return s.top>=r.top&&s.bottom<=r.bottom})'),'purchase feedback and every altar action remain visible at '+width+'x'+height);
+        await shot('camp-altar-purchased-'+width+'x'+height);
+      }
+      await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+      await evaluate('document.querySelector("#meta-screen [data-close]").click();document.getElementById("menu").scrollTop=0;');await shot('camp-upgraded');
+      assert(await evaluate('document.getElementById("play-button").click();document.getElementById("start-button").click();const {game}=await import("/src/main.js");return game.state==="running"'));
       await evaluate('const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.time=185;game.level=17;game.weapons={blade:4,flame:4,shard:3};game.passives={power:2,frostbrand:2,rime:2};game.choiceHistory=["flame","cinder","flame","cinder"];game.stats=characterStats(game.character,game.passives,game.meta);game.player.maxHp=game.stats.maxHp;game.state="level";game.choices=game.rollUpgrades();game.on("weapons");game.on("hud");game.on("level");');
       await delay(100);await shot('upgrade-desktop');
       assert(await evaluate('return document.getElementById("upgrade-affinity").textContent.includes("火焰")&&document.querySelectorAll(".upgrade-card:not(.fusion-card) .item-tags").length===2'));
@@ -581,7 +704,7 @@ try{
       await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
       await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();');await delay(150);await shot('camp-mobile');
       assert(await evaluate('return document.documentElement.scrollWidth<=innerWidth'));
-      await evaluate('document.getElementById("start-button").click();const {game}=await import("/src/main.js");game.state="level";game.level=2;game.choices=game.rollUpgrades();game.on("level");');
+      await evaluate('document.getElementById("play-button").click();document.getElementById("start-button").click();const {game}=await import("/src/main.js");game.state="level";game.level=2;game.choices=game.rollUpgrades();game.on("level");');
       await delay(100);await shot('upgrade-mobile');
       assert(await evaluate('return [...document.querySelectorAll(".upgrade-card")].every(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth})'));
       for(const [width,height] of [[320,568],[378,668],[390,844],[568,320],[667,375],[844,390]]){
@@ -612,7 +735,7 @@ try{
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
       const pendingChoices=await evaluate('const {game}=await import("/src/main.js");return JSON.stringify([game.choices,game.pendingLevels,game.rerolls])');
       await evaluate('document.getElementById("level-tree-button").click();document.getElementById("sheet-close").click();document.getElementById("level-status-button").click();document.getElementById("sheet-tab-catalog").click();');await delay(100);await shot('catalog-mobile');
-      assert(await evaluate('return Number(document.getElementById("catalog-count").textContent.split("/")[0])===document.querySelectorAll(".catalog-item").length'));
+      assert(await evaluate('const tiles=[...document.querySelectorAll("#catalog-list .catalog-item")];return tiles.length>0&&tiles.length<=12&&Number(document.getElementById("catalog-count").textContent.split("/")[0])>=tiles.length&&document.getElementById("catalog-detail").classList.contains("hidden")&&tiles.every(tile=>tile.children.length===2&&tile.children[0].tagName==="CANVAS"&&tile.children[1].tagName==="STRONG")'),'catalog opens as icon/name tiles without automatic effect details');
       await evaluate('document.getElementById("sheet-close").click();');
       assert.equal(await evaluate('const {game}=await import("/src/main.js");return JSON.stringify([game.choices,game.pendingLevels,game.rerolls])'),pendingChoices,'mobile references preserve the upgrade choices');
       assert(await evaluate('document.getElementById("reroll-button").click();const {game}=await import("/src/main.js");return game.rerolls===2&&game.state==="level"'));
@@ -645,48 +768,46 @@ try{
         assert(await evaluate(`const {game}=await import('/src/main.js');const {fusionChoice}=await import('/src/fusions.js');game.state='level';game.choices=[fusionChoice('${key}',game.weapons,game.passives)];game.on('level');document.querySelector('.upgrade-card').click();return game.weapons['${key}']===1&&game.discoveredFusions.has('${key}');`));
       }
       await evaluate('document.getElementById("status-button").click();document.getElementById("sheet-tab-items").click();');
-      assert(await evaluate('return document.getElementById("sheet-items").textContent.includes("散魂震波")&&document.getElementById("sheet-build-summary").textContent.includes("本局倾向")'));
+      assert(await evaluate(`const {game}=await import('/src/main.js');const {weaponStats}=await import('/src/stats.js');document.querySelector('#sheet-items [data-item-id="sheet-weapon-soulforge"]').click();return !document.getElementById('items-detail').classList.contains('hidden')&&document.querySelector('#sheet-weapon-soulforge .sheet-facts dd').textContent===String(Math.round(weaponStats('soulforge',game.weapons.soulforge,game.stats,game.character).damage))`));
       await shot('new-content-desktop');
       await evaluate('document.getElementById("sheet-tab-catalog").click();const input=document.getElementById("catalog-search");input.value="召唤";input.dispatchEvent(new Event("input",{bubbles:true}));');
-      assert(await evaluate('return document.querySelectorAll(".catalog-item").length>=3&&document.getElementById("catalog-count").textContent.endsWith("/ 81")'));
+      assert(await evaluate('return document.querySelectorAll("#catalog-list .catalog-item").length>=3&&document.getElementById("catalog-count").textContent.endsWith("/ 81")'));
       await shot('tag-catalog-desktop');await evaluate('document.getElementById("sheet-close").click();');
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
-      await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[1]);game.level=18;document.getElementById("hud-talents-button").click();document.querySelectorAll(".talent-branch-tabs button")[1].click();');
+      await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[1]);game.level=18;document.getElementById("hud-talents-button").click();const picker=document.querySelector("#sheet-talents>.mobile-picker");picker.value="branch-1";picker.dispatchEvent(new Event("change"));');
       const touch=await evaluate('const r=document.getElementById("talent-s_frost1").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};');
       await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(100);
       assert(await evaluate('const {game}=await import("/src/main.js");const root=document.getElementById("status-screen");return !!game.talents.s_frost1&&root.scrollWidth<=innerWidth&&[...document.querySelectorAll(".talent-branch.selected .talent-node")].every(e=>e.getBoundingClientRect().right<=innerWidth);'));
       await shot('talents-mobile');
-      await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("menu-talents-button").click();');
+      await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("play-button").click();document.getElementById("menu-talents-button").click();');
       assert(await evaluate('return [...document.querySelectorAll(".talent-node")].every(e=>e.disabled)'),'camp is a read-only preview');
       assert(await evaluate('return !document.querySelector(".talent-current")'),'camp must not show the previous run stats');
+      assert(await evaluate('const {game}=await import("/src/main.js");const cards=[...document.querySelector("#sheet-items .collection-cards").children];return document.getElementById("sheet-items-label").textContent==="装备预览"&&cards.length===1&&cards[0].id==="sheet-weapon-"+game.character.weapon'),'camp previews only the starting equipment');
       await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.start(game.character,{vitality:5,power:5,regen:5,magnet:5});game.passives={regen:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents);document.getElementById("status-button").click();');
       assert(await evaluate('const rows=[...document.querySelectorAll(".sheet-stat")];return rows.find(e=>e.textContent.includes("持续恢复")).textContent.includes("0.44")&&rows.find(e=>e.textContent.includes("避伤恢复")).textContent.includes("0.4")&&document.getElementById("sheet-stat-grid").textContent.includes("护盾受击也会打断")'));
-      await evaluate('const card=[...document.querySelectorAll(".sheet-stat")].find(e=>e.textContent.includes("避伤恢复"));card.scrollIntoView({block:"center"});');
+      await evaluate('const picker=document.querySelector("#sheet-attributes>.mobile-picker");picker.value="stats-4";picker.dispatchEvent(new Event("change"));');
       await shot('recovery-mobile');
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});
       await evaluate('document.getElementById("sheet-tab-attributes").click();');await shot('recovery-desktop');
       await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.start(game.character);game.time=60;game.player.x=game.shrines[0].x;game.player.y=game.shrines[0].y;game.player.invincible=999;game.enemies=[];game.spawnClock=game.waveClock=999;game.on("hud");');
-      assert(await evaluate('return !document.getElementById("world-event-start").disabled&&document.getElementById("world-event-detail").textContent.includes("12 秒")'));
+      assert(await evaluate('const button=document.getElementById("world-event-start");return button.parentElement.classList.contains("world-event-heading")&&!button.disabled&&document.getElementById("world-event-detail").textContent.includes("12 秒")'));
       await shot('event-offer-desktop');
       await call('Input.dispatchKeyEvent',{type:'keyDown',key:'e',code:'KeyE'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'e',code:'KeyE'});
-      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="paused"&&!game.activeEvent&&!document.getElementById("pause-event").classList.contains("hidden")&&document.getElementById("world-event-detail").textContent.includes("援兵")'),'preview shows risk and pauses before accepting');
-      await call('Input.dispatchKeyEvent',{type:'keyDown',key:'e',code:'KeyE'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'e',code:'KeyE'});
-      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="running"&&game.activeEvent?.kind==="vigil"'));
+      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="running"&&game.activeEvent?.kind==="vigil"&&document.getElementById("pause-screen").classList.contains("hidden")'),'one key press accepts the nearby task without a details dialog');
       await evaluate('const {game}=await import("/src/main.js");game.pause();');
       const frozenEvent=await evaluate('const {game}=await import("/src/main.js");return [game.time,game.activeEvent.progress]');await delay(250);
       assert.deepEqual(await evaluate('const {game}=await import("/src/main.js");return [game.time,game.activeEvent.progress]'),frozenEvent,'paused event clocks must stop');
       await evaluate('const {game}=await import("/src/main.js");game.resume();game.activeEvent.progress=11.99;game.update(.05);');
       assert(await evaluate('const {game}=await import("/src/main.js");return game.eventsCompleted===1&&!game.activeEvent&&game.player.shield>=12'));
+      assert(await evaluate('const {game}=await import("/src/main.js");return document.getElementById("world-event-card").classList.contains("hidden")&&!document.getElementById("event-reward-toast").classList.contains("hidden")&&game.eventReward.expiresAt>game.time'));
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
       await evaluate('const {game}=await import("/src/main.js");game.player.x=game.shrines[2].x;game.player.y=game.shrines[2].y;game.on("hud");');
-      assert(await evaluate('const card=document.getElementById("world-event-card").getBoundingClientRect(),talent=document.getElementById("hud-talents-button").getBoundingClientRect();return card.right<=innerWidth&&card.left>=0&&card.top>=talent.bottom&&card.bottom<innerHeight*.32'));
+      assert(await evaluate('const card=document.getElementById("world-event-card").getBoundingClientRect(),talent=document.getElementById("hud-talents-button").getBoundingClientRect();return card.right<=innerWidth&&card.left>=0&&card.top>=talent.bottom&&card.bottom<innerHeight*.4'));
       await shot('event-offer-mobile');
-      const eventTouch=await evaluate('const r=document.getElementById("world-event-preview").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+      const eventTouch=await evaluate('const r=document.getElementById("world-event-start").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
       await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[eventTouch]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(100);
-      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="paused"&&!game.activeEvent&&document.getElementById("world-event-reward").textContent.includes("重铸")'));
-      await shot('event-preview-mobile');
-      await evaluate('document.getElementById("world-event-start").click();');
-      assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==="souls"'));
+      assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="running"&&game.activeEvent?.kind==="souls"&&document.getElementById("world-event-start").disabled&&document.getElementById("pause-screen").classList.contains("hidden")'),'one tap accepts the task directly');
+      assert(await evaluate('const card=document.getElementById("world-event-card").getBoundingClientRect(),toast=document.getElementById("toast").getBoundingClientRect();return card.bottom<=toast.top||toast.bottom<=card.top'),'acceptance feedback does not cover the task progress');
       await shot('event-active-mobile');
       assert(await evaluate('const {game}=await import("/src/main.js");game.player.dashCooldown=0;document.getElementById("touch-dash").click();return game.player.dashCooldown>0'),'dash supports standard button activation');
       await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
@@ -734,13 +855,66 @@ try{
           await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
         }
         assert(await evaluate('const {game}=await import("/src/main.js");document.getElementById("hud-loadout-button").click();return game.state==="status"&&document.getElementById("sheet-tab-items").getAttribute("aria-selected")==="true"'),'compact equipment entry retains full inventory');
-        await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.time=60;game.player.x=game.shrines[0].x;game.player.y=game.shrines[0].y;game.on("hud");document.getElementById("world-event-preview").click();');
-        const previewTime=await evaluate('const {game}=await import("/src/main.js");return game.time');await delay(150);
-        assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.time'),previewTime,'preview must freeze battle');
-        await evaluate('document.getElementById("resume-button").click();');
-        assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="running"&&!game.activeEvent'),'cancel preview must not start a challenge');
+        await evaluate('document.getElementById("sheet-close").click();');
       }
+      for(const [width,height] of [[378,668],[320,568],[390,844],[568,320],[667,375],[844,390]]){
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
+        const anchor={x:width*.25,y:height*.65,id:1},moving={x:width*.25+40,y:height*.65,id:1};
+        for(const kind of ['vigil','hunt','souls']){
+          await evaluate('const {game}=await import("/src/main.js");game.start(game.character);game.time=60;game.enemies=[];game.spawnClock=game.waveClock=999;game.player.invincible=999;const shrine=game.shrines.find(s=>s.kind==='+JSON.stringify(kind)+');game.player.x=shrine.x;game.player.y=shrine.y;game.on("hud");');
+          assert(await evaluate(`
+            const {game}=await import('/src/main.js'),{EVENT_TYPES}=await import('/src/world-events.js'),type=EVENT_TYPES['${kind}'],card=document.getElementById('world-event-card'),r=card.getBoundingClientRect(),button=document.getElementById('world-event-start'),b=button.getBoundingClientRect();
+            const dash=document.getElementById('touch-dash').getBoundingClientRect(),loadout=document.getElementById('hud-loadout-button').getBoundingClientRect(),toast=document.getElementById('toast').getBoundingClientRect();
+            return game.state==='running'&&!game.activeEvent&&document.querySelector('.modal-wrap:not(.hidden)')===null&&button.parentElement.id==='touch-controls'&&!card.querySelector('button')&&b.width>=64&&b.height>=64&&b.top>innerHeight/2&&b.left>=0&&b.right<=dash.left-12&&b.bottom<=innerHeight&&Math.abs(b.bottom-dash.bottom)<1&&toast.bottom<=b.top-8&&(b.right<=loadout.left||b.left>=loadout.right||b.bottom<=loadout.top||b.top>=loadout.bottom)&&document.elementFromPoint(b.x+b.width/2,b.y+b.height/2).closest('#world-event-start')===button&&document.getElementById('world-event-detail').textContent.includes(type.hint)&&document.getElementById('world-event-reward').textContent.includes(type.reward)&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<innerHeight-100&&(r.bottom<innerHeight/2-20||r.left>innerWidth/2+20)&&[...card.querySelectorAll('p')].every(e=>{const s=e.getBoundingClientRect();return s.width>0&&s.top>=r.top&&s.bottom<=r.bottom&&e.scrollWidth<=e.clientWidth+1});
+          `),'nearby '+kind+' keeps details above and a separate thumb button beside dash at '+width+'x'+height);
+          await shot('event-'+kind+'-'+width+'x'+height);
+          assert(await evaluate('const {game}=await import("/src/main.js");game.player.x+=46;document.getElementById("world-event-start").click();return !game.activeEvent&&document.getElementById("world-event-card").classList.contains("hidden")&&document.getElementById("world-event-start").disabled'),'leaving the shrine hides the offer and rejects a stale tap');
+          await evaluate('const {game}=await import("/src/main.js");game.player.x-=46;game.on("hud");');
+          const accept=await evaluate('const r=document.getElementById("world-event-start").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,id:2}');
+          await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[anchor]});await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
+          await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[moving,accept]});
+          assert(await evaluate('const {game}=await import("/src/main.js");const active=game.activeEvent;document.getElementById("world-event-start").click();return game.state==="running"&&active?.kind==='+JSON.stringify(kind)+'&&active===game.activeEvent&&game.stick.x>.99&&document.getElementById("joystick").classList.contains("floating")&&document.getElementById("world-event-start").disabled&&!document.getElementById("world-event-start").getClientRects().length'),'second finger accepts '+kind+' on press while movement continues, without accepting twice');
+          await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
+          assert(await evaluate('const {game}=await import("/src/main.js");return game.stick.x>.99'),'releasing the task button does not release movement');
+          await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+          await evaluate('const {game}=await import("/src/main.js");game.player.x=game.activeEvent.x;game.player.y=game.activeEvent.y;');
+          const rewards=await evaluate(`
+            const {game}=await import('/src/main.js'),{updateWorldEvents}=await import('/src/world-events.js');const shrine=game.activeEvent;game.xpNext=1e9;
+            if(shrine.kind==='vigil')updateWorldEvents(game,12);
+            if(shrine.kind==='hunt'){game.kill(shrine.guardian);updateWorldEvents(game,.01)}
+            if(shrine.kind==='souls')for(const mote of shrine.motes){Object.assign(game.player,{x:mote.x,y:mote.y});updateWorldEvents(game,.01)}
+            game.enemies=[];game.drops=[];game.toast('普通拾取提示');game.on('hud');return game.eventReward.rewards;
+          `);
+          assert(await evaluate('return '+JSON.stringify(rewards)+'.every(value=>document.getElementById("event-reward-toast").textContent.includes(value))'),'ordinary pickup messages do not overwrite rewards');
+          assert(await evaluate(`
+            const notice=document.getElementById('event-reward-toast'),r=notice.getBoundingClientRect(),style=getComputedStyle(notice),dash=document.getElementById('touch-dash').getBoundingClientRect();
+            return document.getElementById('world-event-card').classList.contains('hidden')&&!document.getElementById('world-event-start').getClientRects().length&&style.backgroundColor==='rgba(0, 0, 0, 0)'&&style.backgroundImage==='none'&&style.borderTopWidth==='0px'&&style.pointerEvents==='none'&&r.top>=innerHeight*.55&&r.bottom<dash.top&&r.left>=0&&r.right<=innerWidth&&notice.scrollWidth<=notice.clientWidth+1;
+          `),'transparent reward text leaves the upper view and controls clear at '+width+'x'+height);
+          await shot('event-reward-'+kind+'-'+width+'x'+height);
+          await evaluate('const {game}=await import("/src/main.js");game.pause();');
+          const beforeFade=await evaluate('const {game}=await import("/src/main.js");return game.eventReward.expiresAt');await delay(100);
+          assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.eventReward.expiresAt'),beforeFade);
+          await evaluate('const {game}=await import("/src/main.js");game.resume();game.time=game.eventReward.expiresAt-.6;game.on("hud");game.pause();');await delay(180);
+          assert(await evaluate('const opacity=Number(getComputedStyle(document.getElementById("event-reward-toast")).opacity);return opacity>0&&opacity<.8'),'reward fades during the final second');
+          await evaluate('const {game}=await import("/src/main.js");game.resume();game.time=game.eventReward.expiresAt;game.update(.01);game.on("hud");');
+          assert(await evaluate('const {game}=await import("/src/main.js");return !game.eventReward&&!game.activeEvent&&game.eventsCompleted===1&&document.getElementById("event-reward-toast").classList.contains("hidden")&&!document.getElementById("world-event-start").getClientRects().length'),'reward disappears automatically without another payment or confirmation');
+        }
+      }
+      await evaluate(`
+        const {game}=await import('/src/main.js'),{updateWorldEvents}=await import('/src/world-events.js');
+        game.start(game.character);game.time=60;game.enemies=[];game.spawnClock=game.waveClock=999;game.xpNext=1e9;
+        Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y});game.interact();updateWorldEvents(game,12);
+        Object.assign(game.player,{x:game.shrines[1].x,y:game.shrines[1].y});game.on('hud');
+      `);
+      const receiptTouch=await evaluate('const r=document.getElementById("world-event-start").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+      await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[receiptTouch]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      assert(await evaluate('const {game}=await import("/src/main.js");return !!game.eventReward&&game.activeEvent?.kind==="hunt"&&game.eventsCompleted===1&&game.enemies.filter(e=>e.eventGuardian).length===1'),'reward notification allows the next shrine to be accepted exactly once');
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});
+      assert(await evaluate('const {game}=await import("/src/main.js");game.on("hud");return document.getElementById("world-event-start").parentElement.classList.contains("world-event-heading")'),'switching to mouse returns the same button to the desktop details');
+      await evaluate('const {game}=await import("/src/main.js");game.activeEvent=null;game.enemies=[];game.shrines[1].state="idle";game.on("hud");');
+      const desktopOffer=await evaluate('const r=document.getElementById("world-event-start").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+      for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,...desktopOffer,button:'left',clickCount:1});
+      assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==="hunt"&&game.enemies.filter(e=>e.eventGuardian).length===1'),'desktop mouse still accepts once');
       await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("meta-button").click();');
       assert(await evaluate('return document.getElementById("meta-upgrades").textContent.includes("连续 6 秒未受攻击")'));await shot('recovery-altar');
       const concurrentSave=await evaluate(`
@@ -766,6 +940,117 @@ try{
         release();await hold;for(let i=0;i<50&&game.state==='over';i++)await new Promise(resolve=>setTimeout(resolve,10));
         return blocked&&game.state==='running'&&game.time<1;
       `),'settlement must resist modal shortcuts while waiting and restart after the save completes');
+      // Every mobile subpage must fit, including fully discovered collections and long descriptions.
+      await evaluate(`
+        const {game}=await import('/src/main.js'),{WEAPONS,PASSIVES,PICKUPS,readSave,writeSave}=await import('/src/data.js'),{FUSIONS}=await import('/src/fusions.js');
+        const save=readSave();save.discoveredFusions=Object.keys(FUSIONS);
+        save.discoveredItems=Object.fromEntries([...Object.keys(WEAPONS).map(key=>['weapon:'+key,WEAPONS[key].fusion?3:6]),...Object.keys(PASSIVES).map(key=>['passive:'+key,PASSIVES[key].max]),...Object.keys(PICKUPS).map(key=>['pickup:'+key,1])]);
+        await writeSave(save);dispatchEvent(new StorageEvent('storage',{key:'afterlight-save-v1'}));
+        game.start(game.character);game.level=30;game.time=300;game.player.invincible=1e9;game.spawnClock=game.waveClock=1e9;
+        game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,curse:5,regen:5,volatile:3};
+        const {characterStats}=await import('/src/stats.js');game.stats=characterStats(game.character,game.passives,game.meta,game.talents);
+        document.getElementById('status-button').click();
+      `);
+      const mobileFit=async label=>assert.deepEqual(await evaluate(`
+        const panel=document.querySelector('.modal-wrap:not(.hidden) .panel'),rect=panel.getBoundingClientRect(),issues=[];
+        if(rect.left<0||rect.top<0||rect.right>innerWidth+1||rect.bottom>innerHeight+1)issues.push('panel outside viewport');
+        for(const element of [panel,...panel.querySelectorAll('*')]){
+          if(!element.getClientRects().length||element.closest('details:not([open])')||element.matches('option'))continue;
+          const style=getComputedStyle(element),r=element.getBoundingClientRect();
+          if(['auto','scroll','hidden'].includes(style.overflowY)&&element.scrollHeight>element.clientHeight+2)issues.push((element.id||element.className)+' vertical overflow');
+          if(r.left<rect.left-1||r.right>rect.right+1||r.top<rect.top-1||r.bottom>rect.bottom+1)issues.push((element.id||element.className)+' outside panel');
+        }
+        return issues;
+      `),[],label);
+      const chooseMobile=async(selector,value)=>evaluate(`const picker=document.querySelector(${JSON.stringify(selector)});picker.value=${JSON.stringify(value)};picker.dispatchEvent(new Event('change'));`);
+      const visitMobile=async(selector,label)=>{
+        const options=await evaluate(`const picker=document.querySelector(${JSON.stringify(selector)});return picker?[...picker.options].map(option=>option.value):[];`);
+        for(const value of options){await chooseMobile(selector,value);await mobileFit(label+' / '+value)}
+      };
+      for(const [width,height] of [[370,665],[320,568],[390,844],[568,320],[667,375],[844,390]]){
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await delay(50);
+        for(const tab of ['attributes','talents','items','fusion','catalog']){
+          await evaluate(`document.getElementById('sheet-tab-${tab}').click()`);
+          if(tab==='attributes')await visitMobile('#sheet-attributes>.mobile-pages-picker','attributes '+width);
+          if(tab==='talents'){
+            await visitMobile('#sheet-talents>.mobile-pages-picker','talents '+width);
+            for(let i=0;i<3;i++){await chooseMobile('#sheet-talents>.mobile-pages-picker','branch-'+i);await visitMobile('.talent-branch.mobile-selected>.mobile-pages-picker','talent nodes '+width)}
+          }
+          if(tab==='items'||tab==='fusion'){
+            const selector='#sheet-'+tab,seen=[];
+            {
+              if(tab==='items')await chooseMobile(selector+' .collection-category','all');
+              await evaluate(`const previous=document.querySelector('${selector} .collection-prev');while(!previous.disabled)previous.click();`);
+              while(true){
+                const page=await evaluate(`return document.querySelector('${selector} .collection-page').textContent`);
+                const ids=await evaluate(`return [...document.querySelectorAll('${selector} .catalog-item')].map(button=>button.dataset.itemId)`);
+                assert(ids.length>0&&ids.length<=12);seen.push(...ids);await mobileFit(tab+' grid '+width+' '+page);
+                for(const id of ids){
+                  assert(await evaluate(`const root=document.querySelector('${selector}'),id=${JSON.stringify(id)};[...root.querySelectorAll('.catalog-item')].find(button=>button.dataset.itemId===id).click();return root.querySelector('.catalog-browser').classList.contains('hidden')&&!document.getElementById(id).classList.contains('hidden')&&document.activeElement===root.querySelector('.catalog-back');`),'tile opens the selected equipment or recipe');
+                  await mobileFit(tab+' effect '+width+' '+id);
+                  if(tab==='fusion')assert(await evaluate(`
+                    const root=document.querySelector('${selector}'),id=${JSON.stringify(id)},button=document.getElementById(id).querySelector('.fusion-track-button');
+                    if(!button||!button.hasAttribute('aria-pressed')||button.disabled)return true;
+                    const before=button.getAttribute('aria-pressed');button.click();const next=document.getElementById(id).querySelector('.fusion-track-button');
+                    if(root.dataset.selected!==id||root.querySelector('.catalog-detail').classList.contains('hidden')||next.getAttribute('aria-pressed')===before||document.activeElement!==next)return false;
+                    next.click();return document.getElementById(id).querySelector('.fusion-track-button').getAttribute('aria-pressed')===before;
+                  `),'tracking preserves the current recipe and keyboard focus');
+                  await evaluate(`document.querySelector('${selector} .catalog-back').click()`);
+                  assert.deepEqual(await evaluate(`return [document.querySelector('${selector} .collection-page').textContent,document.activeElement.dataset.itemId]`),[page,id],'back restores the equipment or recipe page and focus');
+                }
+                if(await evaluate(`return document.querySelector('${selector} .collection-next').disabled`))break;
+                await evaluate(`document.querySelector('${selector} .collection-next').click()`);
+              }
+            }
+            const expected=tab==='items'?await evaluate(`const {game}=await import('/src/main.js');return [...Object.keys(game.weapons).map(key=>'sheet-weapon-'+key),...Object.keys(game.passives).map(key=>'sheet-passive-'+key)]`):await evaluate(`return [...document.querySelector('${selector} .collection-cards').children].map(card=>card.id)`);
+            assert.deepEqual([...seen].sort(),expected.sort(),'all equipment and known recipes remain reachable');
+            if(tab==='items')assert(await evaluate('return document.getElementById("sheet-items-label").textContent==="本局装备"&&![...document.querySelector("#sheet-items .collection-category").options].some(option=>option.value==="pickup")'),'the loadout does not duplicate the permanent pickup catalog');
+            await evaluate(`document.querySelector('${selector} .catalog-item').click()`);
+            await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+            assert(await evaluate(`const {game}=await import('/src/main.js');return game.state==='status'&&document.querySelector('${selector} .catalog-detail').classList.contains('hidden')`),'Escape returns to the icon grid');
+          }
+
+          if(tab==='catalog'){
+            await chooseMobile('#catalog-category','all');await evaluate('document.getElementById("catalog-clear").click()');
+            const seen=[];
+            while(true){
+              const page=await evaluate('return document.getElementById("catalog-page").textContent'),ids=await evaluate('return [...document.querySelectorAll("#catalog-list .catalog-item")].map(button=>button.dataset.itemId)');
+              assert(ids.length>0&&ids.length<=12);seen.push(...ids);
+              await mobileFit('catalog grid '+width+' '+page);
+              for(const id of ids){
+                assert(await evaluate(`const {catalogItem}=await import('/src/data.js');const id=${JSON.stringify(id)},item=catalogItem(id);[...document.querySelectorAll('#catalog-list .catalog-item')].find(button=>button.dataset.itemId===id).click();return document.getElementById('catalog-browser').classList.contains('hidden')&&document.querySelector('#catalog-detail .catalog-description').textContent===item.data.desc&&document.querySelector('#catalog-detail h4').textContent===item.data.name&&document.activeElement.id==='catalog-back';`),'click opens one short effect');
+                await mobileFit('catalog effect '+width+' '+id);await evaluate('document.getElementById("catalog-back").click()');
+                assert.deepEqual(await evaluate('return [document.getElementById("catalog-page").textContent,document.activeElement.dataset.itemId]'),[page,id],'return preserves the page and focused tile');
+              }
+              if(await evaluate('return document.getElementById("catalog-next").disabled'))break;
+              await evaluate('document.getElementById("catalog-next").click()');
+            }
+            assert.equal(new Set(seen).size,seen.length,'no duplicate tiles across pages');assert.equal(seen.length,81,'every discovered item can be reached by paging');
+            await chooseMobile('#catalog-category','pickup');await mobileFit('pickup category '+width);
+            assert(await evaluate('return [...document.querySelectorAll("#catalog-list .catalog-item")].every(button=>button.dataset.itemId.startsWith("pickup:"))'));
+            await chooseMobile('#catalog-category','all');
+            await evaluate('const input=document.getElementById("catalog-search");input.value="不存在的道具";input.dispatchEvent(new Event("input"));');await mobileFit('empty search '+width);await evaluate('document.getElementById("catalog-clear").click()');
+            await evaluate('document.querySelector("#catalog-list .catalog-item").click()');
+            await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+            assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="status"&&document.getElementById("catalog-detail").classList.contains("hidden")'),'Escape returns from the effect to the collection');
+          }
+          await mobileFit(tab+' '+width+'x'+height);await shot('menus-'+tab+'-'+width+'x'+height);
+        }
+        await evaluate(`
+          document.getElementById('sheet-tab-items').click();const picker=document.querySelector('#sheet-items .collection-category');picker.value='weapon';picker.dispatchEvent(new Event('change'));
+          document.querySelector('#sheet-items [data-item-id="sheet-weapon-solar"]').click();
+          [...document.querySelectorAll('#sheet-weapon-solar .sheet-recipe-link')].find(button=>button.textContent.includes('融合图谱')).click();
+        `);
+        assert(await evaluate('return document.getElementById("recipe-solar").getClientRects().length>0&&document.getElementById("sheet-tab-fusion").getAttribute("aria-selected")==="true"'),'equipment link selects the target recipe');
+        await evaluate('document.querySelector("#recipe-solar .fusion-track-button").click()');
+        assert(await evaluate('return document.getElementById("sheet-weapon-solar").getClientRects().length>0&&document.getElementById("sheet-tab-items").getAttribute("aria-selected")==="true"'),'recipe return selects the equipped weapon');
+        await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.pause()');await mobileFit('pause '+width);await shot('menus-pause-'+width+'x'+height);
+        await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("archive-button").click()');await visitMobile('.guide-grid>.mobile-pages-picker','guide '+width);await shot('menus-guide-'+width+'x'+height);
+        await evaluate('document.querySelector("[data-close=archive-screen]").click();const {game}=await import("/src/main.js");game.start(game.character);game.time=600;game.damageByWeapon={solar:100000,talent:20000,orb:8000};game.damageTaken=300;game.end(true)');
+        for(let i=0;i<30;i++){if(await evaluate('return !document.getElementById("end-screen").classList.contains("hidden")'))break;await delay(50)}
+        await visitMobile('#end-report>.mobile-pages-picker','result '+width);await shot('menus-result-'+width+'x'+height);
+        await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();game.start(game.character);game.level=30;game.time=300;game.player.invincible=1e9;game.spawnClock=game.waveClock=1e9;game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,curse:5,regen:5,volatile:3};const {characterStats}=await import("/src/stats.js");game.stats=characterStats(game.character,game.passives,game.meta,game.talents);document.getElementById("status-button").click()');
+      }
       assert.equal(errors.length,0,JSON.stringify(errors));
       console.log('PASS: native Chrome desktop/touch rendering, 36 weapon effects, adaptive tag UI/search, two new fusion transactions, three talent trees, shrine controls, concurrent save transactions, choice preservation and zero runtime exceptions. Screenshots: artifacts/.');
     }finally{socket?.close();browser.kill()}

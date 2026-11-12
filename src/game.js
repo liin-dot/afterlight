@@ -32,6 +32,7 @@ export class Game{
   if(e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
   if(e.target?.closest?.('input,textarea,select,[contenteditable="true"]')){
    if(e.code==='Escape'&&this.state==='status'){e.preventDefault();this.on('closeStatus')}
+   if(e.code==='Escape'&&this.state==='menu'){e.preventDefault();this.on('closeMenuModal')}
    return;
   }
   if(this.state==='status'){
@@ -53,7 +54,7 @@ export class Game{
   if(this.state==='running'&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();this.keys.add(e.code);
   if(e.repeat)return;
   if(e.code==='Space'&&this.state==='running')this.dash();
-  if(e.code==='KeyE'&&['running','paused'].includes(this.state)){e.preventDefault();this.on('worldEvent')}
+  if(e.code==='KeyE'&&this.state==='running'){e.preventDefault();this.interact()}
   if(e.code==='Escape'||e.code==='KeyP'){if(['running','level'].includes(this.state))this.pause();else if(this.state==='paused')this.resume();else if(this.state==='menu')this.on('closeMenuModal')}
   if(e.code==='KeyM')this.on('sound');if(e.code==='KeyF')this.on('fullscreen');
   if(this.state==='level'&&['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(e.code))this.on('choose',Number(e.code.slice(-1))-1);
@@ -84,7 +85,10 @@ export class Game{
  get moveSpeed(){return this.stats.moveSpeed}
  get pickupRadius(){return this.stats.pickupRadius}
  get xpMultiplier(){return this.stats.xpMultiplier}
- interact(){return startWorldEvent(this)}
+ interact(){
+  if(this.state!=='running'||!this.player||this.player.hp<=0)return false;
+  return startWorldEvent(this);
+ }
  pause(){if(!['running','level'].includes(this.state))return;this.pauseReturn=this.state;this.state='paused';this.keys.clear();this.stick={x:0,y:0};this.on('pause')}
  resume(){if(this.state!=='paused')return;this.state=this.pauseReturn==='level'?'level':'running';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};this.on('resume',this.state)}
  returnToMenu(){this.state='menu';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};this.on('menu')}
@@ -144,9 +148,13 @@ export class Game{
   else if(e.boss){
    if(e.state==='charge'){e.stateTime-=dt;e.x+=e.chargeX*200*dt;e.y+=e.chargeY*200*dt;if(e.stateTime<=0){e.state='chase';e.attack=2.5}speed=0}
    else if(e.state==='windup'){e.stateTime-=dt;speed=0;if(e.stateTime<=0){e.state='charge';e.stateTime=.65;let l=Math.hypot(e.slamX-e.x,e.slamY-e.y)||1;e.chargeX=(e.slamX-e.x)/l;e.chargeY=(e.slamY-e.y)/l;this.burst(e.x,e.y-12,18,'#c6a280',75)}}
-   else if(e.attack<=0){const r=Math.random();if(r<.35){e.state='windup';e.stateTime=1.2;e.slamX=this.player.x;e.slamY=this.player.y;this.hazards.push({type:'line',x:e.x,y:e.y,tx:e.slamX,ty:e.slamY,t:1.2,max:1.2,boss:e,visualOnly:true})}else if(r<.7){for(let i=0;i<(e.final?7:4);i++){const a=i*TAU/(e.final?7:4)+this.time;let hx=this.player.x+Math.cos(a)*(i===0?0:70),hy=this.player.y+Math.sin(a)*(i===0?0:70);this.hazards.push({type:'blast',x:hx,y:hy,r:e.final?36:29,t:1.25+i*.1,max:1.25+i*.1,damage:e.damage})}e.attack=e.final?3.2:4.2}else{const count=e.final?14:10,gap=Math.floor(Math.random()*count);for(let i=0;i<count;i++){if(i===gap||i===(gap+1)%count)continue;const a=i*TAU/count;this.projectiles.push({x:e.x,y:e.y-12,vx:Math.cos(a)*64,vy:Math.sin(a)*64,r:4,damage:e.damage*.65,enemy:true,type:'enemy',t:5,hit:new Set()})}this.effects.push({type:'pulse',x:e.x,y:e.y-12,r:45,t:.8,max:.8,color:'#d3a0b5'});e.attack=e.final?3.5:4.5}}
+   else if(e.attack<=0){const r=Math.random();if(r<.35){e.state='windup';e.stateTime=1.2;e.slamX=this.player.x;e.slamY=this.player.y;this.hazards.push({type:'line',x:e.x,y:e.y,tx:e.slamX,ty:e.slamY,t:1.2,max:1.2,boss:e,visualOnly:true})}else if(r<.7){for(let i=0;i<(e.final?7:4);i++){const a=i*TAU/(e.final?7:4)+this.time;let hx=this.player.x+Math.cos(a)*(i===0?0:70),hy=this.player.y+Math.sin(a)*(i===0?0:70);this.hazards.push({type:'blast',x:hx,y:hy,r:e.final?36:29,t:1.25+i*.1,max:1.25+i*.1,damage:e.damage})}e.attack=e.final?3.2:4.2}else{const count=e.final?10:8,gap=Math.floor(Math.random()*count);for(let i=0;i<count;i++){if(i===gap||i===(gap+1)%count)continue;const a=i*TAU/count;this.projectiles.push({x:e.x,y:e.y-12,vx:Math.cos(a)*64,vy:Math.sin(a)*64,r:4,damage:e.damage*.65,enemy:true,type:'enemy',t:3.2,hit:new Set()})}this.effects.push({type:'pulse',x:e.x,y:e.y-12,r:45,t:.8,max:.8,color:'#d3a0b5'});e.attack=e.final?5.5:6.5}}
    if(e.hp/e.maxHp<.5&&!e.enraged){e.enraged=true;e.speed*=1.28;this.banner('愤怒在黑暗中苏醒','THE GUARDIAN IS ENRAGED',2.5)}
-  }else if(e.kind==='ghost'&&d<205&&d>60){speed*=.4;if(e.attack<=0){const count=this.time>=420?3:1;for(let i=0;i<count;i++){const a=Math.atan2(dy,dx)+(i-(count-1)/2)*.2;this.projectiles.push({x:e.x,y:e.y-12,vx:Math.cos(a)*72,vy:Math.sin(a)*72,r:4,damage:e.damage*.8,enemy:true,type:'enemy',t:4.5,hit:new Set()})}e.attack=4.5+Math.random()}}
+  }else if(e.kind==='ghost'&&d<205&&d>60){speed*=.4;if(e.attack<=0){
+   // ponytail: scan on firing attempts to cap ghost crossfire at six; cache the count if larger projectile pools make scans costly.
+   if(this.projectiles.filter(b=>b.enemy&&b.t>0).length<6){const a=Math.atan2(dy,dx);this.projectiles.push({x:e.x,y:e.y-12,vx:Math.cos(a)*72,vy:Math.sin(a)*72,r:4,damage:e.damage*.8,enemy:true,type:'enemy',t:3.2,hit:new Set()})}
+   e.attack=6.5+Math.random()*2;
+  }}
   else if(e.kind==='reaper'&&this.time>=300){
    if(e.lungeTime>0){e.lungeTime-=dt;e.x+=e.lungeX*145*dt;e.y+=e.lungeY*145*dt;speed=0}
    else if(e.lungeWindup>0){e.lungeWindup-=dt;speed=0;if(e.lungeWindup<=0)e.lungeTime=.4}
@@ -161,12 +169,12 @@ export class Game{
  }
  closest(x=this.player.x,y=this.player.y,range=420,exclude=null){let best=null,ds=range*range;for(const e of this.enemies){if(e.dead||(exclude&&exclude.has(e.id)))continue;const d=(e.x-x)**2+(e.y-y)**2;if(d<ds){ds=d;best=e}}return best}
  updateWeapons(dt){
-  const p=this.player;this.orbitAngle+=dt*2.2;
+  const p=this.player;this.orbitAngle+=dt*(this.weapons.orbit?3:2.2);
   for(const [kind,lvl] of Object.entries(this.weapons)){
    const values=weaponStats(kind,lvl,this.stats,this.character);
    if(updateExpandedWeapon(this,kind,values,dt))continue;
    if(WEAPONS[kind].fusion){updateFusion(this,kind,values,dt);continue}
-   if(kind==='orbit'){let count=values.count;for(let i=0;i<count;i++){let a=this.orbitAngle*(lvl===6&&i%2?-1:1)+i*TAU/count,r=values.radius+(i%2?values.outerOffset:0);const x=p.x+Math.cos(a)*r,y=p.y-8+Math.sin(a)*r;for(const e of this.grid.near(x,y,24))if(distance({x,y},{x:e.x,y:e.y-8})<e.r+12&&e.orbitHit<=0){e.orbitHit=values.hitInterval;this.hit(e,values.damage,x,y,75,true,kind);this.burst(x,y,3,'#bee6cf',30)}}continue}
+   if(kind==='orbit'){let count=values.count;for(let i=0;i<count;i++){let a=this.orbitAngle*(lvl===6&&i%2?-1:1)+i*TAU/count,r=values.radius+(i%2?values.outerOffset:0);const x=p.x+Math.cos(a)*r,y=p.y-8+Math.sin(a)*r;for(const e of this.grid.near(x,y,values.contactRadius+32))if(distance({x,y},{x:e.x,y:e.y-8})<e.r+values.contactRadius&&e.orbitHit<=0){e.orbitHit=values.hitInterval;this.hit(e,values.damage,x,y,75,true,kind);this.burst(x,y,3,'#bee6cf',30)}}continue}
    this.timers[kind]=(this.timers[kind]||0)-dt;if(this.timers[kind]>0)continue;
    const target=this.closest(p.x,p.y,kind==='blade'?values.radius+10:420);if(!target){this.timers[kind]=.08;continue}let a=Math.atan2(target.y-p.y,target.x-p.x);
    this.timers[kind]=values.cooldown;const projectileStart=this.projectiles.length;
@@ -269,15 +277,18 @@ export class Game{
   if(this.drops.length>500){const buckets=new Map(),kept=[];for(const d of this.drops){if(d.type!=='xp'||d.attracted||distance(d,p)<120){kept.push(d);continue}const key=Math.floor(d.x/70)+','+Math.floor(d.y/70);const existing=buckets.get(key);if(existing)existing.value+=d.value;else{buckets.set(key,d);kept.push(d)}}this.drops=kept}
  }
  openChest(value){
-  this.gold+=value;const boss=value>=60,rewards=[];if(boss)this.player.hp=Math.min(this.player.maxHp,this.player.hp+10);
+  this.gold+=value;const boss=value>=60,rewards=[],hp=this.player.hp;if(boss)this.player.hp=Math.min(this.player.maxHp,this.player.hp+10);
   for(let i=0;i<(boss?2:1);i++){
    const item=weightedPick(upgradePool(this).filter(item=>item.current>0));
-   if(item){(item.weapon?this.weapons:this.passives)[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12;rewards.push(item.name+' Lv.'+item.next)}
-   else{this.gainXp(24);rewards.push('经验 +24')}
+   if(item){(item.weapon?this.weapons:this.passives)[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12;rewards.push(item.name+' · LV.'+item.current+' → LV.'+item.next)}
+   else rewards.push('经验 +'+this.gainXp(24).toLocaleString('zh-CN',{maximumFractionDigits:2})+'（无可强化装备）');
   }
   this.stats=characterStats(this.character,this.passives,this.meta,this.talents);this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
-  this.toast((boss?'首领遗产 · ':'古老宝箱 · ')+rewards.join(' / ')+' · 余烬 +'+value);this.on('weapons');this.checkFusionReadiness();
+  if(this.player.hp>hp)rewards.push('生命 +'+(this.player.hp-hp).toLocaleString('zh-CN',{maximumFractionDigits:2}));
+  rewards.push('余烬 +'+value);
+  this.toast((boss?'首领遗产 · ':'古老宝箱 · ')+rewards.join(' / '));this.on('weapons');this.checkFusionReadiness();
   this.sound.play('chest');this.burst(this.player.x,this.player.y-10,40,'#e5c086',100);
+  return rewards;
  }
  checkFusionReadiness(){
   for(const key of Object.keys(FUSIONS))if(fusionState(key,this.weapons,this.passives,this).ready&&!this.notifiedFusions.has(key)){
@@ -310,7 +321,7 @@ export class Game{
   this.toast('成品 LV. '+ready.level+' · '+(consumed.size===2?'释放一个武器位':'融合道具已消耗')+(first?(this.discoveryPersisted?' · 图谱已永久解锁':' · 图谱已解锁，浏览器暂未保存'):''),5);
   this.sound.play('fusion');return true;
  }
- gainXp(amount){if(!Number.isFinite(amount)||amount<=0)return;const points=talentPoints(this);this.xp+=amount*this.xpMultiplier;while(this.xp>=this.xpNext){this.xp-=this.xpNext;this.level++;this.pendingLevels++;this.xpNext=xpForLevel(this.level)}if(talentPoints(this)>points)this.on('talentPoints')}
+ gainXp(amount){if(!Number.isFinite(amount)||amount<=0)return 0;const points=talentPoints(this),gained=amount*this.xpMultiplier;this.xp+=gained;while(this.xp>=this.xpNext){this.xp-=this.xpNext;this.level++;this.pendingLevels++;this.xpNext=xpForLevel(this.level)}if(talentPoints(this)>points)this.on('talentPoints');return gained}
  rollUpgrades(){
   return rollUpgradeChoices(this);
  }
@@ -396,7 +407,7 @@ export class Game{
  drawZones(g,ox,oy,t){for(const z of this.zones){if(drawExpandedZone(g,z,ox,oy,t))continue;if(z.kind){drawFusionZone(g,z,ox,oy,t);continue}const x=z.x+ox,y=z.y+oy;g.globalAlpha=Math.min(1,z.t)*.5;g.fillStyle='#b1703540';g.beginPath();g.ellipse(x,y,z.r,z.r*.8,0,0,TAU);g.fill();g.strokeStyle='#d8a35a55';g.stroke();g.globalAlpha=Math.min(1,z.t);for(let i=0;i<10;i++){let a=hash(i,z.seed)*TAU,r=hash(i+20,z.seed)*z.r,xx=x+Math.cos(a)*r,yy=y+Math.sin(a)*r,hh=3+(Math.sin(t*8+i)+1)*4;g.fillStyle=i%2?'#ce8c48':'#e3b361';g.fillRect(Math.round(xx),Math.round(yy-hh),2,hh);g.fillStyle='#eac88a';g.fillRect(Math.round(xx),Math.round(yy-3),1,3)}g.globalAlpha=1}}
  drawHazards(g,ox,oy,t){for(const z of this.hazards){let x=z.x+ox,y=z.y+oy;g.save();g.strokeStyle='#db9a7a';g.lineWidth=1;if(z.type==='line'){g.globalAlpha=.5;g.setLineDash([4,3]);g.beginPath();g.moveTo(x,y);let a=Math.atan2(z.ty-z.y,z.tx-z.x);g.lineTo(x+Math.cos(a)*150,y+Math.sin(a)*150);g.stroke()}else{g.fillStyle=`rgba(175,83,66,${.08+(1-z.t/z.max)*.2})`;g.beginPath();g.arc(x,y,z.r,0,TAU);g.fill();g.globalAlpha=.5+Math.sin(t*20)*.25;g.stroke();g.strokeStyle='#f3c597';g.beginPath();g.arc(x,y,z.r*(1-z.t/z.max),0,TAU);g.stroke();g.fillRect(x-2,y-2,4,4)}g.restore()}}
  drawDrops(g,ox,oy,t){for(const d of this.drops){const x=Math.round(d.x+ox),y=Math.round(d.y+oy);if(x<-20||x>this.w+20||y<-20||y>this.h+20)continue;const bob=Math.round(Math.sin(t*3+d.x)*1.5);shadow(g,x,y,4,.2);if(d.type==='xp'){const big=d.value>=12;diamond(g,x,y-4+bob,big?5:3,big?'#e2cd89':d.value>=5?'#8fcabb':'#8cb16f');g.fillStyle=big?'#fae7b7':'#d2dfa2';g.fillRect(x-1,y-6+bob,1,2);if(big)glow(g,x,y,16,'#dec38712')}if(d.type==='heal'){g.fillStyle='#617d51';g.fillRect(x-2,y-9+bob,4,3);g.fillStyle='#b5c789';g.fillRect(x-4,y-6+bob,8,7);g.fillStyle='#e0e3b1';g.fillRect(x-2,y-5+bob,2,4)}if(d.type==='magnet'){diamond(g,x,y-7+bob,6,'#8bbccc');diamond(g,x,y-7+bob,3,'#daeee0');glow(g,x,y-7,22,'#8dc7d922')}if(['hourglass','nova','ward'].includes(d.type)){const color={hourglass:'#b4dbe7',nova:'#e8ae70',ward:'#c4dda8'}[d.type];glow(g,x,y-7,22,color+'33');diamond(g,x,y-7+bob,7,color);g.fillStyle='#eff2d2';if(d.type==='hourglass'){g.fillRect(x-4,y-12+bob,8,2);g.fillRect(x-4,y-4+bob,8,2)}else if(d.type==='nova'){g.fillRect(x-1,y-16+bob,2,17);g.fillRect(x-8,y-8+bob,17,2)}else diamond(g,x,y-8+bob,3,'#4f715c')}if(d.type==='chest'){glow(g,x,y-8,33,'#d7ac5d24');drawSprite(g,'chest',x,y+bob);for(let i=0;i<3;i++){g.fillStyle='#dec988';g.fillRect(x-12+i*11,y-12-Math.round((t*12+i*7)%19),1,2)}}}}
- drawWeapons(g,ox,oy,t){drawCharacterTalents(this,g,ox,oy);drawFusionWeapons(this,g,ox,oy);const p=this.player,lvl=this.weapons.orbit;if(p.shield>0){g.strokeStyle='#bfe4cc88';g.lineWidth=1;g.beginPath();g.arc(p.x+ox,p.y+oy-9,17,0,TAU);g.stroke()}if(!lvl)return;const v=weaponStats('orbit',lvl,this.stats,this.character),count=v.count;for(let i=0;i<count;i++){const dir=lvl===6&&i%2?-1:1,a=this.orbitAngle*dir+i*TAU/count,r=v.radius+(i%2?v.outerOffset:0),x=p.x+ox+Math.cos(a)*r,y=p.y+oy-8+Math.sin(a)*r;for(let j=4;j>0;j--){let aa=a-j*.09*dir;g.globalAlpha=.12+(4-j)*.09;g.fillStyle='#a6d7be';g.fillRect(Math.round(p.x+ox+Math.cos(aa)*r)-2,Math.round(p.y+oy-8+Math.sin(aa)*r)-2,4,4)}g.globalAlpha=1;glow(g,x,y,18,'#b5e7c323');diamond(g,Math.round(x),Math.round(y),lvl===6?7:5,'#78bcae');diamond(g,Math.round(x),Math.round(y)-1,3,'#d9edc6');g.fillStyle='#eff3d8';g.fillRect(Math.round(x)-1,Math.round(y)-2,2,3)}}
+ drawWeapons(g,ox,oy,t){drawCharacterTalents(this,g,ox,oy);drawFusionWeapons(this,g,ox,oy);const p=this.player,lvl=this.weapons.orbit;if(p.shield>0){g.strokeStyle='#bfe4cc88';g.lineWidth=1;g.beginPath();g.arc(p.x+ox,p.y+oy-9,17,0,TAU);g.stroke()}if(!lvl)return;const v=weaponStats('orbit',lvl,this.stats,this.character),count=v.count;for(let i=0;i<count;i++){const dir=lvl===6&&i%2?-1:1,a=this.orbitAngle*dir+i*TAU/count,r=v.radius+(i%2?v.outerOffset:0),x=p.x+ox+Math.cos(a)*r,y=p.y+oy-8+Math.sin(a)*r;for(let j=4;j>0;j--){let aa=a-j*.09*dir;g.globalAlpha=.12+(4-j)*.09;g.fillStyle='#a6d7be';g.fillRect(Math.round(p.x+ox+Math.cos(aa)*r)-2,Math.round(p.y+oy-8+Math.sin(aa)*r)-2,4,4)}g.globalAlpha=1;glow(g,x,y,v.contactRadius,'#b5e7c323');diamond(g,Math.round(x),Math.round(y),lvl===6?7:5,'#78bcae');diamond(g,Math.round(x),Math.round(y)-1,3,'#d9edc6');g.fillStyle='#eff3d8';g.fillRect(Math.round(x)-1,Math.round(y)-2,2,3)}}
  drawProjectiles(g,ox,oy,t){for(const b of this.projectiles){let x=Math.round(b.x+ox),y=Math.round(b.y+oy);if(b.trail){for(let i=0;i<b.trail.length;i++){g.globalAlpha=i/b.trail.length*.45;g.fillStyle=b.type==='flame'?'#d29a55':b.fusionKind?'#c7b4ec':b.homing?'#d8c9a0':'#9fac80';g.fillRect(Math.round(b.trail[i].x+ox)-1,Math.round(b.trail[i].y+oy)-1,b.type==='flame'?4:2,b.type==='flame'?4:2)}g.globalAlpha=1}
   if(drawExpandedProjectile(g,b,ox,oy,t))continue;
   if(b.type==='bolt'){const a=Math.atan2(b.vy,b.vx);g.strokeStyle=b.fusionKind?'#d8c9ff':b.homing?'#efdfa5':'#e0d9ab';g.lineWidth=2;g.beginPath();g.moveTo(x-Math.cos(a)*9,y-Math.sin(a)*9);g.lineTo(x+Math.cos(a)*4,y+Math.sin(a)*4);g.stroke();diamond(g,x+Math.cos(a)*4,y+Math.sin(a)*4,2,'#eae1b3')}

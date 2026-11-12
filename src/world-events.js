@@ -10,7 +10,7 @@ const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 export function resetWorldEvents(game){
   const kinds=Object.keys(EVENT_TYPES);
   game.shrines=Array.from({length:8},(_,i)=>{const a=i*2.39996,r=330+Math.floor(i/2)*290,kind=kinds[i%kinds.length];return {kind,x:Math.cos(a)*r,y:Math.sin(a)*r,state:'idle',used:false,progress:0,goal:kind==='vigil'?12:kind==='hunt'?1:6}});
-  game.activeEvent=null;game.eventsCompleted=0;game.eventsFailed=0;
+  game.activeEvent=null;game.eventReward=null;game.eventsCompleted=0;game.eventsFailed=0;
 }
 
 export function nearestWorldEvent(game){
@@ -21,8 +21,8 @@ export function nearestWorldEvent(game){
   return nearest;
 }
 
-function unavailable(game,s,preview=false){
-  if((game.state!=='running'&&!(preview&&game.state==='paused'&&game.pauseReturn==='running'))||!game.player||game.player.hp<=0)return '仅可在战斗中开启';
+function unavailable(game,s){
+  if(game.state!=='running'||!game.player||game.player.hp<=0)return '仅可在战斗中开启';
   if(game.activeEvent)return '先完成当前事件';
   if(!s||s.state!=='idle')return '附近没有可用祭坛';
   if(game.time<45)return '开局 45 秒后开放';
@@ -40,12 +40,14 @@ export function startWorldEvent(game){
     s.guardian=game.spawnEnemy('knight',true,145);s.guardian.eventGuardian=true;
   }
   if(s.kind==='souls')s.motes=Array.from({length:6},(_,i)=>{const a=i*TAU/6,r=110+(i%2)*50;return {x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r,collected:false}});
-  const type=EVENT_TYPES[s.kind];game.banner(type.name+' · 已开启','45 秒内完成 · 敌群将增援',3);game.toast(type.hint+'。奖励：'+type.reward,5);game.on('hud');
+  game.toast(EVENT_TYPES[s.kind].name+' · 已接受',2);game.on('hud');
   return true;
 }
 
 export function updateWorldEvents(game,dt){
-  const s=game.activeEvent;if(!s||game.state!=='running'||game.player.hp<=0)return;
+  if(game.state!=='running'||game.player.hp<=0)return;
+  if(game.eventReward&&game.time>=game.eventReward.expiresAt)game.eventReward=null;
+  const s=game.activeEvent;if(!s)return;
   const boss=game.enemies.some(e=>e.boss&&!e.dead);
   if(boss||game.time>=s.endsAt){
     s.state='failed';s.used=true;game.activeEvent=null;game.eventsFailed++;
@@ -56,10 +58,18 @@ export function updateWorldEvents(game,dt){
   if(s.kind==='souls')for(const mote of s.motes)if(!mote.collected&&distance(game.player,mote)<=16){mote.collected=true;s.progress++;game.burst(mote.x,mote.y-8,7,EVENT_TYPES.souls.color,35);game.sound.play('xp')}
   if(s.progress>=s.goal){
     s.state='complete';s.used=true;game.activeEvent=null;game.eventsCompleted++;
-    if(s.kind==='vigil'){game.player.shield=Math.max(game.player.shield,12);game.gold+=20}
-    if(s.kind==='hunt')game.openChest(25);
-    if(s.kind==='souls'){game.gainXp(30);game.rerolls=Math.min(5,game.rerolls+1)}
-    const type=EVENT_TYPES[s.kind];game.effects.push({type:'pulse',x:s.x,y:s.y-8,r:85,color:type.color,t:.8,max:.8});game.sound.play('chest');game.toast(type.name+'完成 · '+type.reward,4);game.on('hud');return;
+    let rewards;
+    if(s.kind==='vigil'){
+      const before=game.player.shield;game.player.shield=Math.max(before,12);game.gold+=20;
+      rewards=[before<12?'护盾 +'+(12-before).toLocaleString('zh-CN',{maximumFractionDigits:2})+' · 已补至 12':'护盾保持 '+before.toLocaleString('zh-CN',{maximumFractionDigits:2})+'（未增加）','余烬 +20'];
+    }
+    if(s.kind==='hunt')rewards=game.openChest(25);
+    if(s.kind==='souls'){
+      const xp=game.gainXp(30),before=game.rerolls;game.rerolls=Math.min(5,before+1);
+      rewards=['经验 +'+xp.toLocaleString('zh-CN',{maximumFractionDigits:2}),before<5?'重铸 +1 · '+before+' → '+game.rerolls:'重铸已满（5 / 5），未增加'];
+    }
+    const type=EVENT_TYPES[s.kind];game.eventReward={name:type.name,rewards,expiresAt:game.time+4};
+    game.effects.push({type:'pulse',x:s.x,y:s.y-8,r:85,color:type.color,t:.8,max:.8});game.sound.play('chest');game.on('eventReward',game.eventReward);game.on('hud');return;
   }
   if(game.time>=s.nextWave){
     s.nextWave=game.time+5;
@@ -70,7 +80,7 @@ export function updateWorldEvents(game,dt){
 export function worldEventStatus(game){
   const s=nearestWorldEvent(game),empty={visible:false,name:'战场事件',detail:'',reward:'',progress:0,max:1,canStart:false,active:false};
   if(!s||!game.player||game.time>=540&&!game.activeEvent)return empty;
-  const type=EVENT_TYPES[s.kind],active=s===game.activeEvent,d=Math.round(distance(game.player,s)),blocked=unavailable(game,s,true);
+  const type=EVENT_TYPES[s.kind],active=s===game.activeEvent,d=Math.round(distance(game.player,s)),blocked=unavailable(game,s);
   const detail=active?(s.kind==='vigil'?(distance(game.player,s)<=80?'守护中':'返回灯圈继续守护')+' · '+s.progress.toFixed(1)+'/12 秒':s.kind==='hunt'?'击败精英守卫':'已回收 '+s.progress+'/6 魂光')+' · 剩余 '+Math.min(45,Math.max(0,Math.ceil(s.endsAt-game.time)))+' 秒':d>45?'距离 '+d+' · '+blocked:blocked||type.hint+' · 限时 45 秒';
   return {visible:true,name:type.name,detail,reward:type.reward,progress:s.progress,max:s.goal,canStart:!blocked,active};
 }
