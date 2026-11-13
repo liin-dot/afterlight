@@ -1,14 +1,14 @@
 import {TAU,palette,hash,lerp,clamp,canvas,Landscape,drawSprite,sprite,glow,fire,shadow,diamond,pixelText} from './art.js';
 import {CHARACTERS,WEAPONS,ENEMIES,startingLoadout} from './data.js';
-import {characterStats,weaponStats} from './stats.js';
-import {FUSIONS,fusionState} from './fusions.js';
+import {characterStats,weaponStats,refinementValue} from './stats.js';
+import {FUSIONS,fusionState,maxWeaponLevel} from './fusions.js';
 import {updateFusion,chainArrow,updateFusionZone,drawFusionZone,drawFusionWeapons} from './fusion-combat.js';
 import {updateExpandedWeapon,updateExpandedProjectile,updateExpandedZone,drawExpandedProjectile,drawExpandedZone,drawExpandedEffect} from './expanded-combat.js';
 import {onWeaponHit,onEnemyKilled,onWeaponCast,onPlayerHurt,onPlayerDash,onXpPickup,updateRelicStates,readyProc} from './relic-combat.js';
 import {RUN_DURATION,pressureAt,xpForLevel,weightedPick,upgradePool,rollUpgradeChoices,recordUpgradeChoice} from './balance.js';
 import {talentPoints,talentNodeState,resetCharacterTalents,updateCharacterTalents,onCharacterLearn,onCharacterHit,onCharacterProjectileHit,characterHitMultiplier,onCharacterDash,onCharacterHurt,drawCharacterTalents} from './talents.js';
-import {EVENT_TYPES,resetWorldEvents,startWorldEvent,updateWorldEvents,drawWorldEvents,nearestWorldEvent} from './world-events.js';
-import {ALTAR_BOONS,relicValues} from './content.js';
+import {EVENT_TYPES,ALTAR_REWARDS,resetWorldEvents,startWorldEvent,updateWorldEvents,drawWorldEvents,nearestWorldEvent,worldEventTarget} from './world-events.js';
+import {ALTAR_BOONS,relicValues,refinementGain} from './content.js';
 
 export {RUN_DURATION};
 
@@ -58,19 +58,19 @@ export class Game{
   if(e.code==='KeyE'&&this.state==='running'){e.preventDefault();this.interact()}
   if(e.code==='Escape'||e.code==='KeyP'){if(['running','level','reward'].includes(this.state))this.pause();else if(this.state==='paused')this.resume();else if(this.state==='menu')this.on('closeMenuModal')}
   if(e.code==='KeyM')this.on('sound');if(e.code==='KeyF')this.on('fullscreen');
-  if(this.state==='level'&&['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(e.code))this.on('choose',Number(e.code.slice(-1))-1);
+  if(this.state==='level'&&['Digit1','Digit2','Digit3','Digit4','Numpad1','Numpad2','Numpad3','Numpad4'].includes(e.code))this.on('choose',Number(e.code.slice(-1))-1);
   if(this.state==='reward'&&['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(e.code))this.chooseAltarReward(Number(e.code.slice(-1))-1);
   if(e.code==='Enter'&&this.state==='menu'&&!document.querySelector('.modal-wrap:not(.hidden)')&&!e.target.closest('button,a')){e.preventDefault();this.on('start')}
  }
  start(character,meta={},preparation={}){
-  this.keys.clear();this.stick={x:0,y:0};this.pauseReturn=null;
+  this.keys.clear();this.stick={x:0,y:0};this.pauseReturn=null;this.pendingTalentChoice=false;
   this.character=character;this.state='running';this.time=0;this.kills=0;this.gold=0;this.level=1;this.xp=0;this.xpNext=10;this.rerolls=3;this.pendingLevels=0;this.uid=0;this.meta={...meta};this.ended=false;this.enemies=[];this.projectiles=[];this.drops=[];this.effects=[];this.particles=[];this.texts=[];this.zones=[];this.hazards=[];this.afterimages=[];this.spawnClock=.4;this.waveClock=28;this.waveCount=0;this.bossMilestones=new Set();this.finalSpawned=false;this.finalDefeated=false;this.shake=0;this.hitstop=0;this.flash=0;this.orbitAngle=0;this.timers={};this.choices=[];this.camera={x:0,y:37};this.bannerUntil=0;this.toastUntil=0;
   this.fusions={};this.consumedWeapons=new Set();this.consumedPassives=new Set();this.notifiedFusions=new Set();this.trackedFusion=this.discoveredFusions?.has(this.plannedFusion)?this.plannedFusion:null;
   const loadout=startingLoadout(character,preparation);this.weapons=loadout.weapons;this.passives=loadout.passives;
   this.relicTimers={};this.relicProcs={};this.echoCasts=0;
   this.choiceHistory=[];this.stormCharge=0;
   this.xpNext=xpForLevel(1);this.waveClock=42;this.banished=new Set();this.banishes=3;this.lastHealDrop=-20;this.lastUtilityDrop=-30;this.lastHurt=-8;this.harvestCharge=0;this.damageByWeapon={};this.damageTaken=0;this.lastPhase=0;this.pressure=pressureAt(0);
-  this.boons=[];this.weaponEmpowerments={};this.metaBuffs={};this.growth={};this.stats=characterStats(character,this.passives,this.meta,{},this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
+  this.boons=[];this.weaponEmpowerments={};this.weaponUpgrades={};this.metaBuffs={};this.growth={};this.stats=characterStats(character,this.passives,this.meta,{},this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
   const maxHp=this.stats.maxHp;this.player={x:0,y:37,hp:maxHp,maxHp,r:7,flip:false,walk:0,moving:false,invincible:1,dashTime:0,dashCooldown:0,dashX:0,dashY:1,lastX:0,lastY:1,trailClock:0};
   this.player.shield=0;
   resetCharacterTalents(this);
@@ -108,9 +108,9 @@ export class Game{
   if(p.dashTime>0){p.dashTime-=dt;p.x+=p.dashX*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.y+=p.dashY*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.trailClock-=dt;if(p.trailClock<=0){p.trailClock=.028;this.afterimages.push({x:p.x,y:p.y,flip:p.flip,t:.27,max:.27})}}else{p.x+=dx*this.moveSpeed*dt;p.y+=dy*this.moveSpeed*dt}
   p.hp=Math.min(p.maxHp,p.hp+(this.stats.regeneration+(this.time-this.lastHurt>=4?this.stats.recovery:0))*dt);
   this.camera.x=lerp(this.camera.x,p.x,1-Math.exp(-dt*7));this.camera.y=lerp(this.camera.y,p.y-8,1-Math.exp(-dt*7));
-  this.pressure=pressureAt(this.time,this.stats.curse);
+  this.pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty);
   if(this.pressure.index!==this.lastPhase){this.lastPhase=this.pressure.index;if(![3,6,10].includes(this.lastPhase))this.banner(this.pressure.name,this.pressure.hint,3);this.checkFusionReadiness()}
-  this.spawnClock-=dt;if(this.spawnClock<=0){for(let i=0;i<this.pressure.count&&this.enemies.length<this.pressure.cap;i++)this.spawnEnemy(this.chooseEnemy());this.spawnClock=this.pressure.interval}
+  this.spawnClock-=dt;if(this.spawnClock<=0){for(let i=0;i<this.pressure.count&&this.enemies.length<this.pressure.cap;i++)this.spawnEnemy(this.chooseEnemy(),Math.random()<this.pressure.eliteChance);this.spawnClock+=this.pressure.interval}
   this.waveClock-=dt;if(this.waveClock<=0&&this.time<RUN_DURATION){this.spawnWave();this.waveClock=48}
   for(const milestone of [180,360,RUN_DURATION])if(this.time>=milestone&&!this.bossMilestones.has(milestone)){this.bossMilestones.add(milestone);this.spawnBoss(milestone)}
   for(const e of this.enemies)this.updateEnemy(e,dt);
@@ -123,24 +123,28 @@ export class Game{
   this.enemies=this.enemies.filter(e=>!e.dead);
   if(this.bannerUntil&&this.time>this.bannerUntil){this.bannerUntil=0;this.on('bannerHide')}if(this.toastUntil&&this.time>this.toastUntil){this.toastUntil=0;this.on('toastHide')}
   if(p.hp<=0){this.end(false);return}if(this.finalDefeated){this.end(true);return}
-  if(this.pendingLevels>0&&this.state==='running'){this.pendingLevels--;this.state='level';this.keys.clear();this.choices=this.rollUpgrades();this.sound.play('level');this.on('level')}
+  this.presentLevelChoices();
   if(this.lastHud>.10){this.lastHud=0;this.on('hud')}
  }
  chooseEnemy(){return weightedPick(Object.entries(this.pressure.roster),item=>item[1])[0]}
  spawnEnemy(kind,elite=false,radius=0){
   const a=Math.random()*TAU;const edge=radius||(Math.max(this.w,this.h)*.56+35+Math.random()*70);let x=this.player.x+Math.cos(a)*edge,y=this.player.y+Math.sin(a)*edge;
-  const data=ENEMIES[kind],pressure=pressureAt(this.time,this.stats.curse),growth=pressure.hp;const e={id:++this.uid,kind,x,y,hp:data.hp*growth,maxHp:data.hp*growth,speed:data.speed*pressure.speed,damage:data.damage*pressure.damage,xp:data.xp,r:data.r,score:data.score,flip:false,walk:0,flash:0,slow:0,freeze:0,knockX:0,knockY:0,attack:1+Math.random()*3,orbitHit:0,dead:false,elite,boss:false,scale:elite?1.4:1,phase:Math.random()*TAU};
+  const data=ENEMIES[kind],pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty),growth=pressure.hp;const e={id:++this.uid,kind,x,y,hp:data.hp*growth,maxHp:data.hp*growth,speed:data.speed*pressure.speed,damage:data.damage*pressure.damage,xp:data.xp,r:data.r,score:data.score,flip:false,walk:0,flash:0,slow:0,freeze:0,knockX:0,knockY:0,attack:1+Math.random()*3,orbitHit:0,dead:false,elite,boss:false,scale:elite?1.4:1,phase:Math.random()*TAU};
   if(elite){e.hp*=7;e.maxHp=e.hp;e.speed*=.85;e.xp*=8;e.r*=1.4;e.damage*=1.3;e.score*=8}this.enemies.push(e);return e;
  }
  spawnWave(){
   this.waveCount++;
-  const type=this.time<180?'bat':Math.random()<.5?'bat':'reaper';const total=Math.min(38,12+Math.floor(this.time/23));const angle=Math.random()*TAU,px=this.player.x,py=this.player.y,r=Math.max(this.w,this.h)*.6;
-  for(let i=0;i<total&&this.enemies.length<this.pressure.cap-1;i++){const e=this.spawnEnemy(type);e.x=px+Math.cos(angle)*r+Math.cos(angle+Math.PI/2)*(i-total/2)*17;e.y=py+Math.sin(angle)*r+Math.sin(angle+Math.PI/2)*(i-total/2)*17;e.speed*=1.08}
-  if(this.waveCount%3===0&&this.enemies.length<this.pressure.cap){this.spawnEnemy('knight',true);this.banner('提灯精英 · 追猎开始','击败精英夺取一次装备强化',2.7)}else this.banner('鸦群掠过长夜','寻找缺口，避开怪潮正面',2.7);
+  const type=this.time<180?'bat':Math.random()<.5?'bat':'reaper';const total=Math.round(Math.min(38,12+Math.floor(this.time/23))*this.stats.difficulty.population);const angle=Math.random()*TAU,px=this.player.x,py=this.player.y,r=Math.max(this.w,this.h)*.6;
+  for(let i=0;i<total&&this.enemies.length<this.pressure.cap-1;i++){const e=this.spawnEnemy(type,Math.random()<this.pressure.eliteChance);e.x=px+Math.cos(angle)*r+Math.cos(angle+Math.PI/2)*(i-total/2)*17;e.y=py+Math.sin(angle)*r+Math.sin(angle+Math.PI/2)*(i-total/2)*17;e.speed*=1.08}
+  if(this.waveCount%3===0&&this.enemies.length<this.pressure.cap){this.spawnEnemy('knight',true);this.banner('提灯精英 · 追猎开始','击败精英回收八倍经验结晶',2.7)}else this.banner('鸦群掠过长夜','寻找缺口，避开怪潮正面',2.7);
  }
  spawnBoss(milestone){
-  const final=milestone===RUN_DURATION;const e=this.spawnEnemy(final?'reaper':'knight');const a=Math.random()*TAU;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=final?'蚀月君王':milestone===360?'无名葬钟':'墓园看守';e.hp=(final?26000:milestone===360?10500:3200)*(1+(this.stats.curse||0)*.12);e.maxHp=e.hp;e.speed=final?42:28;e.damage=final?44:milestone===360?34:26;e.xp=final?180:90;e.r=final?23:19;e.scale=final?2.7:2.25;e.score=100;e.attack=3;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
-  if(final)this.finalSpawned=true;this.sound.play('boss');this.shake=5;this.banner(e.name+' · 降临',final?'THE ECLIPSE SOVEREIGN':'GUARDIAN OF THE GRAVE',4);this.effects.push({type:'pulse',x:e.x,y:e.y,r:100,t:1,max:1,color:'#d69a77'});this.burst(e.x,e.y-30,40,'#a78eaa',80);this.on('hud');
+  const final=milestone===RUN_DURATION,difficulty=this.stats.difficulty,count=1+difficulty.bosses,angle=Math.random()*TAU;
+  for(let i=0;i<count;i++){
+   const e=this.spawnEnemy(final?'reaper':'knight'),a=angle+i*TAU/count;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=final?'蚀月君王':milestone===360?'无名葬钟':'墓园看守';e.hp=(final?42000:milestone===360?16500:4800)*(1+(this.stats.curse||0)*.12)*difficulty.hp;e.maxHp=e.hp;e.speed=(final?45:30)*difficulty.speed;e.damage=(final?52:milestone===360?40:30)*difficulty.damage;e.xp=final?180:90;e.r=final?23:19;e.scale=final?2.7:2.25;e.score=100;e.attack=3+i*.7;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
+   e.bossWave=milestone;this.effects.push({type:'pulse',x:e.x,y:e.y,r:100,t:1,max:1,color:'#d69a77'});this.burst(e.x,e.y-30,40,'#a78eaa',80);
+  }
+  if(final)this.finalSpawned=true;this.sound.play('boss');this.shake=5;this.banner((final?'蚀月君王':milestone===360?'无名葬钟':'墓园看守')+' · '+count+' 位降临',final?'THE ECLIPSE SOVEREIGN':'GUARDIAN OF THE GRAVE',4);this.on('hud');
  }
  updateEnemy(e,dt){
   if(e.dead)return;e.flash=Math.max(0,e.flash-dt);e.slow=Math.max(0,e.slow-dt);e.freeze=Math.max(0,e.freeze-dt);e.orbitHit=Math.max(0,e.orbitHit-dt);let dx=this.player.x-e.x,dy=this.player.y-e.y,d=Math.hypot(dx,dy)||1;
@@ -213,7 +217,7 @@ export class Game{
    }
   }this.projectiles=this.projectiles.filter(b=>b.t>0);
  }
- addFire(b,trail=false){const values=weaponStats('flame',b.lvl,this.stats,this.character),r=trail?20*this.stats.areaMultiplier:values.radius,duration=trail?1.4*this.stats.durationMultiplier:values.duration;this.zones.push({x:b.x,y:b.y,r,t:duration,max:duration,tick:0,hitInterval:values.hitInterval,damage:values.burnDamage,seed:Math.random()*100});if(!trail){this.effects.push({type:'pulse',x:b.x,y:b.y,r:r*1.1,t:.3,max:.3,color:'#e6ad6a'});this.burst(b.x,b.y,14,'#dc9b55',65)}}
+ addFire(b,trail=false){const values=weaponStats('flame',b.lvl,this.stats,this.character),upgrades=this.weaponUpgrades.flame||{},r=trail?20*this.stats.areaMultiplier*(1+(upgrades.area||0)):values.radius,duration=trail?1.4*this.stats.durationMultiplier*(1+(upgrades.duration||0)):values.duration;this.zones.push({x:b.x,y:b.y,r,t:duration,max:duration,tick:0,hitInterval:values.hitInterval,damage:values.burnDamage,seed:Math.random()*100});if(!trail){this.effects.push({type:'pulse',x:b.x,y:b.y,r:r*1.1,t:.3,max:.3,color:'#e6ad6a'});this.burst(b.x,b.y,14,'#dc9b55',65)}}
  updateZones(dt){
   for(const z of this.zones){if(updateExpandedZone(this,z,dt))continue;if(z.kind==='solar'||z.kind==='glacier'){updateFusionZone(this,z,dt);continue}z.t-=dt;if(z.t<=0)continue;z.tick-=dt;if(z.tick<=0){z.tick=z.hitInterval;for(const e of this.grid.near(z.x,z.y,z.r+15))if(distance(z,e)<z.r+e.r)this.hit(e,z.damage,z.x,z.y,0,false,'flame',true)}}
   // ponytail: retain the newest 128 fields to bound rendering; pool fields if future content routinely reaches this ceiling.
@@ -225,7 +229,7 @@ export class Game{
   e.markUntil=Math.max(e.markUntil||0,this.time+duration);
  }
  hit(e,damage,fromX,fromY,knock=50,feedback=true,source=null,periodic=false){
-  if(e.dead||e.hp<=0)return;const critical=!!source&&!periodic&&Math.random()<this.stats.criticalChance;
+  if(e.dead||e.hp<=0)return;const critical=!!source&&!periodic&&Math.random()<Math.min(1,this.stats.criticalChance+(this.stats.weaponUpgrades?.[source]?.critical||0));
   const execute=source&&!periodic&&this.passives.executioner&&e.hp/e.maxHp<=.3?1+this.passives.executioner*(e.boss?.1:.2):1;
   const marked=e.markUntil>this.time?Object.values(e.marks).reduce((best,mark)=>mark.until>this.time?Math.max(best,mark.multiplier):best,1):1;
   const dmg=Math.max(1,Math.round(damage*(critical?this.stats.criticalMultiplier:1)*execute*marked*characterHitMultiplier(this,e,source,periodic)));
@@ -235,24 +239,25 @@ export class Game{
   if(this.texts.length<90)this.texts.push({x:e.x+(Math.random()-.5)*9,y:e.y-22*e.scale,text:dmg,t:.65,max:.65,critical,color:critical?'#efd395':'#d6ddbd'});
   if(feedback){this.sound.play('hit');this.burst(e.x,e.y-10,critical?6:3,critical?'#efd096':'#a3ab78',40)}
   if(critical&&feedback){this.shake=Math.max(this.shake,1.6);this.hitstop=Math.max(this.hitstop,.022)}
-  onWeaponHit(this,e,source,critical,periodic);
+  const poisonImpact=onWeaponHit(this,e,source,critical,periodic,dmg);
   onCharacterHit(this,e,source,periodic,critical);
+  if(poisonImpact)this.hit(e,poisonImpact,e.x,e.y,0,false,null,true);
   if(source==='talent')this.growFromTalent();
   if(e.hp<=0&&!e.dead)this.kill(e);
  }
  growFromTalent(){
-  if(!this.passives.everseed||!Object.keys(this.talents).length||this.player.hp<=0||(this.relicTimers.everseed||0)>this.time)return;
-  const values=relicValues('everseed',this.passives.everseed);if(Math.random()>=values.chance||!readyProc(this,'everseed',values.cooldown))return;
+  if(!this.passives.everseed||!Object.keys(this.talents).length||this.player.hp<=0)return;
+  const values=relicValues('everseed',this.passives.everseed);if(Math.random()>=values.chance||!readyProc(this,'everseed'))return;
   const key=['damage','area','vitality'][Math.floor(Math.random()*3)],hp=this.player.hp;
   this.growth[key]=(this.growth[key]||0)+1;
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(hp,this.player.maxHp);
   this.texts.push({x:this.player.x,y:this.player.y-42,text:'薪种 · '+{damage:'伤害 +1%',area:'范围 +1%',vitality:'生命上限 +2'}[key],t:1.2,max:1.2,color:'#e4cc82'});this.on('hud');
  }
  kill(e){
   if(e.dead)return;e.dead=true;this.kills++;this.gold+=e.score;this.burst(e.x,e.y-10,8,e.kind==='ghost'?'#8db7a4':'#9e9c72',45);
   const starLinked=!!this.talents.s_scholar1&&e.starMarkedUntil>this.time;
-  this.drops.push({type:'xp',x:e.x,y:e.y,r:3,value:e.xp,age:0,vx:0,vy:0,attracted:starLinked,starLinked});
+  this.drops.push({type:'xp',x:e.x,y:e.y,r:3,value:e.xp,elite:e.elite,age:0,vx:0,vy:0,attracted:starLinked,starLinked});
   if(e.boss)this.drops.push({type:'magnet',x:e.x-12,y:e.y,age:0,r:5,value:0});
   const low=this.player.hp<this.player.maxHp*.45,heals=this.drops.filter(d=>d.type==='heal'&&!d.dead).length;
   if(heals<1&&this.time-this.lastHealDrop>=20&&(Math.random()<(low?.012:.004)||low&&this.time-this.lastHealDrop>=75)){
@@ -262,8 +267,11 @@ export class Game{
    const type=weightedPick([{type:'magnet',weight:4},{type:'hourglass',weight:3},{type:'nova',weight:2},{type:'ward',weight:3}]).type;
    this.drops.push({type,x:e.x-5,y:e.y,age:0,r:5,value:0});this.lastUtilityDrop=this.time;
   }
-  if((e.elite||e.boss)&&!e.eventGuardian){this.drops.push({type:'chest',x:e.x,y:e.y,age:0,r:10,value:e.boss?60:25});this.effects.push({type:'pulse',x:e.x,y:e.y,r:e.boss?140:70,t:.7,max:.7,color:'#dec799'});this.shake=e.boss?7:3;this.hitstop=e.boss?.12:.045;this.burst(e.x,e.y-20,50,'#e1bf87',120);this.sound.play('chest');if(e.boss){this.banner(e.name+' · 已被击败','THE LIGHT PREVAILS',3);for(const enemy of this.enemies)if(!enemy.dead&&!enemy.boss&&distance(enemy,e)<180)this.hit(enemy,250,e.x,e.y,120,false)}}
-  if(e.final)this.finalDefeated=true;
+  if((e.elite||e.boss)&&!e.eventGuardian){
+   if(e.boss&&!this.enemies.some(other=>other.boss&&other.bossWave===e.bossWave&&!other.dead))this.drops.push({type:'chest',x:e.x,y:e.y,age:0,r:10,value:60});
+   this.effects.push({type:'pulse',x:e.x,y:e.y,r:e.boss?140:70,t:.7,max:.7,color:'#dec799'});this.shake=e.boss?7:3;this.hitstop=e.boss?.12:.045;this.burst(e.x,e.y-20,50,'#e1bf87',120);this.sound.play(e.boss?'chest':'xp');if(e.boss){this.banner(e.name+' · 已被击败','THE LIGHT PREVAILS',3);for(const enemy of this.enemies)if(!enemy.dead&&!enemy.boss&&distance(enemy,e)<180)this.hit(enemy,250,e.x,e.y,120,false)}
+  }
+  if(e.final)this.finalDefeated=!this.enemies.some(other=>other.final&&!other.dead);
   onEnemyKilled(this,e);
  }
  hurt(amount,x,y){const p=this.player;if(p.invincible>0||this.state!=='running')return;const dmg=Math.max(1,Math.round(Math.max(amount*.3,amount-this.stats.armor)*this.stats.damageTakenMultiplier)),absorbed=Math.min(p.shield||0,dmg);p.shield-=absorbed;p.hp-=dmg-absorbed;this.lastHurt=this.time;this.damageTaken+=dmg-absorbed;p.invincible=.6;this.shake=5;this.flash=.23;this.sound.play('hurt');this.burst(p.x,p.y-11,12,absorbed?'#c1d9c1':'#bd7968',60);this.texts.push({x:p.x,y:p.y-30,text:absorbed===dmg?'格挡':'−'+(dmg-absorbed),t:.9,max:.9,critical:true,color:absorbed?'#c4e4d0':'#ef9d85'});const shieldBroke=absorbed>0&&p.shield===0;onCharacterHurt(this);onPlayerHurt(this,shieldBroke);this.on('hud')}
@@ -293,11 +301,13 @@ export class Game{
  openChest(value){
   this.gold+=value;const boss=value>=60,rewards=[],hp=this.player.hp;if(boss)this.player.hp=Math.min(this.player.maxHp,this.player.hp+10);
   for(let i=0;i<(boss?2:1);i++){
-   const item=weightedPick(upgradePool(this).filter(item=>item.current>0));
-   if(item){(item.weapon?this.weapons:this.passives)[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12;rewards.push(item.name+' · LV.'+item.current+' → LV.'+item.next)}
+   const pool=upgradePool(this).filter(item=>item.current>0),levels=pool.filter(item=>!item.refinement),item=weightedPick(levels.length?levels:pool);
+   if(item?.refinement){this.refineWeapon(item);rewards.push(item.name+' · '+refinementGain(item.refinement,item.value))}
+   else if(item){(item.weapon?this.weapons:this.passives)[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12;rewards.push(item.name+' · LV.'+item.current+' → LV.'+item.next)}
    else rewards.push('经验 +'+this.gainXp(24).toLocaleString('zh-CN',{maximumFractionDigits:2})+'（无可强化装备）');
+   this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
   }
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
+  this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   if(this.player.hp>hp)rewards.push('生命 +'+(this.player.hp-hp).toLocaleString('zh-CN',{maximumFractionDigits:2}));
   rewards.push('余烬 +'+value);
   this.toast((boss?'首领遗产 · ':'古老宝箱 · ')+rewards.join(' / '));this.on('weapons');this.checkFusionReadiness();
@@ -319,7 +329,7 @@ export class Game{
    if(consumed.has(id)){if(!inserted){replacement[key]=ready.level;inserted=true}}else replacement[id]=level;
   }
   this.weapons=replacement;
-  for(const id of consumed){this.consumedWeapons.add(id);delete this.timers[id]}
+  for(const id of consumed){this.consumedWeapons.add(id);delete this.timers[id];delete this.weaponUpgrades[id]}
   for(const item of recipe.ingredients.filter(i=>i.type==='passive')){delete this.passives[item.id];this.consumedPassives.add(item.id);delete this.relicTimers[item.id]}
   this.projectiles=this.projectiles.filter(b=>b.enemy||!consumed.has(b.source||b.fusionKind||b.type));
   this.zones=this.zones.filter(z=>!consumed.has(z.source||z.kind||'flame'));
@@ -338,46 +348,67 @@ export class Game{
  chooseAltarReward(index){
   if(this.state!=='reward'||!this.eventChoices.length)return false;
   const id=this.eventChoices[index];if(index!==-1&&(!Number.isInteger(index)||!ALTAR_BOONS[id]||this.boons.includes(id)))return false;
-  let message;
+  const bonus=ALTAR_REWARDS[this.altarRewardIndex],rewards=[];
   if(index===-1){
-    const available=upgradePool(this).filter(item=>item.weapon&&item.current>0);
+   for(let i=0;i<(bonus?.upgrades||1);i++){
+    const available=upgradePool(this).filter(item=>item.weapon&&item.current>0&&!item.refinement);
     const item=available[Math.floor(Math.random()*available.length)];
-    if(item){this.weapons[item.key]=item.next;message=item.name+' · LV.'+item.current+' → LV.'+item.next}
+    if(item){this.weapons[item.key]=item.next;rewards.push(item.name+' · LV.'+item.current+' → LV.'+item.next)}
     else{
       const keys=Object.keys(this.weapons),key=keys[Math.floor(Math.random()*keys.length)];if(!key)return false;
-      this.weaponEmpowerments[key]=(this.weaponEmpowerments[key]||0)+1;message=WEAPONS[key].name+' · 祭坛淬炼，伤害额外 +12%';
+      this.weaponEmpowerments[key]=(this.weaponEmpowerments[key]||0)+1;rewards.push(WEAPONS[key].name+' · 祭坛淬炼，伤害额外 +12%');
     }
-  }else{this.boons.push(id);message=ALTAR_BOONS[id].name+' · '+ALTAR_BOONS[id].positive+' / '+ALTAR_BOONS[id].negative}
+   }
+  }else{this.boons.push(id);rewards.push(ALTAR_BOONS[id].name+' · '+ALTAR_BOONS[id].positive+' / '+ALTAR_BOONS[id].negative)}
   const hpRatio=this.player.hp/this.player.maxHp;
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.maxHp,this.player.maxHp*hpRatio);
-  this.eventChoices=[];this.state='running';this.keys.clear();this.stick={x:0,y:0};
-  this.eventReward={name:index===-1?'跳过特殊奖励':'已缔结祭坛契约',rewards:[message],expiresAt:this.time+5};
+  if(bonus){
+    const hp=this.player.hp;this.player.hp=Math.min(this.player.maxHp,hp+bonus.heal);this.gold+=bonus.gold;
+    rewards.push('经验 +'+this.gainXp(bonus.xp).toLocaleString('zh-CN',{maximumFractionDigits:2}),'余烬 +'+bonus.gold);
+    if(this.player.hp>hp)rewards.push('生命 +'+(this.player.hp-hp).toLocaleString('zh-CN',{maximumFractionDigits:2}));
+  }
+  this.eventChoices=[];this.altarRewardIndex=null;this.state='running';this.keys.clear();this.stick={x:0,y:0};
+  this.eventReward={name:index===-1?'祭坛武器强化':'已缔结祭坛契约',rewards,expiresAt:this.time+5};
   this.sound.play('chest');this.on('altarChosen');this.on('weapons');this.on('hud');this.checkFusionReadiness();return true;
  }
- gainXp(amount){if(!Number.isFinite(amount)||amount<=0)return 0;const points=talentPoints(this),gained=amount*this.xpMultiplier;this.xp+=gained;while(this.xp>=this.xpNext){this.xp-=this.xpNext;this.level++;this.pendingLevels++;this.xpNext=xpForLevel(this.level)}if(talentPoints(this)>points)this.on('talentPoints');return gained}
+ gainXp(amount){if(!Number.isFinite(amount)||amount<=0)return 0;const points=talentPoints(this),gained=amount*this.xpMultiplier;this.xp+=gained;while(this.xp>=this.xpNext){this.xp-=this.xpNext;this.level++;this.pendingLevels++;this.xpNext=xpForLevel(this.level)}if(talentPoints(this)>points){this.pendingTalentChoice=true;this.on('talentPoints')}return gained}
+ presentLevelChoices(){
+  if(this.state!=='running')return;
+  if(this.pendingTalentChoice){
+   this.pendingTalentChoice=false;
+   if(talentPoints(this)>0){this.state='talent';this.keys.clear();this.stick={x:0,y:0};this.sound.play('level');this.on('talentChoice');return}
+  }
+  if(this.pendingLevels>0){this.pendingLevels--;this.state='level';this.keys.clear();this.stick={x:0,y:0};this.choices=this.rollUpgrades();this.sound.play('level');this.on('level')}
+ }
  rollUpgrades(){
   return rollUpgradeChoices(this);
  }
+ refineWeapon(item){
+  if(!WEAPONS[item.key]||(this.weapons[item.key]||0)<maxWeaponLevel(item.key)||this.banished.has(item.key)||this.consumedWeapons.has(item.key))return false;
+  const value=refinementValue(this.stats,item.key,item.refinement,item.rarity);if(!value||value!==item.value)return false;
+  const upgrades=this.weaponUpgrades[item.key]??={};upgrades[item.refinement]=Number(((upgrades[item.refinement]||0)+value).toFixed(8));return true;
+ }
  learnTalent(id){
-  const active=['running','paused','level','reward'].includes(this.state)||this.state==='status'&&['running','paused','level','reward'].includes(this.statusReturn);
+  const active=['running','paused','level','reward','talent'].includes(this.state)||this.state==='status'&&['running','paused','level','reward','talent'].includes(this.statusReturn);
   const node=talentNodeState(this,id);if(!active||!node.available)return false;
-  this.talents[id]=true;this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
+  this.talents[id]=true;this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
   onCharacterLearn(this);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.sound.play('select');this.on('talentLearned',id);this.on('hud');return true;
  }
- reroll(){if(this.state!=='level'||this.rerolls<=0)return;this.rerolls--;this.choices=rollUpgradeChoices(this,this.choices.map(item=>item.key));this.sound.play('select');this.on('level')}
- banish(index){if(this.state!=='level'||this.banishes<=0)return;const item=this.choices[index];if(!item||item.fusion||item.key==='heal')return;this.banished.add(item.key);this.banishes--;this.checkFusionReadiness();this.choices=rollUpgradeChoices(this,this.choices.map(choice=>choice.key));this.sound.play('select');this.on('level')}
+ reroll(){if(this.state!=='level'||this.rerolls<=0)return;this.rerolls--;this.choices=rollUpgradeChoices(this,this.choices.map(item=>item.choiceId||item.key));this.sound.play('select');this.on('level')}
+ banish(index){if(this.state!=='level'||this.banishes<=0)return;const item=this.choices[index];if(!item||item.fusion||item.key==='heal')return;this.banished.add(item.key);this.banishes--;this.checkFusionReadiness();this.choices=rollUpgradeChoices(this,this.choices.map(choice=>choice.choiceId||choice.key));this.sound.play('select');this.on('level')}
  skipUpgrade(){if(this.state!=='level')return;this.gold+=10;this.state='running';this.keys.clear();this.on('upgrade');this.on('hud');this.toast('已跳过本次成长 · 余烬 +10')}
  chooseUpgrade(index){
   if(this.state!=='level'||!this.choices[index])return;const item=this.choices[index];
   if(item.fusion){if(!this.fuseWeapon(item.key))return}
+  else if(item.refinement){if(!this.refineWeapon(item))return}
   else if(item.weapon){this.weapons[item.key]=item.next;this.timers[item.key]=.12;if(item.evolution){this.banner(item.name+' · 觉醒','WEAPON EVOLVED',3);this.shake=6}}
   else if(item.key==='heal'){this.player.hp=Math.min(this.player.maxHp,this.player.hp+12);this.gold+=15}
   else{this.passives[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12}
   recordUpgradeChoice(this,item.key);
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.checkFusionReadiness();
   this.effects.push({type:'pulse',x:this.player.x,y:this.player.y,r:85,t:.7,max:.7,color:item.color});this.burst(this.player.x,this.player.y-10,30,item.color,80);this.player.invincible=Math.max(this.player.invincible,.45);this.sound.play('select');this.keys.clear();this.state='running';this.on('upgrade');this.on('weapons');this.on('hud');
@@ -401,7 +432,7 @@ export class Game{
   this.landscape.drawFloor(g,cam,w,h,t);const decor=this.landscape.getObjects(cam,w,h);
   // Subtle cool moonlight travels diagonally through the canopy.
   g.save();g.globalAlpha=.05;g.fillStyle='#b7c5a0';for(let i=0;i<3;i++){const x=w*.6+i*110+Math.sin(t*.08)*10;g.beginPath();g.moveTo(x,0);g.lineTo(x+70,0);g.lineTo(x-85,h);g.lineTo(x-160,h);g.closePath();g.fill()}g.restore();
-  if(!menu){this.drawZones(g,ox,oy,t);drawWorldEvents(this,g,ox,oy);this.drawHazards(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
+  if(!menu){this.drawZones(g,ox,oy,t);this.drawHazards(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
   // Shadows are drawn beneath all sprites, maintaining a coherent depth plane.
   for(const obj of decor)shadow(g,obj.x+ox,obj.y+oy,obj.kind==='tree'?28:obj.kind==='arch'?53:10,.20);
   if(!menu){for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+40&&Math.abs(e.y-cam.y)<h/2+50)shadow(g,e.x+ox,e.y+oy,e.r*1.3,.3);shadow(g,this.player.x+ox,this.player.y+oy,12,.44)}
@@ -434,13 +465,14 @@ export class Game{
   // Pools of light and floating ash tie the hand-drawn scenery together.
   glow(g,ox,oy-6,92+Math.sin(t*7)*4,'#e9983e34');glow(g,ox,oy-6,32,'#f4c26a32');
   for(const o of decor)if(o.kind==='lantern')glow(g,o.x+ox,o.y+oy-24,37,'#e7b36221');
-  if(!menu){this.drawWeapons(g,ox,oy,t);this.drawProjectiles(g,ox,oy,t);this.drawEffects(g,ox,oy,t);for(const p of this.particles){g.globalAlpha=clamp(p.t/p.max,0,1);g.fillStyle=p.color;g.fillRect(Math.round(p.x+ox),Math.round(p.y+oy),p.size,p.size)}g.globalAlpha=1;for(const tx of this.texts){g.globalAlpha=Math.min(1,tx.t*4);pixelText(g,tx.text,tx.x+ox,tx.y+oy,tx.color,tx.critical?11:8)}g.globalAlpha=1;this.drawCompass(g,cam,w,h)}
+  if(!menu){this.drawWeapons(g,ox,oy,t);this.drawProjectiles(g,ox,oy,t);this.drawEffects(g,ox,oy,t);for(const p of this.particles){g.globalAlpha=clamp(p.t/p.max,0,1);g.fillStyle=p.color;g.fillRect(Math.round(p.x+ox),Math.round(p.y+oy),p.size,p.size)}g.globalAlpha=1;for(const tx of this.texts){g.globalAlpha=Math.min(1,tx.t*4);pixelText(g,tx.text,tx.x+ox,tx.y+oy,tx.color,tx.critical?11:8)}g.globalAlpha=1}
   this.drawAtmosphere(g,w,h,t,menu);
   if(!menu&&this.player){glow(g,this.player.x+ox,this.player.y+oy-8,74,'#bfd0910b');if(this.player.hp/this.player.maxHp<.28){const gradient=g.createRadialGradient(w/2,h/2,h*.25,w/2,h/2,w*.65);gradient.addColorStop(0,'transparent');gradient.addColorStop(1,`rgba(116,36,27,${.23+Math.sin(t*4)*.07})`);g.fillStyle=gradient;g.fillRect(0,0,w,h)}if(this.flash>0){g.fillStyle=`rgba(217,139,110,${this.flash*.5})`;g.fillRect(0,0,w,h)}}
+  if(!menu){drawWorldEvents(this,g,ox,oy);this.drawCompass(g,cam,w,h)}
  }
  drawZones(g,ox,oy,t){for(const z of this.zones){if(drawExpandedZone(g,z,ox,oy,t))continue;if(z.kind){drawFusionZone(g,z,ox,oy,t);continue}const x=z.x+ox,y=z.y+oy;g.globalAlpha=Math.min(1,z.t)*.5;g.fillStyle='#b1703540';g.beginPath();g.ellipse(x,y,z.r,z.r*.8,0,0,TAU);g.fill();g.strokeStyle='#d8a35a55';g.stroke();g.globalAlpha=Math.min(1,z.t);for(let i=0;i<10;i++){let a=hash(i,z.seed)*TAU,r=hash(i+20,z.seed)*z.r,xx=x+Math.cos(a)*r,yy=y+Math.sin(a)*r,hh=3+(Math.sin(t*8+i)+1)*4;g.fillStyle=i%2?'#ce8c48':'#e3b361';g.fillRect(Math.round(xx),Math.round(yy-hh),2,hh);g.fillStyle='#eac88a';g.fillRect(Math.round(xx),Math.round(yy-3),1,3)}g.globalAlpha=1}}
  drawHazards(g,ox,oy,t){for(const z of this.hazards){let x=z.x+ox,y=z.y+oy;g.save();g.strokeStyle='#db9a7a';g.lineWidth=1;if(z.type==='line'){g.globalAlpha=.5;g.setLineDash([4,3]);g.beginPath();g.moveTo(x,y);let a=Math.atan2(z.ty-z.y,z.tx-z.x);g.lineTo(x+Math.cos(a)*150,y+Math.sin(a)*150);g.stroke()}else{g.fillStyle=`rgba(175,83,66,${.08+(1-z.t/z.max)*.2})`;g.beginPath();g.arc(x,y,z.r,0,TAU);g.fill();g.globalAlpha=.5+Math.sin(t*20)*.25;g.stroke();g.strokeStyle='#f3c597';g.beginPath();g.arc(x,y,z.r*(1-z.t/z.max),0,TAU);g.stroke();g.fillRect(x-2,y-2,4,4)}g.restore()}}
- drawDrops(g,ox,oy,t){for(const d of this.drops){const x=Math.round(d.x+ox),y=Math.round(d.y+oy);if(x<-20||x>this.w+20||y<-20||y>this.h+20)continue;const bob=Math.round(Math.sin(t*3+d.x)*1.5);shadow(g,x,y,4,.2);if(d.type==='xp'){const big=d.value>=12;diamond(g,x,y-4+bob,big?5:3,big?'#e2cd89':d.value>=5?'#8fcabb':'#8cb16f');g.fillStyle=big?'#fae7b7':'#d2dfa2';g.fillRect(x-1,y-6+bob,1,2);if(big)glow(g,x,y,16,'#dec38712')}if(d.type==='heal'){g.fillStyle='#617d51';g.fillRect(x-2,y-9+bob,4,3);g.fillStyle='#b5c789';g.fillRect(x-4,y-6+bob,8,7);g.fillStyle='#e0e3b1';g.fillRect(x-2,y-5+bob,2,4)}if(d.type==='magnet'){diamond(g,x,y-7+bob,6,'#8bbccc');diamond(g,x,y-7+bob,3,'#daeee0');glow(g,x,y-7,22,'#8dc7d922')}if(['hourglass','nova','ward'].includes(d.type)){const color={hourglass:'#b4dbe7',nova:'#e8ae70',ward:'#c4dda8'}[d.type];glow(g,x,y-7,22,color+'33');diamond(g,x,y-7+bob,7,color);g.fillStyle='#eff2d2';if(d.type==='hourglass'){g.fillRect(x-4,y-12+bob,8,2);g.fillRect(x-4,y-4+bob,8,2)}else if(d.type==='nova'){g.fillRect(x-1,y-16+bob,2,17);g.fillRect(x-8,y-8+bob,17,2)}else diamond(g,x,y-8+bob,3,'#4f715c')}if(d.type==='chest'){glow(g,x,y-8,33,'#d7ac5d24');drawSprite(g,'chest',x,y+bob);for(let i=0;i<3;i++){g.fillStyle='#dec988';g.fillRect(x-12+i*11,y-12-Math.round((t*12+i*7)%19),1,2)}}}}
+ drawDrops(g,ox,oy,t){for(const d of this.drops){const x=Math.round(d.x+ox),y=Math.round(d.y+oy);if(x<-20||x>this.w+20||y<-20||y>this.h+20)continue;const bob=Math.round(Math.sin(t*3+d.x)*1.5);shadow(g,x,y,4,.2);if(d.type==='xp'){const big=d.elite||d.value>=12;diamond(g,x,y-4+bob,big?5:3,big?'#e2cd89':d.value>=5?'#8fcabb':'#8cb16f');g.fillStyle=big?'#fae7b7':'#d2dfa2';g.fillRect(x-1,y-6+bob,1,2);if(big)glow(g,x,y,16,'#dec38712')}if(d.type==='heal'){g.fillStyle='#617d51';g.fillRect(x-2,y-9+bob,4,3);g.fillStyle='#b5c789';g.fillRect(x-4,y-6+bob,8,7);g.fillStyle='#e0e3b1';g.fillRect(x-2,y-5+bob,2,4)}if(d.type==='magnet'){diamond(g,x,y-7+bob,6,'#8bbccc');diamond(g,x,y-7+bob,3,'#daeee0');glow(g,x,y-7,22,'#8dc7d922')}if(['hourglass','nova','ward'].includes(d.type)){const color={hourglass:'#b4dbe7',nova:'#e8ae70',ward:'#c4dda8'}[d.type];glow(g,x,y-7,22,color+'33');diamond(g,x,y-7+bob,7,color);g.fillStyle='#eff2d2';if(d.type==='hourglass'){g.fillRect(x-4,y-12+bob,8,2);g.fillRect(x-4,y-4+bob,8,2)}else if(d.type==='nova'){g.fillRect(x-1,y-16+bob,2,17);g.fillRect(x-8,y-8+bob,17,2)}else diamond(g,x,y-8+bob,3,'#4f715c')}if(d.type==='chest'){glow(g,x,y-8,33,'#d7ac5d24');drawSprite(g,'chest',x,y+bob);for(let i=0;i<3;i++){g.fillStyle='#dec988';g.fillRect(x-12+i*11,y-12-Math.round((t*12+i*7)%19),1,2)}}}}
  drawWeapons(g,ox,oy,t){drawCharacterTalents(this,g,ox,oy);drawFusionWeapons(this,g,ox,oy);const p=this.player,lvl=this.weapons.orbit;if(p.shield>0){g.strokeStyle='#bfe4cc88';g.lineWidth=1;g.beginPath();g.arc(p.x+ox,p.y+oy-9,17,0,TAU);g.stroke()}if(!lvl)return;const v=weaponStats('orbit',lvl,this.stats,this.character),count=v.count;for(let i=0;i<count;i++){const dir=lvl===6&&i%2?-1:1,a=this.orbitAngle*dir+i*TAU/count,r=v.radius+(i%2?v.outerOffset:0),x=p.x+ox+Math.cos(a)*r,y=p.y+oy-8+Math.sin(a)*r;for(let j=4;j>0;j--){let aa=a-j*.09*dir;g.globalAlpha=.12+(4-j)*.09;g.fillStyle='#a6d7be';g.fillRect(Math.round(p.x+ox+Math.cos(aa)*r)-2,Math.round(p.y+oy-8+Math.sin(aa)*r)-2,4,4)}g.globalAlpha=1;glow(g,x,y,v.contactRadius,'#b5e7c323');diamond(g,Math.round(x),Math.round(y),lvl===6?7:5,'#78bcae');diamond(g,Math.round(x),Math.round(y)-1,3,'#d9edc6');g.fillStyle='#eff3d8';g.fillRect(Math.round(x)-1,Math.round(y)-2,2,3)}}
  drawProjectiles(g,ox,oy,t){for(const b of this.projectiles){let x=Math.round(b.x+ox),y=Math.round(b.y+oy);if(b.trail){for(let i=0;i<b.trail.length;i++){g.globalAlpha=i/b.trail.length*.45;g.fillStyle=b.type==='flame'?'#d29a55':b.fusionKind?'#c7b4ec':b.homing?'#d8c9a0':'#9fac80';g.fillRect(Math.round(b.trail[i].x+ox)-1,Math.round(b.trail[i].y+oy)-1,b.type==='flame'?4:2,b.type==='flame'?4:2)}g.globalAlpha=1}
   if(drawExpandedProjectile(g,b,ox,oy,t))continue;
@@ -468,10 +500,10 @@ export class Game{
   g.restore();
  }}
  drawCompass(g,cam,w,h){
-  const event=nearestWorldEvent(this),target=event?.guardian&&!event.guardian.dead?event.guardian:event;
-  if(target&&this.time>=45&&(this.time<540||this.activeEvent)&&!this.enemies.some(e=>e.boss&&!e.dead)){
-   const x=target.x-cam.x,y=target.y-cam.y;
-   if(Math.abs(x)>w/2-35||Math.abs(y)>h/2-50){const a=Math.atan2(y,x),scale=Math.min((w/2-25)/Math.max(1,Math.abs(x)),(h/2-55)/Math.max(1,Math.abs(y))),px=w/2+x*scale,py=h/2+y*scale,color=EVENT_TYPES[event.kind].color;g.fillStyle=color;g.beginPath();g.moveTo(px+Math.cos(a)*6,py+Math.sin(a)*6);g.lineTo(px+Math.cos(a+2.4)*5,py+Math.sin(a+2.4)*5);g.lineTo(px+Math.cos(a-2.4)*5,py+Math.sin(a-2.4)*5);g.fill();pixelText(g,'祭坛',px,py-12,color,8)}
+  const event=nearestWorldEvent(this),target=worldEventTarget(this);
+  if(target&&!this.enemies.some(e=>e.boss&&!e.dead)){
+   const x=target.x-cam.x,y=target.y-cam.y,top=Math.min(h/2-20,125/this.dpr+25);
+   if(Math.abs(x)>w/2-55||y<top-h/2||y>h/2-50){const a=Math.atan2(y,x),scale=Math.min((w/2-55)/Math.max(1,Math.abs(x)),(y<0?h/2-top:h/2-55)/Math.max(1,Math.abs(y))),px=w/2+x*scale,py=h/2+y*scale,color=EVENT_TYPES[event.kind].color,label=(this.activeEvent?.kind==='souls'?'魂光':this.activeEvent?.kind==='hunt'?'守卫':'祭坛')+' · '+Math.round(distance(this.player,target));g.fillStyle='#071711';g.fillRect(px-50,py-25,100,15);g.fillStyle=color;g.beginPath();g.moveTo(px+Math.cos(a)*8,py+Math.sin(a)*8);g.lineTo(px+Math.cos(a+2.4)*7,py+Math.sin(a+2.4)*7);g.lineTo(px+Math.cos(a-2.4)*7,py+Math.sin(a-2.4)*7);g.fill();pixelText(g,label,px,py-17,color,10)}
   }
   const boss=this.enemies.find(e=>e.boss&&!e.dead);if(boss){const x=boss.x-cam.x,y=boss.y-cam.y;if(Math.abs(x)>w/2-30||Math.abs(y)>h/2-40){const a=Math.atan2(y,x),scale=Math.min((w/2-23)/Math.max(1,Math.abs(x)),(h/2-50)/Math.max(1,Math.abs(y)));const px=w/2+x*scale,py=h/2+y*scale;g.fillStyle='#d5a786';g.beginPath();g.moveTo(px+Math.cos(a)*7,py+Math.sin(a)*7);g.lineTo(px+Math.cos(a+2.4)*5,py+Math.sin(a+2.4)*5);g.lineTo(px+Math.cos(a-2.4)*5,py+Math.sin(a-2.4)*5);g.fill();pixelText(g,'BOSS',px,py-12,'#c7a085',7)}}
  }

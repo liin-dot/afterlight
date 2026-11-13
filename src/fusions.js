@@ -53,6 +53,6 @@ export function fusionState(key,weapons={},passives={},context={}) {
 export function fusionChoice(key,weapons,passives) {
   const state=fusionState(key,weapons,passives),data=WEAPONS[key],usesRelic=fusionUsesRelic(key);
   return {key,fusion:true,weapon:true,current:0,next:state.level,name:data.name,color:data.color,
-    description:FUSIONS[key].effect+'。'+(usesRelic?'消耗武器与道具；道具的独立效果随之失去，获得成品固有效果。':'消耗两件武器，合为一格。'),
+    description:FUSIONS[key].effect+'。'+(usesRelic?'道具独立效果消失。':'合为一格。'),
     ingredients:state.ingredients.map(item=>({...item}))};
 }

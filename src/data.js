@@ -35,21 +35,21 @@ export const PASSIVES = {
  curse:{name:'禁忌烛冠',desc:'伤害 +10%、经验 +8%；敌人生命 +12%、生成频率 +8%、速度 +3%。',color:'#c399cf',max:3,rarity:'rare'},
 };
 export const META = {
- power:{name:'余烬之力',icon:'power',desc:'每级 +3% 武器伤害，最多 +15%。',max:5,cost:160},
- reach:{name:'星火余照',icon:'area',desc:'每级 +3% 武器范围，最多 +15%。',max:5,cost:100,costs:[4000,4500,5000,5500,6000]},
- tempo:{name:'战意微燃',icon:'haste',desc:'武器直接命中有 12% 概率使武器攻击间隔缩短 15%，持续 6 秒；冷却 10 秒。',max:1,cost:10000},
- flare:{name:'扩焰回响',icon:'area',desc:'武器直接命中有 10% 概率使武器范围增加 25%，持续 8 秒；冷却 12 秒。',max:1,cost:18000},
- conquest:{name:'破阵薪火',icon:'solar',desc:'击败精英或首领后，同时获得间隔 −15%、范围 +25%、移速 +15%，持续 10 秒；冷却 18 秒，不叠加。',max:1,cost:30000},
- magnet:{name:'引路之光',icon:'growth',desc:'每级 +3% 经验获取，最多 +15%。',max:5,cost:140},
- pace:{name:'行旅轻步',icon:'speed',desc:'每级 +2% 移速，最多 +10%。',max:5,cost:110,costs:[4000,4500,5000,5500,6000]},
- wind:{name:'猎风应答',icon:'speed',desc:'武器直接命中有 12% 概率使移速增加 15%，持续 6 秒；冷却 10 秒。',max:1,cost:10000},
- chill:{name:'寒光留痕',icon:'frostbrand',desc:'武器直接命中有 12% 概率使目标减速 55%，持续 1.5 秒；共享冷却 2 秒。',max:1,cost:18000},
- omen:{name:'蚀星刻印',icon:'deadeye',desc:'武器直接命中异常状态目标，有 15% 概率施加 15% 易伤，持续 6 秒；共享冷却 6 秒，只取最高易伤。',max:1,cost:30000},
- vitality:{name:'长明之躯',icon:'vitality',desc:'每级 +4 初始生命，最多 +20。',max:5,cost:120},
- regen:{name:'春回之息',icon:'regen',desc:'连续 4 秒未受攻击后，每级恢复 0.08 生命 / 秒，最多 0.4。',max:5,cost:180,costs:[4000,4500,5000,5500,6000]},
- blood:{name:'拾烬回生',icon:'siphon',desc:'击杀有 10% 概率恢复 2 生命；共享冷却 3 秒，不超过最大生命。',max:1,cost:10000},
- ward:{name:'护灯余光',icon:'aegis',desc:'受击后有 20% 概率将护盾补至 8；冷却 10 秒，不与较高护盾叠加。',max:1,cost:18000},
- laststand:{name:'绝境续灯',icon:'aegis',desc:'非致命受击后生命降至 25% 以下，恢复 10 生命、护盾补至 20；每局一次，不能抵挡致命伤害。',max:1,cost:30000},
+ power:{name:'余烬之力',icon:'power',desc:'每级 +3% 武器伤害，最多 +15%。',max:5,cost:60,costs:[60,90,120,150,180]},
+ reach:{name:'星火余照',icon:'area',desc:'每级 +3% 武器范围，最多 +15%。',max:5,cost:120,costs:[120,160,200,240,280]},
+ tempo:{name:'战意微燃',icon:'haste',desc:'武器直接命中有 12% 概率使武器攻击间隔缩短 15%，持续 6 秒。',max:3,cost:400,costs:[400,600,800],cooldowns:[20,15,10]},
+ flare:{name:'扩焰回响',icon:'area',desc:'武器直接命中有 10% 概率使武器范围增加 25%，持续 8 秒。',max:2,cost:1000,costs:[1000,1400],cooldowns:[24,12]},
+ conquest:{name:'破阵薪火',icon:'solar',desc:'击败精英或首领后，同时获得间隔 −15%、范围 +25%、移速 +15%，持续 10 秒，不叠加。',max:1,cost:1800,cooldowns:[18]},
+ magnet:{name:'引路之光',icon:'growth',desc:'每级 +3% 经验获取，最多 +15%。',max:5,cost:60,costs:[60,90,120,150,180]},
+ pace:{name:'行旅轻步',icon:'speed',desc:'每级 +2% 移速，最多 +10%。',max:5,cost:120,costs:[120,160,200,240,280]},
+ wind:{name:'猎风应答',icon:'speed',desc:'武器直接命中有 12% 概率使移速增加 15%，持续 6 秒。',max:3,cost:400,costs:[400,600,800],cooldowns:[20,15,10]},
+ chill:{name:'寒光留痕',icon:'frostbrand',desc:'武器直接命中有 12% 概率使目标减速 55%，持续 1.5 秒。',max:2,cost:1000,costs:[1000,1400],cooldowns:[4,2]},
+ omen:{name:'蚀星刻印',icon:'deadeye',desc:'武器直接命中异常状态目标，有 15% 概率施加 15% 易伤，持续 6 秒，只取最高易伤。',max:1,cost:1800,cooldowns:[6]},
+ vitality:{name:'长明之躯',icon:'vitality',desc:'每级 +4 初始生命，最多 +20。',max:5,cost:60,costs:[60,90,120,150,180]},
+ regen:{name:'春回之息',icon:'regen',desc:'连续 4 秒未受攻击后，每级恢复 0.08 生命 / 秒，最多 0.4。',max:5,cost:120,costs:[120,160,200,240,280]},
+ blood:{name:'拾烬回生',icon:'siphon',desc:'击杀有 10% 概率恢复 2 生命，不超过最大生命。',max:3,cost:400,costs:[400,600,800],cooldowns:[6,4.5,3]},
+ ward:{name:'护灯余光',icon:'aegis',desc:'受击后有 20% 概率将护盾补至 8，不与较高护盾叠加。',max:2,cost:1000,costs:[1000,1400],cooldowns:[20,10]},
+ laststand:{name:'绝境续灯',icon:'aegis',desc:'非致命受击后生命降至 25% 以下，恢复 10 生命、护盾补至 20；每局一次，不能抵挡致命伤害。',max:1,cost:1800},
 };
 export const META_TREES=[
  {id:'ember',name:'星火',hint:'输出 · 范围',nodes:['power','reach','tempo','flare','conquest']},
@@ -61,7 +61,7 @@ export function metaState(meta,key){
  if(!Object.hasOwn(META,key))return null;
  const info=META[key],level=meta[key]||0,tree=META_TREES.find(tree=>tree.nodes.includes(key));
  const prerequisite=tree.nodes.slice(0,tree.nodes.indexOf(key)).find(id=>(meta[id]||0)<META[id].max);
- return {level,cost:metaCost(key,level),maxed:level>=info.max,prerequisite,available:level<info.max&&!prerequisite};
+ return {level,cost:metaCost(key,level),cooldown:info.cooldowns?.[level-1],nextCooldown:info.cooldowns?.[level],maxed:level>=info.max,prerequisite,available:level<info.max&&!prerequisite};
 }
 export const STARTING_WEAPONS={
  flame:{cost:600,hint:'投掷火种，用持续火焰控制追兵。'},
@@ -76,10 +76,10 @@ export function startingLoadout(character,preparation={}){
  return {weapons:{[weapon]:1},passives:{}};
 }
 export const PICKUPS = {
- xp:{name:'灵光结晶',color:'#b3cc89',desc:'拾取后获得经验。不同敌人掉落的结晶包含不同经验，较大的结晶也可能由多颗合并而成。',source:'击败敌人后掉落。'},
+ xp:{name:'灵光结晶',color:'#b3cc89',desc:'拾取后获得经验。精英掉落醒目的大结晶，保留同类普通敌人 8 倍的基础经验；较大的结晶也可能由多颗合并而成。',source:'击败敌人后掉落；精英不再掉落升级宝箱。'},
  heal:{name:'生命药草',color:'#bfd394',desc:'拾取后立即恢复 12 点生命，不超过最大生命。',source:'击败敌人时有机会掉落；共享 20 秒间隔，地面最多保留一株。'},
  magnet:{name:'引魂之光',color:'#a6d9e2',desc:'让地面上现有的全部经验结晶向你飞来；不会永久改变拾取范围。',source:'普通敌人有机会掉落；每位首领必定额外掉落一枚。'},
- chest:{name:'古老宝箱',color:'#e0bd78',desc:'精英宝箱强化一次已持有装备并赠 25 余烬；首领宝箱强化两次、恢复 10 生命并赠 60 余烬。包括武器与道具，排除满级或已放逐装备；无可强化装备时每次改为 24 基础经验。不自动融合。',source:'击败精英或首领后掉落。'},
+ chest:{name:'古老宝箱',color:'#e0bd78',desc:'每波首领共享一个宝箱：强化已有装备两次、恢复 10 生命并赠 60 余烬。优先提升装备等级；没有可升等级时精修满级武器。排除放逐装备，不自动融合；完全无合法强化时每次改为 24 基础经验。',source:'同一波最后一名首领死亡时掉落；额外首领不增加宝箱数量。'},
  hourglass:{name:'凝时碎砂',color:'#b5dce7',desc:'立即冻结当前普通敌人 3 秒，首领仅冻结 0.3 秒。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
  nova:{name:'破晓火种',color:'#efb078',desc:'立即对半径 210 内的普通敌人造成 500 伤害，首领受到 250 伤害；伤害不触发遗物。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
  ward:{name:'灯盾残片',color:'#c2d9b1',desc:'护盾补至 20 点，先于生命承受伤害；不与已有护盾相加。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
@@ -119,13 +119,23 @@ export function mergeItemDiscoveries(...records) {
 export function readSave(fallback={}){
   let d;try{d=JSON.parse(localStorage.getItem('afterlight-save-v1')||'{}')||{}}catch{d=fallback}
   const amount=(value,integer=true)=>{const n=typeof value==='number'||typeof value==='string'?Number(value):0;return Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER,integer?Math.floor(n):n)):0};
-  const meta=Object.fromEntries(Object.keys(META).map(k=>[k,Math.min(META[k].max,amount(d.meta?.[k]))]));
-  for(const tree of META_TREES){let unlocked=true;for(const key of tree.nodes){if(META[key].max===1&&!unlocked)meta[key]=0;unlocked&&=meta[key]===META[key].max}}
+  const version=amount(d.metaVersion),legacy=version<2,meta={};let refund=0;
+  for(const tree of META_TREES){let unlocked=true;for(const [index,key] of tree.nodes.entries()){
+    const info=META[key],max=info.cooldowns?(legacy?1:version===2?3:info.max):info.max;
+    const level=(info.cooldowns||info.max===1)&&!unlocked?0:Math.min(max,amount(d.meta?.[key]));unlocked&&=level===max;
+    meta[key]=legacy&&info.cooldowns&&level?info.max:Math.min(info.max,level);
+    if(version<4){
+      // Keep historical prices fixed when refunding each save version's actual spend.
+      const oldBase=index===0?{power:160,magnet:140,vitality:120}[key]:[0,0,10000,18000,30000][index];
+      for(let rank=0;rank<level;rank++)refund+=index===0?oldBase*(rank+1)**2:index===1?4000+500*rank:oldBase*(1+rank*.5);
+      for(let rank=0;rank<meta[key];rank++)refund-=metaCost(key,rank);
+    }
+  }}
   const oldWeapons={ember:'flame',frost:'frost',storm:'prism',blight:'thorn',stars:'sentinel',blood:'crescent'};
   const weaponUnlocks=[...new Set([...(Array.isArray(d.weaponUnlocks)?d.weaponUnlocks:[]),...Object.entries(oldWeapons).filter(([id])=>amount(d.legacyRanks?.[id])>=1).map(([,weapon])=>weapon)])].filter(key=>typeof key==='string'&&Object.hasOwn(STARTING_WEAPONS,key));
   const preferred=d.selectedWeapon??(typeof d.selectedLegacy==='string'&&Object.hasOwn(oldWeapons,d.selectedLegacy)?oldWeapons[d.selectedLegacy]:null),selectedWeapon=weaponUnlocks.includes(preferred)?preferred:null;
-  const refund=Object.keys(oldWeapons).reduce((sum,id)=>sum+(amount(d.legacyRanks?.[id])>=2?2400:0)+(amount(d.legacyRanks?.[id])>=3?7200:0),0);
-  return {embers:Math.min(Number.MAX_SAFE_INTEGER,amount(d.embers)+refund),best:amount(d.best,false),kills:amount(d.kills),runs:amount(d.runs),wins:amount(d.wins),meta,weaponUnlocks,selectedWeapon,muted:!!d.muted,discoveredFusions:normalizeDiscoveries(d.discoveredFusions),discoveredItems:normalizeItemDiscoveries(d.discoveredItems)};
+  refund+=Object.keys(oldWeapons).reduce((sum,id)=>sum+(amount(d.legacyRanks?.[id])>=2?2400:0)+(amount(d.legacyRanks?.[id])>=3?7200:0),0);
+  return {embers:Math.min(Number.MAX_SAFE_INTEGER,amount(d.embers)+refund),best:amount(d.best,false),kills:amount(d.kills),runs:amount(d.runs),wins:amount(d.wins),metaVersion:4,meta,weaponUnlocks,selectedWeapon,muted:!!d.muted,discoveredFusions:normalizeDiscoveries(d.discoveredFusions),discoveredItems:normalizeItemDiscoveries(d.discoveredItems)};
 }
 let saveQueue=Promise.resolve(),lastStored=null,pendingMuted;
 const pending={embers:0,best:0,kills:0,runs:0,wins:0};

@@ -1,10 +1,11 @@
 import {WEAPONS} from './data.js';
-import {WEAPON_FAMILIES,RELICS,SYNERGIES,relicValues,compatibleWeapons,ALTAR_BOONS} from './content.js';
+import {WEAPON_FAMILIES,WEAPON_REFINEMENTS,REFINEMENT_RARITIES,RELICS,SYNERGIES,relicValues,compatibleWeapons,ALTAR_BOONS} from './content.js';
 
 // The simulation and character sheet use the same effective values.
-export function characterStats(character, passives = {}, meta = {}, talents = {}, weapons = {}, boons = [], empowerments = {}, metaBuffs = {}, growth = {}) {
+export function characterStats(character, passives = {}, meta = {}, talents = {}, weapons = {}, boons = [], empowerments = {}, metaBuffs = {}, growth = {}, weaponUpgrades = {}) {
   const stats={
-    boons:[...boons],empowerments:{...empowerments},metaBuffs,growth:{...growth},summonMultiplier:1,damageTakenMultiplier:1,
+    boons:[...boons],empowerments:{...empowerments},metaBuffs,growth:{...growth},weaponUpgrades,summonMultiplier:1,damageTakenMultiplier:1,
+    difficulty:{hp:1,damage:1,speed:1,population:1,elite:1,bosses:0},
     talents,
     passives:{...passives},
     weapons:{...weapons},
@@ -34,6 +35,7 @@ export function characterStats(character, passives = {}, meta = {}, talents = {}
     const boon=ALTAR_BOONS[id];if(!boon)continue;
     for(const [key,value] of Object.entries(boon.multiply||{}))stats[key]*=value;
     for(const [key,value] of Object.entries(boon.add||{}))stats[key]+=value;
+    for(const [key,value] of Object.entries(boon.difficulty))stats.difficulty[key]+=value;
   }
   stats.maxHp=Math.max(1,Math.round(stats.maxHp));stats.criticalChance=Math.min(1,stats.criticalChance);
   return stats;
@@ -86,9 +88,15 @@ function baseWeaponStats(kind, level, stats, character) {
 // One modifier path keeps every weapon, fusion, preview and combat effect in agreement.
 export function weaponStats(kind,level,stats,character){
   const values=baseWeaponStats(kind,level,stats,character);
+  const upgrades=stats.weaponUpgrades?.[kind]||{};
+  for(const [key,amount] of Object.entries(upgrades)){
+    const fields=key==='damage'?Object.keys(values).filter(field=>field==='damage'||field.endsWith('Damage')):WEAPON_REFINEMENTS[key]?.fields||[];
+    for(const field of fields)if(values[field]!==undefined)values[field]=WEAPON_REFINEMENTS[key].flat?values[field]+amount:key==='haste'?values[field]/(1+amount):values[field]*(1+amount);
+  }
+  values.criticalChance=Math.min(1,stats.criticalChance+(upgrades.critical||0));values.anomalyChance=Math.min(1,upgrades.anomaly||0);
   if(values.fusion&&level>=2)for(const link of stats.resonances||[]){
     const rank=Math.min(level-1,link.rank),weapons={...stats.weapons,[kind]:level};
-    const linked=link.items.filter(key=>RELICS[key]).map(key=>compatibleWeapons(key,weapons,stats.passives,stats.talents,character.id));
+    const linked=link.items.filter(key=>RELICS[key]).map(key=>compatibleWeapons(key,weapons,stats.passives,stats.talents,character.id,stats.weaponUpgrades));
     if(rank>(values.resonance?.rank||0)&&linked.every(ids=>ids.length)&&linked.some(ids=>ids.includes(kind)))values.resonance={...link,rank};
   }
   const rank=values.resonance?.rank||0,tempo=(1-rank*.15)*(stats.metaBuffs.haste||1);
@@ -96,7 +104,7 @@ export function weaponStats(kind,level,stats,character){
   for(const key of ['radius','contactRadius','range','chainRange','width','innerRadius','outerOffset','fieldRadius','splashRadius','blastRadius','shieldRadius'])if(values[key]!==undefined)values[key]=Math.round(values[key]*area);
   values.cooldown*=tempo;
   for(const key of ['hitInterval','fieldInterval','fireInterval'])if(values[key]!==undefined)values[key]*=stats.haste*tempo;
-  if(values.flightTime){values.flightSpeed=210*area;values.returnSpeed=290*area}
+  if(values.flightTime){values.flightSpeed=210*area*(1+(upgrades.area||0));values.returnSpeed=290*area*(1+(upgrades.area||0))}
   for(const key of ['duration','fieldDuration','slowDuration','freeze','poisonDuration','lifetime'])if(values[key]!==undefined)values[key]*=duration;
   if(values.count!==undefined)values.count+=stats.amount||0;
   if(values.fusion){
@@ -108,4 +116,11 @@ export function weaponStats(kind,level,stats,character){
   for(const key of Object.keys(values))if(key==='damage'||key.endsWith('Damage'))values[key]*=pact;
   if(tags.includes('summon')&&values.fireInterval)values.fireInterval*=stats.soulpact?.interval||1;
   return values;
+}
+
+export function refinementValue(stats,key,refinement,rarity){
+  const info=WEAPON_REFINEMENTS[refinement],tier=REFINEMENT_RARITIES[rarity];if(!info||!tier)return 0;
+  const value=info.values[tier.index],current=stats.weaponUpgrades?.[key]?.[refinement]||0;
+  const max=refinement==='critical'?1-stats.criticalChance:info.max??Infinity,remaining=Math.max(0,Number((max-current).toFixed(8)));
+  return info.flat&&remaining<value?0:Math.min(value,remaining);
 }

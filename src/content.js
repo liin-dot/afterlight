@@ -30,28 +30,28 @@ export const NEW_WEAPONS = {
 };
 
 export const RELICS = {
-  everseed:{name:'无尽薪种',color:'#e4cc82',max:3,relic:true,rarity:'rare',trigger:'学习天赋后，角色能力命中',families:['talent'],desc:'学会任一天赋后，灯火震荡、星火或风矢命中有 12% / 18% / 24% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2。本局累计无层数上限，共享冷却 4 秒；增加生命上限不治疗。',lore:'偶然拾到的微光，也能燃成无尽长夜。'},
+  everseed:{name:'无尽薪种',color:'#e4cc82',max:3,relic:true,rarity:'rare',trigger:'学习天赋后，角色能力命中',families:['talent'],desc:'学会任一天赋后，灯火震荡、星火或风矢每次命中有 3% / 4.5% / 6% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2。本局累计无层数上限，无触发冷却；增加生命上限不治疗。',lore:'偶然拾到的微光，也能燃成无尽长夜。'},
   soulpact:{name:'牧魂契',color:'#acd3da',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'灵魂与召唤武器',families:['spirit','summon'],desc:'强化灵魂与召唤武器的伤害，并加快石像的射击节奏。学习星群路线后，也强化角色伴星。',lore:'灯火有了守护灯火的人。'},
   hoarfrost:{name:'霜行石',color:'#b7dce2',max:3,relic:true,rarity:'uncommon',trigger:'主动冲刺',families:['dash'],desc:'冲刺起点爆发冰环，冻结并减速追兵；可为碎冰、雷霜反应提供寒冷状态。',lore:'踏过的地方，脚步仍留在冬天。'},
   rotclock:{name:'腐时沙漏',color:'#c6bd81',max:3,relic:true,rarity:'uncommon',trigger:'燃烧与侵蚀状态伤害',families:['fire','poison'],desc:'提高附着在敌人身上的燃烧与侵蚀伤害；地面火场、毒池的独立伤害不受影响。',lore:'流逝的不是沙，是尚未腐尽的时间。'},
-  bulwark:{name:'碎灯棱片',color:'#d1dbae',max:3,relic:true,rarity:'rare',trigger:'护盾被击破',families:['guard'],desc:'护盾归零时向外释放追踪棱片；补盾后可再次触发，有共享冷却。',lore:'每一片碎光，都记得来袭的方向。'},
+  bulwark:{name:'碎灯棱片',color:'#d1dbae',max:3,relic:true,rarity:'rare',trigger:'护盾被击破',families:['guard'],desc:'每次护盾被击破都向外释放追踪棱片；补盾后可再次触发，无独立冷却。',lore:'每一片碎光，都记得来袭的方向。'},
   forkseed:{name:'分岔骨钉',color:'#d7b6cf',max:3,relic:true,rarity:'rare',trigger:'武器暴击',families:['hit'],desc:'暴击时从目标位置分裂两枚追踪骨片，寻找其他敌人；骨片不暴击或再次分裂。',lore:'命运在骨缝间分出岔路。'},
   stormcoil:{name:'蓄雷瓶',color:'#c3b2e8',max:3,relic:true,rarity:'uncommon',trigger:'雷电武器命中',families:['lightning'],desc:'累计雷电武器直接命中，释放近身雷环并补充少量护盾；追加闪电不计数。',lore:'把七声远雷，藏成一道护身的光。'},
   frostbrand:{name:'寒髓针',color:'#a5d7e4',max:3,relic:true,rarity:'uncommon',trigger:'投射物、光束命中',families:['projectile','beam'],desc:'命中时施加短暂减速，让远程武器也能触发碎冰与冰雷联动。',lore:'把冬天藏在针尖。'},
-  venomfang:{name:'蚀骨针',color:'#bad37b',max:3,relic:true,rarity:'uncommon',trigger:'刃器、投射物命中',families:['melee','projectile'],desc:'命中附加侵蚀，可与孢子囊、沸血瓶联动。',lore:'一滴绿意，侵入白骨。'},
-  volatile:{name:'沸血瓶',color:'#dcaa79',max:3,relic:true,rarity:'rare',trigger:'命中同时燃烧、侵蚀的敌人',families:['fire','poison'],desc:'消耗目标身上的燃烧与侵蚀，造成范围炼金爆炸；有共享冷却。',lore:'两种灾厄在瓶中握手。'},
+  venomfang:{name:'蚀骨针',color:'#bad37b',max:3,relic:true,rarity:'uncommon',trigger:'刃器、投射物命中',families:['melee','projectile'],desc:'每次命中立即造成额外侵蚀伤害，并附加持续侵蚀，可与孢子囊、沸血瓶联动。',lore:'一滴绿意，侵入白骨。'},
+  volatile:{name:'沸血瓶',color:'#dcaa79',max:3,relic:true,rarity:'rare',trigger:'命中同时燃烧、侵蚀的敌人',families:['fire','poison'],desc:'每次命中同时燃烧、侵蚀的目标，消耗两种状态并造成范围炼金爆炸，无独立冷却。',lore:'两种灾厄在瓶中握手。'},
   stormseal:{name:'雷霜符',color:'#b6cef1',max:3,relic:true,rarity:'rare',trigger:'雷电命中减速或冻结的敌人',families:['lightning'],desc:'冰雷反应传导额外闪电，并短暂冻结首个目标。',lore:'雷声响起时，雪花停止坠落。'},
   executioner:{name:'断头徽',color:'#dab193',max:3,relic:true,catalyst:true,rarity:'rare',trigger:'武器命中低生命敌人',families:['hit'],desc:'对生命不高于 30% 的敌人增加武器伤害；首领加成减半。',lore:'不承诺胜利，只终结挣扎。'},
   deadeye:{name:'猎魂目',color:'#d0b2da',max:3,relic:true,rarity:'uncommon',trigger:'武器暴击',families:['hit'],desc:'暴击标记目标，短时间内受到更多伤害；重复暴击刷新标记，不叠层。',lore:'看见每一道裂隙。'},
-  aegis:{name:'灯塔护符',color:'#c1d6ad',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'连续避伤',families:['guard'],desc:'连续数秒未受攻击后补充护盾；护盾先承受伤害，不可无限叠加。',lore:'灯光照向尚未到来的伤口。'},
-  thorns:{name:'铁棘印',color:'#c4b99d',max:3,relic:true,trigger:'受到攻击',families:['guard'],desc:'受到攻击时向周围反击；护甲提高反击伤害，有独立冷却。',lore:'盔甲上的每一道旧伤，都朝外生长。'},
+  aegis:{name:'灯塔护符',color:'#c1d6ad',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'武器直接命中',families:['guard'],desc:'每次武器直接命中补充少量护盾，最多储存规定上限；无独立冷却。',lore:'灯光照向尚未到来的伤口。'},
+  thorns:{name:'铁棘印',color:'#c4b99d',max:3,relic:true,trigger:'受到攻击',families:['guard'],desc:'每次受到攻击都向周围反击；护甲提高反击伤害，无独立冷却。',lore:'盔甲上的每一道旧伤，都朝外生长。'},
   dashfire:{name:'踏火灰',color:'#e5ac72',max:3,relic:true,trigger:'主动冲刺',families:['dash'],desc:'冲刺起点留下燃烧区域，诱导追兵进入火场。',lore:'将退路点成火。'},
   harvest:{name:'拾穗烛',color:'#d3d99d',max:3,relic:true,rarity:'uncommon',trigger:'拾取经验',families:['pickup'],desc:'累计拾取一定基础经验后释放追踪魂火；经验合并不会减少充能。',lore:'每一缕遗光，都愿再守你一程。'},
   embercore:{name:'不熄燃芯',color:'#e5a16a',max:3,relic:true,catalyst:true,trigger:'刃器、投射物命中',families:['melee','projectile'],desc:'刃器或投射物命中点燃敌人，灼烧持续 2 秒。',lore:'灰烬中仍在跳动的火。'},
-  conductor:{name:'引雷针',color:'#c4b2e9',max:3,relic:true,catalyst:true,trigger:'投射物、光束命中',families:['projectile','beam'],desc:'命中后向附近其他敌人传导闪电，有独立触发冷却。',lore:'将远方的雷声缝入武器。'},
-  rime:{name:'霜纹镜',color:'#aee1e1',max:3,relic:true,catalyst:true,trigger:'攻击减速或冻结的敌人',families:['cold'],desc:'攻击寒冷敌人触发范围碎冰，有独立触发冷却。',lore:'镜中封着一场尚未落下的雪。'},
+  conductor:{name:'引雷针',color:'#c4b2e9',max:3,relic:true,catalyst:true,trigger:'投射物、光束命中',families:['projectile','beam'],desc:'每次命中都向附近其他敌人传导闪电，无独立触发冷却。',lore:'将远方的雷声缝入武器。'},
+  rime:{name:'霜纹镜',color:'#aee1e1',max:3,relic:true,catalyst:true,trigger:'攻击减速或冻结的敌人',families:['cold'],desc:'每次攻击寒冷敌人都触发小范围碎冰，无独立触发冷却。',lore:'镜中封着一场尚未落下的雪。'},
   spore:{name:'孢子囊',color:'#b4c978',max:3,relic:true,catalyst:true,trigger:'击败被侵蚀的敌人',families:['poison'],desc:'侵蚀中的敌人死亡时释放毒爆，并向附近敌人传播侵蚀。',lore:'每一场凋零，都是新的播种。'},
-  siphon:{name:'血契牙',color:'#d99498',max:3,relic:true,catalyst:true,trigger:'刃器命中',families:['melee'],desc:'刃器命中时汲取生命，有独立触发冷却。',lore:'用敌人的生命偿还长夜。'},
+  siphon:{name:'血契牙',color:'#d99498',max:3,relic:true,catalyst:true,trigger:'刃器命中',families:['melee'],desc:'每次刃器命中都汲取少量生命，无独立触发冷却。',lore:'用敌人的生命偿还长夜。'},
   echo:{name:'回声铃',color:'#d4c190',max:3,relic:true,trigger:'主动施放武器',families:['cast'],desc:'每施放三次武器，在身边释放一次额外震波。环绕接触不计数。',lore:'第三声，来自你身后的黑暗。'},
   lens:{name:'裂光透镜',color:'#d9bada',max:3,relic:true,catalyst:true,trigger:'发射投射物',families:['projectile'],desc:'每轮投射物追加一枚折射弹，追踪敌人并造成原弹部分伤害。',lore:'一道光，照出另一条道路。'},
   cinder:{name:'死火余烬',color:'#d9a377',max:3,relic:true,trigger:'击败燃烧的敌人',families:['fire'],desc:'燃烧中的敌人死亡时引发爆燃，对周围敌人造成范围伤害。',lore:'熄灭前，最后一次盛放。'},
@@ -68,6 +68,27 @@ export const WEAPON_FAMILIES = {
   eclipse:['melee','projectile','cast'], requiem:['spirit','projectile','cast'], plague:['poison','projectile','cast'],
   bloodmoon:['melee','projectile','cast'], tempest:['beam','lightning','cast'], absolute:['cold','cast'],
 };
+
+export const REFINEMENT_RARITIES={
+  white:{name:'白 · 普通',color:'#e3e4db',weight:60,index:0},green:{name:'绿 · 精良',color:'#91d4a0',weight:28,index:1},
+  purple:{name:'紫 · 稀有',color:'#c5a1ed',weight:10,index:2},gold:{name:'黄 · 传说',color:'#f0ce72',weight:2,index:3},
+};
+export const WEAPON_REFINEMENTS={
+  damage:{name:'锋芒',label:'伤害',values:[.04,.07,.11,.16],fields:['damage']},
+  area:{name:'扩域',label:'范围',values:[.03,.05,.08,.12],max:1,fields:['radius','contactRadius','range','chainRange','width','innerRadius','outerOffset','fieldRadius','splashRadius','blastRadius','shieldRadius']},
+  haste:{name:'疾奏',label:'攻击频率',values:[.03,.05,.08,.12],max:1,fields:['cooldown','hitInterval','fieldInterval','fireInterval']},
+  duration:{name:'长明',label:'领域 / 召唤持续',values:[.04,.07,.11,.16],max:1,tags:['fire','poison','cold','spirit','summon','blast'],fields:['duration','fieldDuration','poisonDuration','lifetime']},
+  amount:{name:'多重',label:'弹道 / 数量',values:[0,0,1,2],max:4,fields:['count'],flat:true},
+  pierce:{name:'穿行',label:'穿透 / 弹跳目标',values:[0,0,1,2],max:4,tags:['projectile'],fields:['pierce','bounces'],flat:true},
+  critical:{name:'锐刃',label:'暴击率',values:[.01,.02,.03,.05],max:1,tags:['melee'],points:true},
+  affliction:{name:'余灾',label:'灼烧 / 侵蚀 / 领域伤害',values:[.06,.10,.16,.24],tags:['fire','poison'],fields:['burnDamage','poisonDamage','fieldDamage']},
+  control:{name:'缚影',label:'减速 / 普通冻结 / 牵引',values:[.04,.07,.11,.16],max:1,tags:['cold','spirit'],fields:['slowDuration','freeze','pull','pullSpeed']},
+  anomaly:{name:'异变',label:'异常触发率',values:[.03,.05,.08,.12],max:1,tags:['fire','cold','poison','lightning'],points:true},
+};
+export const refinementGain=(key,value)=>WEAPON_REFINEMENTS[key].label+' +'+Number((value*(WEAPON_REFINEMENTS[key].flat?1:100)).toFixed(2))+(WEAPON_REFINEMENTS[key].flat?'':WEAPON_REFINEMENTS[key].points?' 个百分点':'%');
+export function weaponAnomalyText(key){
+  return (WEAPON_FAMILIES[key]||[]).map(tag=>({fire:'点燃 2 秒，每 0.5 秒造成命中伤害的 15%',poison:'侵蚀 3 秒，每秒造成命中伤害的 30%',cold:'深冻，本次武器冻结时长 +25%',lightning:'感电 3 秒，易伤 +15%'}[tag])).filter(Boolean).join('；');
+}
 
 // Build tags describe player intent; combat families above still control actual triggers.
 export const BUILD_TAGS={
@@ -115,82 +136,82 @@ export const SYNERGIES=[
 export function relicValues(key,level,stats) {
   const damage=base=>base*(stats?.damageMultiplier||1);
   switch(key) {
-    case 'everseed': return {chance:.06+level*.06,cooldown:4};
+    case 'everseed': return {chance:.015+level*.015};
     case 'soulpact': return {multiplier:1+level*.18,interval:1-level*.06};
     case 'hoarfrost': return {damage:damage(15+level*13),radius:65+level*9,freeze:.4+level*.2,bossFreeze:.15,slowDuration:2+level*.4};
     case 'rotclock': return {multiplier:1+level*.25};
-    case 'bulwark': return {damage:damage(16+level*12),count:3+level,cooldown:4};
-    case 'forkseed': return {damage:damage(10+level*12),count:2,cooldown:1.5-level*.15};
-    case 'stormcoil': return {damage:damage(25+level*20),radius:72+level*8,shield:3+level*2,hits:7,cooldown:2.5};
+    case 'bulwark': return {damage:damage(5+level*5),count:3+level};
+    case 'forkseed': return {damage:damage(5+level*5),count:2};
+    case 'stormcoil': return {damage:damage(12+level*10),radius:72+level*8,shield:1+level,hits:7};
     case 'frostbrand': return {duration:.5+level*.3};
-    case 'venomfang': return {damage:damage(3+level*4),duration:3};
-    case 'volatile': return {damage:damage(35+level*30),radius:42+level*7,cooldown:2.2-level*.2};
-    case 'stormseal': return {damage:damage(20+level*18),count:level+1,range:135,freeze:.3+level*.15,cooldown:2};
+    case 'venomfang': return {damage:damage(3+level*4),hitDamage:damage(3+level*2),duration:3};
+    case 'volatile': return {damage:damage(18+level*12),radius:42+level*7};
+    case 'stormseal': return {damage:damage(10+level*8),count:level+1,range:135,freeze:.12+level*.08,bossFreeze:.1};
     case 'executioner': return {multiplier:1+level*.2,threshold:.3};
     case 'deadeye': return {multiplier:1+level*.08,duration:3};
-    case 'aegis': return {shield:8+level*5,cooldown:8-level};
-    case 'thorns': return {damage:damage(18+level*18+(stats?.armor||0)*4),radius:65+level*8,cooldown:2};
+    case 'aegis': return {shield:8+level*5,gain:level*.15};
+    case 'thorns': return {damage:damage(6+level*6+(stats?.armor||0)*2),radius:65+level*8};
     case 'dashfire': return {damage:damage(6+level*7),radius:35+level*6,duration:2+level*.5};
     case 'harvest': return {damage:damage(18+level*14),count:level+1,charge:60};
     case 'embercore': return {damage:damage(3+level*2),duration:2,interval:.5};
-    case 'conductor': return {damage:damage(18+level*12),count:level+1,range:130,cooldown:1.8-level*.2};
-    case 'rime': return {damage:damage(22+level*16),radius:38+level*8,cooldown:1.6};
-    case 'spore': return {damage:damage(15+level*12),radius:42+level*8,poisonDamage:damage(7+level*5),duration:3,cooldown:.65};
-    case 'siphon': return {heal:level,cooldown:1.8-level*.2};
-    case 'echo': return {damage:damage(20+level*18),radius:65+level*14,casts:3,cooldown:1};
+    case 'conductor': return {damage:damage(12+level*6),count:level+1,range:130};
+    case 'rime': return {damage:damage(3+level*2),radius:24+level*6};
+    case 'spore': return {damage:damage(8+level*6),radius:42+level*8,poisonDamage:damage(4+level*3),duration:3};
+    case 'siphon': return {heal:level*.12};
+    case 'echo': return {damage:damage(10+level*9),radius:65+level*14,casts:3};
     case 'lens': return {multiplier:.3+level*.15};
-    case 'cinder': return {damage:damage(22+level*18),radius:40+level*10,cooldown:.65};
+    case 'cinder': return {damage:damage(10+level*8),radius:40+level*10};
   }
 }
 
 export function relicDescription(key,level,stats) {
   const v=relicValues(key,level,stats),d=n=>Math.round(n),s=n=>Number(n.toFixed(2));
   switch(key) {
-    case 'everseed': return '学会任一天赋后，灯火震荡、星火或风矢命中有 '+d(v.chance*100)+'% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2；本局累计无层数上限，共享冷却 '+v.cooldown+' 秒。增加生命上限不治疗，离局清空。';
+    case 'everseed': return '学会天赋后，灯火震荡／星火／风矢命中：'+s(v.chance*100)+'% 随机获得伤害 +1%、范围 +1% 或生命上限 +2；本局无限累加、无冷却，加生命不治疗。';
     case 'soulpact': return '灵魂、召唤武器伤害 +'+d((v.multiplier-1)*100)+'%；石像与灵龛射击间隔缩短 '+d((1-v.interval)*100)+'%。学习星群路线后，伴星继承上述两项加成。';
     case 'hoarfrost': return '冲刺起点爆发半径 '+v.radius+' 冰环，造成 '+d(v.damage)+' 伤害；冻结普通敌人 '+s(v.freeze)+' 秒、首领 '+v.bossFreeze+' 秒，再减速 55% 持续 '+s(v.slowDuration)+' 秒。';
     case 'rotclock': return '附着燃烧、侵蚀的每次状态伤害 +'+d((v.multiplier-1)*100)+'%；地面火场与毒池伤害不变。';
-    case 'bulwark': return '护盾被击破时释放 '+v.count+' 枚追踪棱片，各造成 '+d(v.damage)+' 伤害；冷却 '+v.cooldown+' 秒。棱片不暴击或触发命中遗物。';
-    case 'forkseed': return '武器暴击从目标位置分裂 '+v.count+' 枚追踪骨片，寻找其他敌人，各造成 '+d(v.damage)+' 伤害；冷却 '+s(v.cooldown)+' 秒。骨片不暴击、不触发命中遗物。';
-    case 'stormcoil': return '累计 '+v.hits+' 次雷电武器直接命中，释放半径 '+v.radius+' 雷环，造成 '+d(v.damage)+' 伤害并将护盾补至 '+v.shield+'；最短间隔 '+v.cooldown+' 秒，追加闪电不计数。';
+    case 'bulwark': return '每次护盾被击破都释放 '+v.count+' 枚追踪棱片，各造成 '+d(v.damage)+' 伤害，无独立冷却。棱片不暴击或触发命中遗物。';
+    case 'forkseed': return '每次武器暴击都分裂 '+v.count+' 枚追踪骨片，寻找其他敌人，各造成 '+d(v.damage)+' 伤害，无独立冷却。骨片不暴击、不触发命中遗物。';
+    case 'stormcoil': return '每累计 '+v.hits+' 次雷电武器直接命中，释放半径 '+v.radius+' 雷环，造成 '+d(v.damage)+' 伤害并将护盾补至 '+v.shield+'；无独立冷却，追加闪电不计数。';
     case 'frostbrand': return '投射物或光束命中减速 55%，持续 '+s(v.duration)+' 秒；可触发霜纹镜。';
-    case 'venomfang': return '刃器或投射物附加 '+v.duration+' 秒侵蚀，每秒 '+d(v.damage)+' 伤害；重复施加刷新，不叠层。';
-    case 'volatile': return '武器命中同时燃烧、侵蚀的敌人，消耗两种状态，造成半径 '+v.radius+'、'+d(v.damage)+' 伤害的炼金爆炸；冷却 '+s(v.cooldown)+' 秒。';
-    case 'stormseal': return '雷电命中寒冷敌人，传导 '+v.count+' 个目标，各 '+d(v.damage)+' 伤害，首个目标冻结 '+s(v.freeze)+' 秒（首领 0.2 秒）；冷却 2 秒。';
+    case 'venomfang': return '刃器／投射物每次命中：'+d(v.hitDamage)+' 侵蚀伤害，另附 '+v.duration+' 秒侵蚀，每秒 '+d(v.damage)+' 伤害；重复命中仍触发即时伤害，持续侵蚀刷新、不叠加。';
+    case 'volatile': return '每次武器命中同时燃烧、侵蚀的敌人，消耗两种状态，造成半径 '+v.radius+'、'+d(v.damage)+' 伤害的炼金爆炸；无独立冷却。';
+    case 'stormseal': return '每次雷电命中寒冷敌人，传导 '+v.count+' 个目标，各 '+d(v.damage)+' 伤害，首个目标冻结 '+s(v.freeze)+' 秒（首领 '+v.bossFreeze+' 秒）；无独立冷却。';
     case 'executioner': return '武器对生命不高于 30% 的敌人伤害 +'+d((v.multiplier-1)*100)+'%；首领加成减半；持续状态伤害不触发。';
     case 'deadeye': return '武器暴击后标记 '+v.duration+' 秒，目标受到伤害 +'+d((v.multiplier-1)*100)+'%；刷新不叠加。';
-    case 'aegis': return '连续 '+v.cooldown+' 秒未受攻击，护盾补至 '+v.shield+' 点；再次充能需等待相同时间，不与其他护盾相加。';
-    case 'thorns': return '受到攻击时在半径 '+v.radius+' 内反击 '+d(v.damage)+' 伤害（已计护甲）；冷却 2 秒。';
+    case 'aegis': return '每次武器直接命中补充 '+s(v.gain)+' 护盾，最多存至 '+v.shield+' 点；无独立冷却，不能提高已有的更高护盾。';
+    case 'thorns': return '每次受到攻击，都在半径 '+v.radius+' 内反击 '+d(v.damage)+' 伤害（已计护甲）；无独立冷却。';
     case 'dashfire': return '冲刺起点留下半径 '+v.radius+' 火场，持续 '+s(v.duration)+' 秒，每 0.5 秒造成 '+d(v.damage)+' 伤害并点燃。';
     case 'harvest': return '累计拾取 '+v.charge+' 基础经验释放 '+v.count+' 枚追踪魂火，各造成 '+d(v.damage)+' 伤害；合并结晶按完整经验充能。';
     case 'embercore': return '刃器或投射物命中点燃 2 秒，每 0.5 秒造成 '+d(v.damage)+' 灼烧伤害；重复命中刷新持续时间。';
-    case 'conductor': return '投射物或光束命中，向 '+v.count+' 个其他目标传导各 '+d(v.damage)+' 伤害；触发冷却 '+s(v.cooldown)+' 秒。';
-    case 'rime': return '攻击减速或冻结的敌人，触发半径 '+v.radius+' 的碎冰，造成 '+d(v.damage)+' 伤害；冷却 1.6 秒。';
-    case 'spore': return '被侵蚀的敌人死亡时，在半径 '+v.radius+' 内造成 '+d(v.damage)+' 毒爆伤害，并传播持续 3 秒、每秒 '+d(v.poisonDamage)+' 伤害的侵蚀；触发冷却 '+s(v.cooldown)+' 秒。';
-    case 'siphon': return '刃器命中恢复 '+v.heal+' 点生命；触发冷却 '+s(v.cooldown)+' 秒。';
-    case 'echo': return '每施放 '+v.casts+' 次武器产生半径 '+v.radius+' 的回声，造成 '+d(v.damage)+' 伤害；最短间隔 '+s(v.cooldown)+' 秒。环绕接触不计数。';
+    case 'conductor': return '每次投射物或光束命中，都向 '+v.count+' 个其他目标传导各 '+d(v.damage)+' 伤害；无独立冷却，追加闪电不递归触发。';
+    case 'rime': return '每次攻击减速或冻结的敌人，都触发半径 '+v.radius+' 的碎冰，造成 '+d(v.damage)+' 伤害；无独立冷却。';
+    case 'spore': return '每个被侵蚀的敌人死亡时，都在半径 '+v.radius+' 内造成 '+d(v.damage)+' 毒爆伤害，并传播持续 3 秒、每秒 '+d(v.poisonDamage)+' 伤害的侵蚀；无独立冷却。';
+    case 'siphon': return '每次刃器命中都恢复 '+s(v.heal)+' 点生命，无独立冷却；不超过最大生命。';
+    case 'echo': return '每施放 '+v.casts+' 次武器产生半径 '+v.radius+' 的回声，造成 '+d(v.damage)+' 伤害；无独立冷却，环绕接触不计数。';
     case 'lens': return '每轮投射物追加一枚追踪折射弹，伤害为该轮单枚投射物的 '+d(v.multiplier*100)+'%；附加弹不重复折射。';
-    case 'cinder': return '燃烧中的敌人死亡时，在半径 '+v.radius+' 内引发 '+d(v.damage)+' 伤害的爆燃；触发冷却 '+s(v.cooldown)+' 秒。';
+    case 'cinder': return '每个燃烧中的敌人死亡时，都在半径 '+v.radius+' 内引发 '+d(v.damage)+' 伤害的爆燃；无独立冷却。';
   }
 }
 
-// Run-only altar bargains: modifiers compose with equipment, never consume an equipment slot.
+// Run-only altar bargains: gains affect the hero; costs add enemy pressure.
 export const ALTAR_BOONS={
-  horizon:{name:'裂界星图',icon:'area',positive:'范围 +45%',negative:'攻击间隔 +12%',multiply:{areaMultiplier:1.45,haste:1.12}},
-  frenzy:{name:'疾鸣沙漏',icon:'haste',positive:'攻击频率 +35%',negative:'伤害 −12%',multiply:{haste:1/1.35,damageMultiplier:.88}},
-  glass:{name:'碎命烛冠',icon:'curse',positive:'伤害 +40%',negative:'最大生命 −15%',multiply:{damageMultiplier:1.4,maxHp:.85}},
-  stride:{name:'逐风契约',icon:'speed',positive:'移速 +25%，冲刺冷却 −20%',negative:'受到伤害 +12%',multiply:{moveSpeed:1.25,dashCooldown:.8,damageTakenMultiplier:1.12}},
-  winter:{name:'长夜寒誓',icon:'duration',positive:'持续时间 +55%，范围 +15%',negative:'移速 −10%',multiply:{durationMultiplier:1.55,areaMultiplier:1.15,moveSpeed:.9}},
-  twins:{name:'破碎双生',icon:'amount',positive:'投射物、环绕物与落雷目标 +2',negative:'伤害 −15%',add:{amount:2},multiply:{damageMultiplier:.85}},
-  harvest:{name:'饥渴灵冠',icon:'growth',positive:'经验 +35%，拾取范围 +60%',negative:'伤害 −10%',multiply:{xpMultiplier:1.35,pickupRadius:1.6,damageMultiplier:.9}},
-  fortress:{name:'负山灯壁',icon:'armor',positive:'最大生命 +30%，护甲 +3',negative:'移速 −10%',add:{armor:3},multiply:{maxHp:1.3,moveSpeed:.9}},
-  precision:{name:'孤注猎瞳',icon:'focus',positive:'暴击率 +20 个百分点，暴击倍率 +0.5',negative:'范围 −15%',add:{criticalChance:.2,criticalMultiplier:.5},multiply:{areaMultiplier:.85}},
-  renewal:{name:'回生苔心',icon:'regen',positive:'每秒恢复 0.8 生命',negative:'经验获取 −10%',add:{regeneration:.8},multiply:{xpMultiplier:.9}},
-  pilgrim:{name:'灰烬行者',icon:'dashfire',positive:'冲刺冷却 −40%，冲刺保护 +0.12 秒',negative:'最大生命 −10%',add:{dashInvincibility:.12},multiply:{dashCooldown:.6,maxHp:.9}},
-  souls:{name:'群魂共鸣',icon:'soulpact',positive:'灵魂、召唤武器与伴星伤害 +45%',negative:'移速 −8%',multiply:{summonMultiplier:1.45,moveSpeed:.92}},
+  horizon:{name:'裂界星图',icon:'area',positive:'范围 +45%',negative:'普通刷怪与怪潮数量 +50%',multiply:{areaMultiplier:1.45},difficulty:{population:.5}},
+  frenzy:{name:'疾鸣沙漏',icon:'haste',positive:'攻击频率 +35%',negative:'随机精英出现概率 +50%',multiply:{haste:1/1.35},difficulty:{elite:.5}},
+  glass:{name:'碎命烛冠',icon:'curse',positive:'伤害 +40%',negative:'后续每波首领数量 +1',multiply:{damageMultiplier:1.4},difficulty:{bosses:1}},
+  stride:{name:'逐风契约',icon:'speed',positive:'移速 +25%，冲刺冷却 −20%',negative:'怪物移动速度 +12%',multiply:{moveSpeed:1.25,dashCooldown:.8},difficulty:{speed:.12}},
+  winter:{name:'长夜寒誓',icon:'duration',positive:'持续时间 +55%，范围 +15%',negative:'怪物与首领生命 +25%',multiply:{durationMultiplier:1.55,areaMultiplier:1.15},difficulty:{hp:.25}},
+  twins:{name:'破碎双生',icon:'amount',positive:'投射物、环绕物与落雷目标 +2',negative:'后续每波首领数量 +1',add:{amount:2},difficulty:{bosses:1}},
+  harvest:{name:'饥渴灵冠',icon:'growth',positive:'经验 +35%，拾取范围 +60%',negative:'普通刷怪与怪潮数量 +50%',multiply:{xpMultiplier:1.35,pickupRadius:1.6},difficulty:{population:.5}},
+  fortress:{name:'负山灯壁',icon:'armor',positive:'最大生命 +30%，护甲 +3',negative:'怪物与首领伤害 +20%',add:{armor:3},multiply:{maxHp:1.3},difficulty:{damage:.2}},
+  precision:{name:'孤注猎瞳',icon:'focus',positive:'暴击率 +20 个百分点，暴击倍率 +0.5',negative:'随机精英出现概率 +50%',add:{criticalChance:.2,criticalMultiplier:.5},difficulty:{elite:.5}},
+  renewal:{name:'回生苔心',icon:'regen',positive:'每秒恢复 0.8 生命',negative:'怪物与首领生命 +25%',add:{regeneration:.8},difficulty:{hp:.25}},
+  pilgrim:{name:'灰烬行者',icon:'dashfire',positive:'冲刺冷却 −40%，冲刺保护 +0.12 秒',negative:'怪物移动速度 +12%',add:{dashInvincibility:.12},multiply:{dashCooldown:.6},difficulty:{speed:.12}},
+  souls:{name:'群魂共鸣',icon:'soulpact',positive:'灵魂、召唤武器与伴星伤害 +45%',negative:'怪物与首领伤害 +20%',multiply:{summonMultiplier:1.45},difficulty:{damage:.2}},
 };
 
-export function compatibleWeapons(key,weapons,passives={},talents={},characterId=null) {
+export function compatibleWeapons(key,weapons,passives={},talents={},characterId=null,weaponUpgrades={}) {
   if(key==='everseed')return Object.keys(talents).length?Object.keys(weapons):[];
   const families=RELICS[key]?.families||[];
   const tags=Object.keys(weapons).flatMap(id=>WEAPON_FAMILIES[id]||[]);
@@ -199,7 +220,8 @@ export function compatibleWeapons(key,weapons,passives={},talents={},characterId
   const poison=tags.includes('poison')||enabled('venomfang');
   const cold=tags.includes('cold')||!!weapons.tether||!!weapons.soulchain||enabled('frostbrand')||!!talents.s_frost1||!!passives.hoarfrost;
   if(key==='bulwark'&&!passives.aegis&&!weapons.bastion&&!talents.s_scholar2&&characterId!=='warden'&&!(passives.stormcoil&&tags.includes('lightning')))return [];
-  if(key==='rotclock'&&!poison&&!enabled('embercore')&&!talents.w_flame2)return [];
+  const refinedBurn=Object.keys(weapons).some(id=>weaponUpgrades[id]?.anomaly>0&&WEAPON_FAMILIES[id]?.includes('fire'));
+  if(key==='rotclock'&&!poison&&!enabled('embercore')&&!talents.w_flame2&&!refinedBurn)return [];
   if(key==='volatile'&&!(fire&&poison)||key==='stormseal'&&!cold)return [];
   return Object.keys(weapons).filter(id=>{
     const tags=WEAPON_FAMILIES[id]||[];

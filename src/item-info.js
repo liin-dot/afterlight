@@ -63,10 +63,11 @@ export function weaponFacts(kind, values) {
     if((kind==='tether'||kind==='soulchain')&&v.blastDamage)facts.push(['延迟震爆',damage(v.blastDamage)],['震爆半径',v.blastRadius+' 像素']);
     if(['lance','execution'].includes(kind))facts.push(['枪芒长度',v.range+' 像素'],['枪芒宽度',v.width*2+' 像素'],['每轮突刺',v.strikes+' 次']);
     if(kind==='execution')facts.push(['处决阈值',percent(v.threshold)+' 生命以下'],['处决增伤',percent(v.executeMultiplier-1)+' · 首领减半']);
+    facts.push(['直接命中暴击率',percent(v.criticalChance)],['异常触发率',percent(v.anomalyChance)]);
     return facts;
   }
 
 
 export function weaponExtra(key,v,stats,character){
- return key==='bolt'&&v.homing?' 进化后弩矢会追踪敌人。':key==='orbit'&&v.evolved?' 两组游魂沿内外双环反向旋转。':key==='flame'&&v.evolved?' 飞行中每 0.2 秒留下半径 '+number(20*stats.areaMultiplier)+' 像素的火路，持续 '+seconds(1.4*stats.durationMultiplier)+'，每 '+seconds(weaponStats('flame',3,stats,character).hitInterval)+'造成 '+damage(weaponStats('flame',3,stats,character).burnDamage)+' 伤害。':'';
+ return key==='bolt'&&v.homing?' 进化后弩矢会追踪敌人。':key==='orbit'&&v.evolved?' 两组游魂沿内外双环反向旋转。':key==='flame'&&v.evolved?' 飞行中每 0.2 秒留下半径 '+number(20*stats.areaMultiplier*(1+(stats.weaponUpgrades?.flame?.area||0)))+' 像素的火路，持续 '+seconds(1.4*stats.durationMultiplier*(1+(stats.weaponUpgrades?.flame?.duration||0)))+'，每 '+seconds(weaponStats('flame',3,stats,character).hitInterval)+'造成 '+damage(weaponStats('flame',3,stats,character).burnDamage)+' 伤害。':'';
 }

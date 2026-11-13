@@ -4,11 +4,11 @@ import {poisonEnemy,chainLightning,onWeaponCast} from './relic-combat.js';
 
 const KINDS=new Set(['crescent','thorn','bell','prism','eclipse','requiem','plague','bloodmoon','tempest','absolute','shard','meteor','mine','tether','sentinel','lance','starfall','bastion','wintermine','soulchain','ricochet','execution','supernova','stormsentry','pestilence','hailfire','soulforge']);
 const nearby=(game,x,y,r)=>game.grid.near(x,y,r+30).filter(e=>!e.dead&&Math.hypot(e.x-x,e.y-y)<r+e.r);
-function wave(game,kind,x,y,r,damage,freeze=0,bossFreeze=0) {
+function wave(game,kind,x,y,r,damage,freeze=0,bossFreeze=0,slowDuration=3.2) {
   const color=WEAPONS[kind].color;
   game.effects.push({type:kind==='absolute'?'frost':'pulse',x,y:y-8,r,color,t:.55,max:.55});
   for(const e of nearby(game,x,y,r)) {
-    if(freeze){e.freeze=Math.max(e.freeze,e.boss?bossFreeze:freeze);e.slow=Math.max(e.slow,3.2)}
+    if(freeze){e.freeze=Math.max(e.freeze,e.boss?bossFreeze:freeze);e.slow=Math.max(e.slow,slowDuration)}
     game.hit(e,damage,x,y,95,true,kind);
   }
   game.burst(x,y-8,16,color,90);
@@ -124,7 +124,7 @@ export function updateExpandedWeapon(game,kind,v,dt) {
     game.sound.play('shoot');
   }
   if(kind==='absolute') {
-    wave(game,kind,p.x,p.y,v.radius,v.damage,v.freeze,v.bossFreeze);
+    wave(game,kind,p.x,p.y,v.radius,v.damage,v.freeze,v.bossFreeze,v.slowDuration);
     game.zones.push({kind:'echoWave',source:kind,x:p.x,y:p.y,r:v.radius+12,t:v.echoDelay,max:v.echoDelay,damage:v.blastDamage});
     game.sound.play('frost');
   }

@@ -2,7 +2,7 @@ import {paintAvatar, paintIcon} from './art.js';
 import {WEAPONS, PASSIVES, META, META_TREES, startingLoadout, formatTime,catalogItem} from './data.js';
 import {characterStats, weaponStats} from './stats.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData} from './fusions.js';
-import {relicDescription,compatibleWeapons,SYNERGIES,ALTAR_BOONS} from './content.js';
+import {relicDescription,compatibleWeapons,SYNERGIES,ALTAR_BOONS,refinementGain,weaponAnomalyText} from './content.js';
 import {passiveEffect,weaponFacts,resonanceText} from './item-info.js';
 import {ItemCatalog,itemArt,effectText} from './catalog.js';
 import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,characterTalentSummary} from './talents.js';
@@ -68,7 +68,7 @@ export class CharacterSheet {
   }
 
   open({tab = 'attributes', weapon = null} = {}) {
-    if (this.visible || !['menu', 'running', 'paused', 'level', 'reward', 'over'].includes(this.game.state)) return false;
+    if (this.visible || !['menu', 'running', 'paused', 'level', 'reward', 'talent', 'over'].includes(this.game.state)) return false;
     const modal = document.querySelector('.modal-wrap:not(.hidden)');
     if (modal && !['pause-screen', 'level-screen', 'reward-screen', 'end-screen'].includes(modal.id)) return false;
     this.origin = this.game.state;
@@ -103,15 +103,16 @@ export class CharacterSheet {
     this.visible = false;
     $('status-screen').classList.add('hidden');
     for (const [element, wasInert] of this.inertStates) element.inert = wasInert;
-    this.game.state = this.origin;
+    this.game.state = this.origin==='talent'?'running':this.origin;
     this.game.statusReturn = null;
     this.game.keys.clear();
     this.game.stick = {x: 0, y: 0};
     if (this.previousModal) this.previousModal.classList.remove('hidden');
-    if (this.origin === 'running') document.activeElement?.blur();
+    if (['running','talent'].includes(this.origin)) document.activeElement?.blur();
     else if (this.previousFocus?.isConnected && !this.previousFocus.closest('.hidden')) this.previousFocus.focus({preventScroll: true});
     this.sound.play('select');
     put('announcer', this.origin === 'running' ? '已关闭角色状态，继续守夜。' : '已返回原界面。');
+    if(this.origin==='talent')this.game.presentLevelChoices();
   }
 
   selectTab(tab) {
@@ -126,7 +127,7 @@ export class CharacterSheet {
     $('sheet-scroll').scrollTop = 0;
     $('status-screen').classList.toggle('collection-mode',['items','fusion','catalog'].includes(this.tab));
     $('status-screen').classList.toggle('talent-mode',this.tab==='talents');
-    put('sheet-title',({catalog:'道具图鉴',items:this.origin==='menu'?'装备预览':'本局装备',fusion:'融合图谱',talents:'角色天赋'})[this.tab]||'角色状态');
+    put('sheet-title',({catalog:'道具图鉴',items:this.origin==='menu'?'装备预览':'本局装备',fusion:'融合图谱',talents:this.origin==='talent'?'选择天赋':'角色天赋'})[this.tab]||'角色状态');
   }
 
   mobilePages(root, label, entries) {
@@ -163,7 +164,7 @@ export class CharacterSheet {
 
   renderCollection(tab) {
     const root=$('sheet-'+tab),cards=[...root.querySelector('.collection-cards').children];
-    const restore=root.querySelector('.detail-bubble').matches(':popover-open')?root.dataset.selected:null;this.hideCollection(tab);
+    const bubble=root.querySelector('.detail-bubble'),restore=bubble.matches(':popover-open')?root.dataset.selected:null,pinned=bubble.dataset.pinned;this.hideCollection(tab);
     const category=root.querySelector('.collection-category')?.value||'all';
     const entries=cards.filter(card=>tab==='fusion'||category==='all'||card.dataset.category===category);
     for(const card of cards)card.classList.add('hidden');
@@ -179,7 +180,7 @@ export class CharacterSheet {
     root.querySelector('.collection-prev').disabled=page===0;root.querySelector('.collection-next').disabled=page===pages-1;
     root.querySelector('.collection-page').textContent=(page+1)+' / '+pages;root.querySelector('.catalog-pagination').classList.toggle('hidden',!entries.length);root.querySelector('.catalog-empty').classList.toggle('hidden',!!entries.length);
     $('sheet-scroll').scrollTop=0;
-    if(restore){const card=cards.find(card=>card.id===restore);if(card)this.showCollection(card)}
+    if(restore){const card=cards.find(card=>card.id===restore);if(card){this.showCollection(card);if(pinned)bubble.dataset.pinned=pinned}}
   }
 
   showCollection(card){
@@ -220,7 +221,7 @@ export class CharacterSheet {
     $('sheet-xp-fill').style.width = Math.min(100, xp / nextXp * 100) + '%';
     put('sheet-context', preview ? '出征预览 · 已计入永久成长' : this.origin === 'over' ? '本局最终状态 · 远征已经结束' : this.origin === 'level' ? '升级选择已保留 · 战斗暂停中' : '战斗暂停中 · 从容查看你的成长');
     put('sheet-run', preview ? '起始武器 · ' + WEAPONS[Object.keys(weapons)[0]].name : formatTime(game.time) + ' 守夜 · ' + game.kills.toLocaleString() + ' 击败 · ' + game.gold.toLocaleString() + ' 余烬');
-    put('sheet-return', ({menu: '返回营地 ↗', running: '继续守夜 ↗', paused: '返回暂停界面 ↗', level: '返回升级选择 ↗', reward: '返回祭坛奖励 ↗', over: '返回远征结算 ↗'})[this.origin]);
+    put('sheet-return', this.origin==='talent'?(talentPoints(game)>0?'保留天赋点，继续升级 ↗':'继续升级 ↗'):({menu: '返回营地 ↗', running: '继续守夜 ↗', paused: '返回暂停界面 ↗', level: '返回升级选择 ↗', reward: '返回祭坛奖励 ↗', over: '返回远征结算 ↗'})[this.origin]);
     $('sheet-menu-button').classList.toggle('hidden',!['running','paused','level','reward'].includes(this.origin));
     put('sheet-meta-note', preview ? '下次出征生效' : '本次出征时的祭坛加成');
     put('sheet-item-count', Object.keys(weapons).length + Object.keys(passives).length+(preview?0:game.boons.length));
@@ -250,7 +251,7 @@ export class CharacterSheet {
     const root=$('sheet-talents');root.replaceChildren();root.style.setProperty('--talent-color',definition.color);
     const selected=definition.branches.find(branch=>branch.nodes.some(talent=>game.talents[talent.id]));
     const budget=node('div','talent-budget');budget.append(node('b','',preview?'天赋预览':points+' 点可用'),node('span','',selected?'已锁定 · '+selected.name:'首次学习锁定路线'));
-    root.append(budget,node('p','talent-rules','LV.'+TALENT_LEVELS.join(' / ')+' 各 1 点 · 点选图标查看'));
+    root.append(budget,node('p','talent-rules',this.origin==='talent'?'获得天赋点 · 先选天赋，再选升级；也可保留点数。':'LV.'+TALENT_LEVELS.join(' / ')+' 各 1 点 · 点选图标查看'));
     const tree=node('div','talent-tree');tree.setAttribute('aria-label',definition.name+'天赋树');
     const bubble=node('div','detail-bubble');bubble.id='talent-detail';bubble.popover='auto';bubble.setAttribute('role','dialog');bubble.setAttribute('aria-labelledby','talent-detail-title');
     bubble.addEventListener('beforetoggle',event=>{if(event.newState==='closed'){this.talentAnchor?.classList.remove('selected');this.talentAnchor?.setAttribute('aria-expanded','false')}});
@@ -374,7 +375,7 @@ export class CharacterSheet {
       card.append(effectText(values.evolved?data.upgrades.at(-1).replace(/^进化：/,''):data.desc));
       const facts=node('dl','sheet-facts');
       for(const [label,value] of weaponFacts(key,values).slice(0,4)){const pair=node('div');pair.append(node('dt','',label),node('dd','',value));facts.append(pair)}
-      card.append(facts);if(stats.empowerments?.[key])card.append(effectText('祭坛淬炼 · 伤害 +'+stats.empowerments[key]*12+'%，已计入数值。','collection-note'));if(values.resonance)card.append(effectText(resonanceText(values),'collection-note'));this.addFusionLink(card,key);return card;
+      card.append(facts);if(stats.empowerments?.[key])card.append(effectText('祭坛淬炼 · 伤害 +'+stats.empowerments[key]*12+'%，已计入数值。','collection-note'));if(stats.weaponUpgrades?.[key])card.append(effectText('满级精修：'+Object.entries(stats.weaponUpgrades[key]).map(([id,value])=>refinementGain(id,value)).join('；')+'。同类收益累加，已计入战斗与预览；概率最高 100%。','collection-note'));if(values.anomalyChance)card.append(effectText('直接命中：'+weaponAnomalyText(key)+'。','collection-note'));if(values.resonance)card.append(effectText(resonanceText(values),'collection-note'));this.addFusionLink(card,key);return card;
     });
   }
 
@@ -425,12 +426,12 @@ export class CharacterSheet {
       const card=this.itemCard(catalogItem('passive:'+key),data.name,data.relic?'联动遗物 · '+data.trigger:'属性祝福','LV. '+level+' / '+data.max);card.id='sheet-passive-'+key;card.dataset.badge='LV.'+level;
       card.append(effectText(description));
       if(data.relic){
-        const linked=compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id);
+        const linked=compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id,stats.weaponUpgrades);
         const status=linked.length?'联动就绪':'缺少触发来源';
         card.append(effectText(key==='soulpact'?'持续强化灵魂与召唤武器，已计入当前武器数值。'+(stats.talents?.s_swarm1?'星群伴星同时继承伤害与射速。':''):status+' · 本局触发 '+(this.origin==='menu'?0:(this.game.relicProcs?.[key]||0))+' 次。','collection-note'));
       }
       if(key==='vitality')card.append(effectText('获得时立即恢复 12 点生命。','collection-note'));
-      if(key==='haste')card.append(effectText('附着燃烧、侵蚀与遗物触发冷却不变。','collection-note'));
+      if(key==='haste')card.append(effectText('附着燃烧、侵蚀的伤害节奏不变；遗物随实际施放与命中触发。','collection-note'));
       if(key==='everseed'){
         const growth=this.origin==='menu'?{}:this.game.growth;
         card.append(effectText('本局累计：伤害 +'+(growth.damage||0)+'% · 范围 +'+(growth.area||0)+'% · 生命上限 +'+(growth.vitality||0)*2+'。','collection-note'));
@@ -447,7 +448,7 @@ export class CharacterSheet {
     const basics={power:level=>'伤害 +'+level*3+'%',reach:level=>'武器范围 +'+level*3+'%',magnet:level=>'经验 +'+level*3+'%',pace:level=>'移速 +'+level*2+'%',vitality:level=>'初始生命 +'+level*4,regen:level=>'避伤 4 秒后恢复 '+number(level*.08,2)+' / 秒'};
     $('sheet-meta').replaceChildren(...META_TREES.map(tree=>{
       const card=node('article','sheet-meta-card'),words=node('div');words.append(node('h4','',tree.name+' · 永久成长'));
-      for(const key of tree.nodes){const level=meta[key]||0;if(!level)continue;const info=META[key],effect=basics[key]?basics[key](level):'已解锁'+(!preview?' · 本局触发 '+(this.game.relicProcs['meta_'+key]||0)+' 次':'');words.append(node('p','',info.name+' · '+effect))}
+      for(const key of tree.nodes){const level=meta[key]||0;if(!level)continue;const info=META[key],effect=basics[key]?basics[key](level):'LV.'+level+'/'+info.max+(info.cooldowns?' · 冷却 '+info.cooldowns[level-1]+' 秒':' · 每局一次')+(!preview?' · 本局触发 '+(this.game.relicProcs['meta_'+key]||0)+' 次':'');words.append(node('p','',info.name+' · '+effect))}
       if(words.children.length===1)words.append(node('p','','尚未强化 · 营地余烬祭坛可查看成长树'));
       card.append(artwork(META[tree.nodes[0]].icon),words);return card;
     }));

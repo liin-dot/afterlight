@@ -1,7 +1,7 @@
 import {WEAPON_FAMILIES} from './content.js';
 import {TAU,diamond,glow} from './art.js';
 
-export const TALENT_LEVELS=[5,15,25];
+export const TALENT_LEVELS=[10,20,30];
 export const CHARACTER_TALENTS={
   warden:{name:'守灯誓约',color:'#e8b578',icon:'aegis',style:'近身作战 · 灯火与护盾',
     description:'出征自带 8 点护盾。85 范围内的武器直接命中积蓄灯火；每 6 层释放震荡并将护盾补至 8。每 0.35 秒积蓄一层，震荡最短间隔 6 秒；冷却期间蓄满会在冷却结束自动释放。',

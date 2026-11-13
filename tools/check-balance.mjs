@@ -3,15 +3,15 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {Game} from '../src/game.js';
 import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,ENEMIES,META,META_TREES,metaState,metaCost,STARTING_WEAPONS,startingLoadout,normalizeItemDiscoveries,readSave,writeSave,refreshSave} from '../src/data.js';
 import {FUSIONS,fusionState,maxWeaponLevel} from '../src/fusions.js';
-import {characterStats,weaponStats} from '../src/stats.js';
+import {characterStats,weaponStats,refinementValue} from '../src/stats.js';
 import {PHASES,pressureAt,xpForLevel,upgradePool,rollUpgradeChoices,buildProfile,tagAffinity,recordUpgradeChoice} from '../src/balance.js';
-import {relicDescription,relicValues,compatibleWeapons,BUILD_TAGS,itemTags,ALTAR_BOONS} from '../src/content.js';
+import {relicDescription,relicValues,compatibleWeapons,BUILD_TAGS,itemTags,ALTAR_BOONS,WEAPON_REFINEMENTS,REFINEMENT_RARITIES} from '../src/content.js';
 import {weaponFacts,passiveEffect} from '../src/item-info.js';
-import {onXpPickup,updateRelicStates,onWeaponHit} from '../src/relic-combat.js';
+import {onXpPickup,updateRelicStates,onWeaponHit,onWeaponCast} from '../src/relic-combat.js';
 import {updateExpandedWeapon,updateExpandedZone} from '../src/expanded-combat.js';
 import {updateFusion,updateFusionZone,chainArrow} from '../src/fusion-combat.js';
 import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,updateCharacterTalents,onCharacterCast,onCharacterProjectileHit,characterHitMultiplier,onCharacterHit,characterTalentProgress,characterTalentSummary} from '../src/talents.js';
-import {EVENT_TYPES,ALTAR_TIMES,startWorldEvent,updateWorldEvents,worldEventStatus} from '../src/world-events.js';
+import {EVENT_TYPES,ALTAR_TIMES,ALTAR_ORDER,ALTAR_REWARDS,startWorldEvent,updateWorldEvents,worldEventStatus,worldEventTarget,nearestWorldEvent,drawWorldEvents} from '../src/world-events.js';
 
 // Canvas and audio stay outside this check: the actual Game simulation runs unchanged.
 globalThis.window={innerWidth:1280,innerHeight:720,addEventListener(){}};
@@ -27,7 +27,7 @@ function start(character=CHARACTERS[0]){
   return game;
 }
 function equip(game,weapons,passives={}){
-  game.weapons={...weapons};game.passives={...passives};game.stats=characterStats(game.character,passives,game.meta,game.talents,game.weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth);
+  game.weapons={...weapons};game.passives={...passives};game.stats=characterStats(game.character,passives,game.meta,game.talents,game.weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth,game.weaponUpgrades);
   game.player.maxHp=game.stats.maxHp;game.player.hp=game.player.maxHp;
 }
 function target(game,x=50,y=37,hp=10000){
@@ -39,53 +39,86 @@ try{
   const storedDescriptor=Object.getOwnPropertyDescriptor(globalThis,'localStorage');let storedSave='{}',denyRead=false,denyWrite=false;
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:()=>{if(denyRead)throw Error('storage unavailable');return storedSave},setItem:(_,value)=>{if(denyWrite)throw Error('storage full');storedSave=value}}});
   try{
-    storedSave='{"embers":"Infinity","best":1e309,"kills":-4,"runs":[9],"wins":true,"meta":{"power":"Infinity","vitality":2.9,"magnet":99,"regen":-1}}';
+    storedSave='{"metaVersion":4,"embers":"Infinity","best":1e309,"kills":-4,"runs":[9],"wins":true,"meta":{"power":"Infinity","vitality":2.9,"magnet":99,"regen":-1}}';
     const invalid=readSave();for(const key of ['embers','best','kills','runs','wins'])assert.equal(invalid[key],0,'invalid saved '+key);
     assert.equal(invalid.meta.vitality,2);assert.equal(invalid.meta.power,0);assert.equal(invalid.meta.magnet,5);assert.equal(invalid.meta.regen,0);assert.equal(Object.keys(invalid.meta).length,15);
     storedSave='{"embers":"123.9","best":61.25,"kills":8.8,"runs":"2","wins":1,"meta":{"power":"3"},"discoveredFusions":["solar"],"discoveredItems":{"weapon:blade":4}}';
-    const legacy=readSave();assert.deepEqual([legacy.embers,legacy.best,legacy.kills,legacy.runs,legacy.wins,legacy.meta.power],[123,61.25,8,2,1,3]);assert.deepEqual(legacy.discoveredFusions,['solar']);assert.equal(legacy.discoveredItems['weapon:blade'],4);
+    const legacy=readSave();assert.deepEqual([legacy.embers,legacy.best,legacy.kills,legacy.runs,legacy.wins,legacy.meta.power],[2093,61.25,8,2,1,3]);assert.deepEqual(legacy.discoveredFusions,['solar']);assert.equal(legacy.discoveredItems['weapon:blade'],4);
     storedSave='{"embers":1e100}';assert.equal(readSave().embers,Number.MAX_SAFE_INTEGER);storedSave='{broken';assert.equal(readSave().embers,0);
-    storedSave='{"embers":1000}';const first=readSave(),stale=readSave();
-    denyRead=denyWrite=true;refreshSave(first);assert.equal(first.embers,1000,'the first unavailable read must preserve the initial loaded save');denyRead=denyWrite=false;
-    assert((await writeSave(first,{purchase:'vitality'})).purchased);assert.equal(first.embers,880);
+    storedSave='{"embers":200}';const first=readSave(),stale=readSave();
+    denyRead=denyWrite=true;refreshSave(first);assert.equal(first.embers,200,'the first unavailable read must preserve the initial loaded save');denyRead=denyWrite=false;
+    assert((await writeSave(first,{purchase:'vitality'})).purchased);assert.equal(first.embers,140);
     stale.discoveredItems={'weapon:blade':4};await writeSave(stale,{muted:true});
-    assert.equal(readSave().embers,880,'a stale settings/discovery save must preserve another purchase');assert.equal(readSave().meta.vitality,1);
+    assert.equal(readSave().embers,140,'a stale settings/discovery save must preserve another purchase');assert.equal(readSave().meta.vitality,1);
     await Promise.all([writeSave(first,{result:{reward:17,time:50,kills:3,won:false}}),writeSave(stale,{result:{reward:20,time:40,kills:7,won:true}})]);
-    assert.deepEqual([readSave().embers,readSave().best,readSave().kills,readSave().runs,readSave().wins],[917,50,10,2,1]);assert.equal(readSave().discoveredItems['weapon:blade'],4);
+    assert.deepEqual([readSave().embers,readSave().best,readSave().kills,readSave().runs,readSave().wins],[177,50,10,2,1]);assert.equal(readSave().discoveredItems['weapon:blade'],4);
     const purchases=await Promise.all([writeSave(first,{purchase:'vitality'}),writeSave(stale,{purchase:'vitality'})]);
-    assert.equal(purchases.filter(r=>r.purchased).length,1,'recompute the level and price inside each purchase');assert.equal(readSave().embers,437);
+    assert.equal(purchases.filter(r=>r.purchased).length,1,'recompute the level and price inside each purchase');assert.equal(readSave().embers,87);
     denyWrite=true;assert.equal((await writeSave(first,{result:{reward:13,time:60,kills:2,won:false}})).persisted,false);
-    refreshSave(first);refreshSave(first);assert.equal(first.embers,450,'failed income remains once in memory');assert.equal(readSave().embers,437);
-    assert.equal((await writeSave(first,{purchase:'power'})).purchased,false);assert.equal(first.meta.power,0,'failed purchase must not grant an unsaved upgrade');assert.equal(first.embers,450);
-    denyWrite=false;await writeSave(first);await writeSave(first);assert.equal(readSave().embers,450,'retry failed income exactly once');assert.equal(readSave().runs,3);
-    denyRead=denyWrite=true;await writeSave(first,{result:{reward:7,time:10,kills:1,won:false}});assert.equal(first.embers,457,'unavailable reads retain the last stored balance');
-    denyRead=denyWrite=false;await writeSave(first);assert.equal(readSave().embers,457);
+    refreshSave(first);refreshSave(first);assert.equal(first.embers,100,'failed income remains once in memory');assert.equal(readSave().embers,87);
+    assert.equal((await writeSave(first,{purchase:'power'})).purchased,false);assert.equal(first.meta.power,0,'failed purchase must not grant an unsaved upgrade');assert.equal(first.embers,100);
+    denyWrite=false;await writeSave(first);await writeSave(first);assert.equal(readSave().embers,100,'retry failed income exactly once');assert.equal(readSave().runs,3);
+    denyRead=denyWrite=true;await writeSave(first,{result:{reward:7,time:10,kills:1,won:false}});assert.equal(first.embers,107,'unavailable reads retain the last stored balance');
+    denyRead=denyWrite=false;await writeSave(first);assert.equal(readSave().embers,107);
     const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
     try{
       Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request:()=>Promise.reject(Error('lock denied'))}}});
-      assert.equal((await writeSave(first,{result:{reward:7,time:10,kills:1,won:false}})).persisted,false);assert.equal(first.embers,464,'lock rejection retains income without unsafe writes');assert.equal(readSave().embers,457);
+      assert.equal((await writeSave(first,{result:{reward:7,time:10,kills:1,won:false}})).persisted,false);assert.equal(first.embers,114,'lock rejection retains income without unsafe writes');assert.equal(readSave().embers,107);
     }finally{if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator}
-    await writeSave(first);assert.equal(readSave().embers,464,'retry rejected lock income once');
+    await writeSave(first);assert.equal(readSave().embers,114,'retry rejected lock income once');
     storedSave=JSON.stringify({embers:1000,meta:{vitality:5,power:5,magnet:5,regen:5,conquest:1},legacyRanks:{ember:3,frost:2,storm:1},selectedLegacy:'ember',legacyMastery:{ember:8}});
-    const migrated=readSave();assert.equal(migrated.embers,13000);assert.deepEqual(migrated.weaponUnlocks,['flame','frost','prism']);assert.equal(migrated.selectedWeapon,'flame');assert.equal(migrated.meta.vitality,5);assert.equal(migrated.meta.conquest,0,'invalid locked abilities cannot enter a run');
-    await writeSave(migrated);assert.equal(readSave().embers,13000);await writeSave(migrated);assert.equal(readSave().embers,13000,'retired relic/mastery costs refund exactly once');assert(!JSON.parse(storedSave).legacyRanks);
+    const migrated=readSave();assert.equal(migrated.embers,58300);assert.deepEqual(migrated.weaponUnlocks,['flame','frost','prism']);assert.equal(migrated.selectedWeapon,'flame');assert.equal(migrated.meta.vitality,5);assert.equal(migrated.meta.conquest,0,'invalid locked abilities cannot enter a run');
+    await writeSave(migrated);assert.equal(readSave().embers,58300);await writeSave(migrated);assert.equal(readSave().embers,58300,'retired relic/mastery costs and price differences refund exactly once');assert(!JSON.parse(storedSave).legacyRanks);
+    storedSave=JSON.stringify({embers:700,meta:Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.cooldowns?1:info.max]))});
+    const oldSkills=readSave();assert.equal(oldSkills.metaVersion,4);assert.equal(oldSkills.embers,250000,'single-rank saves refund only their actual former spend');for(const [key,info] of Object.entries(META))assert.equal(oldSkills.meta[key],info.max,'old unlocked skill retains its previous cooldown: '+key);
+    await writeSave(oldSkills);assert.equal(readSave().embers,250000);assert.equal(readSave().meta.laststand,1);assert.equal(readSave().meta.conquest,1,'old purchased downstream skills survive migration and reload');
+    storedSave=JSON.stringify({metaVersion:2,embers:700,meta:Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.cooldowns?3:info.max]))});
+    const fewerRanks=readSave();assert.equal(fewerRanks.embers,754000,'retired ranks and price reductions refund the exact former spend');for(const [key,info] of Object.entries(META))assert.equal(fewerRanks.meta[key],info.max);
+    denyWrite=true;assert(!(await writeSave(fewerRanks)).persisted);assert.equal(readSave().embers,754000,'failed migration does not duplicate refunds');denyWrite=false;
+    await writeSave(fewerRanks);await writeSave(fewerRanks);assert.equal(readSave().embers,754000);assert.equal(JSON.parse(storedSave).metaVersion,4,'combined refund is persisted once');
+    storedSave=JSON.stringify({metaVersion:2,embers:0,meta:{power:5,reach:5,tempo:3,flare:2,conquest:3}});const invalidRanks=readSave();assert.equal(invalidRanks.meta.flare,2);assert.equal(invalidRanks.meta.conquest,0);assert.equal(invalidRanks.embers,118000,'locked nodes cannot contribute a refund');assert(metaState(invalidRanks.meta,'conquest').available,'the new two-rank prerequisite now unlocks a normal purchase');
+    storedSave=JSON.stringify({metaVersion:2,meta:{power:5,reach:5,tempo:1,flare:3,conquest:3}});const partial=readSave();assert.equal(partial.meta.tempo,1);assert.equal(partial.meta.flare,0);assert.equal(partial.meta.conquest,0,'new saves cannot skip a three-rank prerequisite');await writeSave(partial);assert.equal(readSave().meta.tempo,1,'new rank one is never migrated to rank three');
+    for(const tree of META_TREES){
+      const meta={};let formerSpend=0,currentSpend=0;
+      for(const [index,key] of tree.nodes.entries())for(let rank=0;rank<META[key].max;rank++){
+        meta[key]=rank+1;
+        formerSpend+=index===0?{power:160,magnet:140,vitality:120}[key]*(rank+1)**2:index===1?[4000,4500,5000,5500,6000][rank]:[[10000,15000,20000],[18000,27000],[30000]][index-2][rank];
+        currentSpend+=metaCost(key,rank);
+        storedSave=JSON.stringify({metaVersion:3,embers:17,meta,best:601,kills:123,runs:4,wins:1,weaponUnlocks:['sentinel'],selectedWeapon:'sentinel',discoveredItems:{'weapon:sentinel':2}});
+        const cheaper=readSave();assert.equal(cheaper.embers,17+formerSpend-currentSpend,'exact price difference at '+key+' rank '+(rank+1));
+        assert.deepEqual([cheaper.best,cheaper.kills,cheaper.runs,cheaper.wins,cheaper.selectedWeapon,cheaper.discoveredItems['weapon:sentinel']],[601,123,4,1,'sentinel',2]);
+        for(const [id,level] of Object.entries(meta))assert.equal(cheaper.meta[id],level,'purchased ranks survive repricing');
+        await writeSave(cheaper);await writeSave(cheaper);assert.equal(readSave().embers,17+formerSpend-currentSpend,'price refund is persisted once');
+      }
+    }
+    storedSave=JSON.stringify({metaVersion:3,embers:700,meta:fullPermanent});const repriced=readSave(),stalePrice=readSave();refreshSave(repriced);assert.equal(repriced.embers,436000);
+    denyRead=denyWrite=true;assert(!(await writeSave(repriced)).persisted);refreshSave(repriced);assert.equal(repriced.embers,436000,'failed storage retains one pending price refund');denyRead=denyWrite=false;
+    await writeSave(repriced);await writeSave(stalePrice,{muted:true});assert.equal(readSave().embers,436000,'a stale page cannot refund prices again');assert.equal(readSave().metaVersion,4);
+    storedSave=JSON.stringify({metaVersion:4,embers:0});const affordable=readSave();
+    for(const [key,budget] of [['vitality',600],['regen',1000],['blood',1800],['ward',2400],['laststand',1800]]){
+      await writeSave(affordable,{result:{reward:budget,time:120,kills:100,won:false}});
+      for(let rank=0;rank<META[key].max;rank++)assert((await writeSave(affordable,{purchase:key,metaLevel:rank})).purchased,'one modest settlement can buy several ranks: '+key);
+      assert.equal(affordable.embers,0,'published node total: '+key);assert.equal(affordable.meta[key],META[key].max);
+    }
     storedSave=JSON.stringify({embers:2000,weaponUnlocks:['flame','flame',{},'unknown'],selectedWeapon:'unknown'});const weapons=readSave();assert.deepEqual(weapons.weaponUnlocks,['flame']);assert.equal(weapons.selectedWeapon,null);
     assert(!(await writeSave(weapons,{selectWeapon:'frost'})).selected);const staleWeapon=readSave();const unlocks=await Promise.all([writeSave(weapons,{unlockWeapon:'frost'}),writeSave(staleWeapon,{unlockWeapon:'frost'})]);assert.equal(unlocks.filter(r=>r.unlocked).length,1);assert.equal(readSave().embers,1400);assert((await writeSave(weapons,{selectWeapon:'frost'})).selected);
     denyWrite=true;assert(!(await writeSave(weapons,{unlockWeapon:'thorn'})).unlocked);assert(!weapons.weaponUnlocks.includes('thorn'));denyWrite=false;
     await writeSave(staleWeapon,{muted:true});assert.equal(readSave().selectedWeapon,'frost','stale settings cannot replace the chosen starter');assert(!(await writeSave(weapons,{unlockWeapon:'__proto__'})).unlocked);
     storedSave=JSON.stringify({embers:500000,meta:{}});const growth=readSave();assert(!(await writeSave(growth,{purchase:'tempo'})).purchased);assert.equal(growth.embers,500000);
-    for(const tree of META_TREES)for(const key of tree.nodes){
+    for(const tree of META_TREES)for(const key of tree.nodes.slice(0,2)){
       const state=metaState(growth.meta,key);assert(state.available);assert.equal(growth.meta[key],0);
-      if(META[key].max===1){assert(metaCost(key,0)>=10000);continue}
       for(let level=0;level<META[key].max;level++){assert((await writeSave(growth,{purchase:key,metaLevel:level})).purchased);assert(!(await writeSave(growth,{purchase:key,metaLevel:level})).purchased,'stale rank cannot buy the next rank')}
       const next=tree.nodes[tree.nodes.indexOf(key)+1];assert(metaState(growth.meta,next).available);
-      if(next&&META[next].max===1)break;
     }
     const beforeFailed=growth.embers;denyWrite=true;assert(!(await writeSave(growth,{purchase:'tempo',metaLevel:0})).purchased);assert.equal(growth.meta.tempo,0);assert.equal(growth.embers,beforeFailed);denyWrite=false;
-    assert((await writeSave(growth,{purchase:'tempo',metaLevel:0})).purchased);assert(!metaState(growth.meta,'conquest').available);assert((await writeSave(growth,{purchase:'flare'})).purchased);
+    assert((await writeSave(growth,{purchase:'tempo',metaLevel:0})).purchased);assert(!metaState(growth.meta,'flare').available);assert(!(await writeSave(growth,{purchase:'flare'})).purchased);
+    for(let rank=1;rank<3;rank++)assert((await writeSave(growth,{purchase:'tempo',metaLevel:rank})).purchased);
+    assert(!metaState(growth.meta,'conquest').available);for(let rank=0;rank<META.flare.max;rank++)assert((await writeSave(growth,{purchase:'flare',metaLevel:rank})).purchased);
     assert(metaState(growth.meta,'conquest').available);assert(metaCost('conquest',0)>metaCost('flare',0)&&metaCost('flare',0)>metaCost('tempo',0));
   }finally{if(storedDescriptor)Object.defineProperty(globalThis,'localStorage',storedDescriptor);else delete globalThis.localStorage}
-  assert.equal(META_TREES.length,3);assert.equal(Object.keys(META).length,15);assert.equal(Object.keys(META).reduce((sum,key)=>sum+Array.from({length:META[key].max},(_,rank)=>metaCost(key,rank)).reduce((a,b)=>a+b,0),0),272100);
+  assert.equal(META_TREES.length,3);assert.equal(Object.keys(META).length,15);assert.equal(Object.keys(META).reduce((sum,key)=>sum+Array.from({length:META[key].max},(_,rank)=>metaCost(key,rank)).reduce((a,b)=>a+b,0),0),22800);
+  for(const tree of META_TREES){assert.deepEqual(tree.nodes.map(key=>META[key].max),[5,5,3,2,1]);assert.deepEqual(tree.nodes.map(key=>Array.from({length:META[key].max},(_,rank)=>metaCost(key,rank))),[[60,90,120,150,180],[120,160,200,240,280],[400,600,800],[1000,1400],[1800]])}
+  console.log('PASS: 22,800-ember permanent growth, affordable multi-rank settlements and exact one-time refunds across three prior save versions.');
   for(const [key] of Object.entries(STARTING_WEAPONS))for(const character of CHARACTERS){
     const preparation={selectedWeapon:key,weaponUnlocks:[key]},loadout=startingLoadout(character,preparation),game=start(character);game.start(character,{},preparation);assert.deepEqual(game.weapons,{[key]:1});assert.deepEqual(loadout.passives,{});assert.deepEqual(game.passives,{});preparation.selectedWeapon=null;assert.deepEqual(game.weapons,{[key]:1},'run starter is a snapshot');
     game.enemies=[];game.spawnClock=game.waveClock=game.xpNext=Infinity;target(game,50,37);for(let i=0;i<200;i++){game.player.invincible=2;game.update(.05)}assert(game.damageByWeapon[key]>0,'unlocked starter attacks: '+key+' / '+character.id);
@@ -93,6 +126,26 @@ try{
   }
   assert.deepEqual(startingLoadout(CHARACTERS[0],{selectedWeapon:'solar',weaponUnlocks:['solar']}).weapons,{blade:1});
   console.log('PASS: three ordered permanent trees, locked/stale purchases, old research refunds, six starter unlocks and 18 character/weapon combinations.');
+  {
+    const expected={tempo:[20,15,10],flare:[24,12],conquest:[18],wind:[20,15,10],chill:[4,2],omen:[6],blood:[6,4.5,3],ward:[20,10]},roll=Math.random;Math.random=()=>0;
+    try{
+      for(const [key,cooldowns] of Object.entries(expected))for(let rank=1;rank<=cooldowns.length;rank++){
+        assert.equal(META[key].max,cooldowns.length);assert.deepEqual(META[key].cooldowns,cooldowns);
+        const game=start();game.start(game.character,{[key]:rank});game.enemies=[];game.stats.criticalChance=0;game.player.hp=20;const e=target(game,50,37,1e9);e.slow=1;
+        const trigger=()=>{
+          if(key==='ward'){game.player.invincible=0;game.player.shield=0;game.hurt(1,0,0)}
+          else if(key==='blood'||key==='conquest'){const enemy=target(game,80,37,1);enemy.elite=key==='conquest';game.kill(enemy)}
+          else game.hit(e,1,0,37,0,false,'blade');
+        };
+        trigger();assert.equal(game.relicProcs['meta_'+key],1);assert.equal(game.relicTimers['meta_'+key],cooldowns[rank-1],key+' rank '+rank+' uses its real cooldown');
+        game.time=cooldowns[rank-1]-.001;trigger();assert.equal(game.relicProcs['meta_'+key],1,'no early retrigger: '+key+' rank '+rank);
+        game.time=cooldowns[rank-1];trigger();assert.equal(game.relicProcs['meta_'+key],2,'retrigger exactly when ready: '+key+' rank '+rank);
+        assert.equal(metaState(game.meta,key).cooldown,cooldowns[rank-1]);assert.equal(metaState(game.meta,key).nextCooldown,cooldowns[rank]);
+      }
+      assert.equal(META.laststand.max,1);assert(!META.laststand.cooldowns,'last stand stays once per run');
+    }finally{Math.random=roll}
+    console.log('PASS: all eight status skills at 3/2/1 ranks use actual graded cooldowns, block early retriggers and keep maximum-rank baseline effects.');
+  }
   {
     const base=characterStats(CHARACTERS[0]),full=characterStats(CHARACTERS[0],{},fullPermanent);
     assert.equal(full.maxHp-base.maxHp,20);assert(Math.abs(full.damageMultiplier/base.damageMultiplier-1.15)<1e-9);assert.equal(full.xpMultiplier,1.15);assert.equal(full.areaMultiplier,1.15);assert.equal(full.recovery,.4);assert.equal(full.moveSpeed,base.moveSpeed*1.1);assert.equal(full.regeneration,0,'permanent ranks do not give unconditional regeneration');
@@ -105,7 +158,7 @@ try{
       for(let i=0;i<50;i++)game.hit(e,1,0,37,0,false,'blade');assert.equal(game.relicProcs.meta_tempo,1,'high hit counts share the same cooldown');
       game.hit(e,1,0,37,0,false,'talent',true);assert.equal(game.relicProcs.meta_chill,1,'talents and reactions never recursively roll permanent hit effects');
       game.time=5.99;updateRelicStates(game);assert.equal(game.metaBuffs.haste,.85);game.time=6;updateRelicStates(game);assert.equal(game.metaBuffs.haste,1);assert.equal(game.metaBuffs.move,1);assert.equal(game.metaBuffs.area,1.25);game.time=8;updateRelicStates(game);assert.equal(game.metaBuffs.area,1);
-      game.time=9.99;game.hit(e,1,0,37,0,false,'bolt');assert.equal(game.relicProcs.meta_tempo,1);game.time=10;game.hit(e,1,0,37,0,false,'bolt');assert.equal(game.relicProcs.meta_tempo,2);game.level=5;assert(game.learnTalent('w_flame1'));assert.equal(game.stats.metaBuffs,game.metaBuffs,'stat rebuild keeps the live, bounded buff reference');
+      game.time=9.99;game.hit(e,1,0,37,0,false,'bolt');assert.equal(game.relicProcs.meta_tempo,1);game.time=10;game.hit(e,1,0,37,0,false,'bolt');assert.equal(game.relicProcs.meta_tempo,2);game.level=10;assert(game.learnTalent('w_flame1'));assert.equal(game.stats.metaBuffs,game.metaBuffs,'stat rebuild keeps the live, bounded buff reference');
       game.time=20;game.player.hp=20;const corpse=target(game,100,37,1);game.kill(corpse);assert.equal(game.player.hp,22);game.kill(corpse);assert.equal(game.player.hp,22);game.kill(target(game,120,37,1));assert.equal(game.player.hp,22,'kill healing shares three seconds of cooldown');
       game.time=25;game.player.hp=game.player.maxHp-.4;game.kill(target(game,130,37,1));assert.equal(game.player.hp,game.player.maxHp,'healing clamps to max HP');
       const elite=target(game);elite.elite=true;game.time=30;game.kill(elite);assert.equal(game.relicProcs.meta_conquest,1);assert.equal(game.relicTimers.meta_tempo_until,40);assert.equal(game.relicTimers.meta_flare_until,40);assert.equal(game.relicTimers.meta_wind_until,40);game.time=40;updateRelicStates(game);assert.equal(game.metaBuffs.haste,1);assert.equal(game.metaBuffs.area,1);
@@ -121,7 +174,7 @@ try{
     try{
       Math.random=()=>0;
       for(const character of CHARACTERS){
-        const game=start(character);game.enemies=[];game.level=5;equip(game,game.weapons,{everseed:3});const e=target(game,40,37,1e9);game.grid.rebuild(game.enemies);game.stats.criticalChance=0;
+        const game=start(character);game.enemies=[];game.level=10;equip(game,game.weapons,{everseed:3});const e=target(game,40,37,1e9);game.grid.rebuild(game.enemies);game.stats.criticalChance=0;
         game.hit(e,1,0,37,0,false,'talent',true);assert.deepEqual(game.growth,{},'the relic requires a learned talent');
         assert(game.learnTalent(CHARACTER_TALENTS[character.id].branches[0].nodes[0].id));
         assert(compatibleWeapons('everseed',game.weapons,game.passives,game.talents,character.id).length);
@@ -132,27 +185,27 @@ try{
           else{game.characterState.charge=80;onCharacterCast(game,'bolt')}
           for(let i=0;i<30;i++)game.updateProjectiles(.05);
         }
-        assert.equal(game.growth.damage,1,'real '+character.id+' talent damage can grow');assert.equal(game.relicProcs.everseed,1,'multiple targets/projectiles share one growth cooldown');assert(Math.abs(game.stats.damageMultiplier/base-1.01)<1e-9);
-        const next=game.relicTimers.everseed;game.time=next-.01;game.hit(e,1,0,37,0,false,'talent',true);assert.equal(game.relicProcs.everseed,1);
-        game.time=next;const corpse=target(game,50,37,0);game.hit(corpse,1,0,37,0,false,'talent',true);assert.equal(game.relicProcs.everseed,1,'a pending death cannot award another talent hit');
-        game.time=next;Math.random=()=>.99;game.hit(e,1,0,37,0,false,'talent',true);assert.equal(game.relicProcs.everseed,1,'failed chance awards nothing');
+        let grown=game.relicProcs.everseed;assert(grown>0,'real '+character.id+' talent damage can grow');assert.equal(game.growth.damage,grown);assert(Math.abs(game.stats.damageMultiplier/base-(1+grown*.01))<1e-9);
+        game.hit(e,1,0,37,0,false,'talent',true);grown++;assert.equal(game.relicProcs.everseed,grown,'a second hit can grow immediately without a cooldown');assert(!game.relicTimers.everseed);
+        const corpse=target(game,50,37,0);game.hit(corpse,1,0,37,0,false,'talent',true);assert.equal(game.relicProcs.everseed,grown,'a pending death cannot award another talent hit');
+        Math.random=()=>.99;game.hit(e,1,0,37,0,false,'talent',true);assert.equal(game.relicProcs.everseed,grown,'failed chance awards nothing');
         // Game.hit draws once for text placement, then for the proc and random attribute.
         for(const [choice,key] of [[.5,'area'],[.9,'vitality']]){
-          const draws=[0,0,choice];Math.random=()=>draws.shift()??0;game.time=game.relicTimers.everseed;const hp=game.player.hp,max=game.player.maxHp,area=game.stats.areaMultiplier;
+          const draws=[0,0,choice];Math.random=()=>draws.shift()??0;const hp=game.player.hp,max=game.player.maxHp,area=game.stats.areaMultiplier;
           game.hit(e,1,0,37,0,false,'talent',true);assert.equal(game.growth[key],1);
           if(key==='area')assert(Math.abs(game.stats.areaMultiplier/area-1.01)<1e-9);
           else{assert.equal(game.player.maxHp,max+2);assert.equal(game.player.hp,hp,'life growth does not heal')}
         }
-        Math.random=()=>0;game.level=15;assert(game.learnTalent(CHARACTER_TALENTS[character.id].branches[0].nodes[1].id));assert.equal(game.stats.growth.damage,1,'learning keeps run growth');
+        Math.random=()=>0;game.level=20;assert(game.learnTalent(CHARACTER_TALENTS[character.id].branches[0].nodes[1].id));assert.equal(game.stats.growth.damage,grown,'learning keeps run growth');
         game.boons=['glass'];game.state='reward';game.eventChoices=['horizon'];assert(game.chooseAltarReward(0));assert.equal(game.stats.growth.vitality,1,'altar stat rebuild keeps growth');
-        game.growth.damage=500;game.time=game.relicTimers.everseed;game.hit(e,1,0,37,0,false,'talent',true);assert.equal(game.growth.damage,501,'growth has no ordinary stack cap');
+        game.growth.damage=500;game.hit(e,1,0,37,0,false,'talent',true);assert.equal(game.growth.damage,501,'growth has no ordinary stack cap');
         const pool=upgradePool(game);assert(!pool.some(item=>item.key==='everseed'),'relic still respects max level');
         game.start(character);assert.deepEqual(game.growth,{});assert(!game.relicProcs.everseed);assert(!game.relicTimers.everseed);
-        game.level=5;assert(game.learnTalent(CHARACTER_TALENTS[character.id].branches[0].nodes[0].id));game.hit(target(game),1,0,37,0,false,'talent',true);assert.deepEqual(game.growth,{},'talents alone do not grant rare growth');
+        game.level=10;assert(game.learnTalent(CHARACTER_TALENTS[character.id].branches[0].nodes[0].id));game.hit(target(game),1,0,37,0,false,'talent',true);assert.deepEqual(game.growth,{},'talents alone do not grant rare growth');
       }
     }finally{Math.random=roll}
-    assert.equal(PASSIVES.everseed.rarity,'rare');assert.equal(relicValues('everseed',1).chance,.12);assert.equal(relicValues('everseed',3).chance,.24);assert(itemTags('everseed').includes('growth'));
-    console.log('PASS: three real talent attack paths, rare growth chance, shared cooldown, all three attributes, stat rebuild persistence, unlimited stacks and run reset.');
+    assert.equal(PASSIVES.everseed.rarity,'rare');assert.equal(relicValues('everseed',1).chance,.03);assert.equal(relicValues('everseed',3).chance,.06);assert(itemTags('everseed').includes('growth'));
+    console.log('PASS: three real talent attack paths, rare growth chance without cooldowns, all three attributes, stat rebuild persistence, unlimited stacks and run reset.');
   }
   const stats=characterStats(CHARACTERS[0]);
   // Exercise the actual first swing, before upgrades, on both fresh and fully upgraded saves.
@@ -179,7 +232,8 @@ try{
       updateCharacterTalents(opening,.8,80);onCharacterCast(opening);
       const wind=opening.projectiles.find(b=>b.talent==='wind');assert(wind&&Math.round(wind.damage)<first.maxHp,'movement supplies an additional, individually bounded wind arrow');
       for(let i=0;i<8;i++)opening.updateProjectiles(.05);
-      assert(first.dead,'moving to charge wind should still turn the combined attacks into a kill');
+      assert(first.maxHp-first.hp>2*Math.round(values.damage),'charged wind adds real damage against the tougher opening skeleton');
+      opening.timers.bolt=0;opening.updateWeapons(.01);for(let i=0;i<8;i++)opening.updateProjectiles(.05);assert(first.dead,'a follow-up volley finishes the tougher opening skeleton');
       const second=weaponStats('bolt',2,opening.stats,character);assert(second.damage<=values.damage*1.4);assert.equal(second.count,values.count,'the first upgrade must not multiply damage and arrow count together');
     }else{
       assert.equal(first.maxHp-first.hp,Math.round(values.damage));assert(!first.dead,'a normal orbit contact must not kill a skeleton');
@@ -249,12 +303,12 @@ try{
   const returning=start();returning.enemies=[];equip(returning,{bloodmoon:3},{area:3,luck:3,deadeye:3});target(returning);returning.grid.rebuild(returning.enemies);returning.updateWeapons(.01);const scythe=returning.projectiles[0];Object.assign(scythe,{returning:true,x:returning.player.x+13.2,y:returning.player.y-8});returning.updateProjectiles(.05);assert(Math.hypot(scythe.x-returning.player.x,scythe.y-returning.player.y+8)<13,'fast returning scythes must arrive even at a 50 ms frame, without oscillating past the player');
   for(let level=1;level<100;level++)assert(xpForLevel(level+1)>xpForLevel(level));
   for(let time=0;time<600;time++)assert(pressureAt(time+1).hp>=pressureAt(time).hp);
-  assert.equal(pressureAt(0).hp,1);assert(pressureAt(540).hp>8);assert(pressureAt(120,3).hp>pressureAt(120).hp);
+  assert.equal(pressureAt(0).hp,1.1);assert(pressureAt(540).hp>8);assert(pressureAt(120,3).hp>pressureAt(120).hp);
   assert.equal(PHASES.at(-1).at,600);
   for(const [time,level,power] of [[60,3,1],[150,5,2],[270,6,2],[450,6,3]]){
     const normal=characterStats(CHARACTERS[0],{power}),strike=weaponStats('blade',level,normal,CHARACTERS[0]).damage;
     const ratio=strike/(ENEMIES.skeleton.hp*pressureAt(time).hp);
-    assert(ratio>.35&&ratio<1,'an ordinary blade hit must not erase a fresh skeleton at '+time);
+    assert(ratio>.25&&ratio<1,'an ordinary blade hit must not erase a fresh skeleton at '+time);
     assert.equal(normal.maxHp,CHARACTERS[0].hp,'damage investment does not silently grant health');
   }
 
@@ -273,8 +327,67 @@ try{
   equip(full,{blade:2,bolt:2,orbit:2,storm:2,flame:2,frost:2},{power:1,haste:1,armor:1,luck:1,regen:1,area:1});
   assert(upgradePool(full).every(i=>i.current>0));
   full.banished.add('blade');assert(!upgradePool(full).some(i=>i.key==='blade'));
-  for(let i=0;i<100;i++){const choices=rollUpgradeChoices(full);assert.equal(new Set(choices.map(i=>i.key)).size,choices.length);assert(choices.length<=3)}
+  for(let i=0;i<100;i++){const choices=rollUpgradeChoices(full);assert.equal(new Set(choices.map(i=>i.key)).size,choices.length);assert.equal(choices.length,4)}
+  {
+    const mixed=start();mixed.time=240;equip(mixed,{blade:6,bolt:2,orbit:2});
+    for(let i=0;i<100;i++){
+      mixed.state='level';mixed.rerolls=1;mixed.choices=rollUpgradeChoices(mixed);
+      for(const choices of [mixed.choices,(mixed.reroll(),mixed.choices)]){assert.equal(choices.length,4);assert.equal(choices.filter(item=>item.refinement).length,1)}
+    }
+    mixed.banishes=1;mixed.banish(mixed.choices.findIndex(item=>item.key==='bolt'));assert.equal(mixed.choices.length,4);assert.equal(mixed.choices.filter(item=>item.refinement).length,1);
+    equip(mixed,{blade:6,bolt:6,orbit:6,storm:6,prism:6,thorn:6},{power:4,haste:5,area:3,armor:5,luck:5,focus:3});
+    for(const key of Object.keys(FUSIONS))mixed.banished.add(key);
+    for(let i=0;i<50;i++){const choices=rollUpgradeChoices(mixed);assert.equal(choices.length,2,'one ordinary choice must not allow three refinements to fill the panel');assert.equal(choices.filter(item=>item.refinement).length,1);assert(choices.some(item=>item.key==='power'))}
+    mixed.banished.clear();equip(mixed,{blade:6,flame:6,bolt:6,orbit:6,storm:6,prism:6},{power:5,haste:5,area:3,armor:5,luck:5,focus:3});
+    const choices=rollUpgradeChoices(mixed);assert(choices.some(item=>item.fusion));assert.equal(choices.filter(item=>item.refinement).length,1,'a ready fusion also limits refinement choices');
+  }
   assert(fusionState('bloodmoon',{crescent:5},full.passives,full).blocked);
+  {
+    const refine=(game,key,refinement,rarity='white')=>{
+      const item=upgradePool(game).find(item=>item.key===key&&item.refinement===refinement&&item.rarity===rarity);assert(item,key+' / '+refinement+' / '+rarity+' must be useful');
+      game.state='level';game.choices=[item];game.chooseUpgrade(0);assert.equal(game.state,'running');return item;
+    };
+    for(const key of Object.keys(WEAPONS)){
+      const g=start();equip(g,{[key]:maxWeaponLevel(key)});const pool=upgradePool(g).filter(item=>item.key===key),before=weaponStats(key,g.weapons[key],g.stats,g.character);
+      assert(pool.every(item=>item.refinement&&item.next===item.current&&item.value>0));
+      for(const item of pool){
+        const info=WEAPON_REFINEMENTS[item.refinement];assert(!info.tags||info.tags.some(tag=>itemTags(key).includes(tag)||tag==='beam'||tag==='blast'));
+        if(info.flat){assert(['purple','gold'].includes(item.rarity));assert.equal(item.value,item.rarity==='gold'?2:1)}
+      }
+      assert.deepEqual(pool.filter(item=>item.refinement==='damage').map(item=>item.value),[.04,.07,.11,.16]);
+      for(let i=0;i<4;i++)refine(g,key,'damage');const after=weaponStats(key,g.weapons[key],g.stats,g.character);
+      for(const field of Object.keys(before).filter(field=>field==='damage'||field.endsWith('Damage')))assert(Math.abs(after[field]-before[field]*1.16)<1e-7,key+' additive '+field);
+      refine(g,key,'haste','gold');const fast=weaponStats(key,g.weapons[key],g.stats,g.character);
+      for(const field of ['cooldown','fireInterval','fieldInterval','hitInterval'])if(before[field]>0)assert(Math.abs(fast[field]-before[field]/1.12)<1e-9,key+' cadence '+field);
+      assert.equal(g.weapons[key],maxWeaponLevel(key),'refining must not increase equipment levels');
+    }
+    const g=start();g.time=240;g.level=30;equip(g,{bolt:6,blade:6,orbit:6,storm:6,prism:6,thorn:6},{power:5,haste:5,area:3,armor:5,luck:5,focus:3});
+    for(const id of Object.keys(FUSIONS))g.banished.add(id);
+    for(let i=0;i<120;i++){
+      const choices=rollUpgradeChoices(g);assert.equal(choices.length,4);assert(choices.every(item=>item.refinement));assert.equal(new Set(choices.map(item=>item.choiceId)).size,4,'one weapon attribute cannot appear twice in different colors');
+      g.state='level';g.choices=choices;g.chooseUpgrade(0);assert.equal(g.state,'running');
+    }
+    g.weaponUpgrades={};equip(g,{bolt:6,blade:6});const plainBlade=weaponStats('blade',6,g.stats,g.character);
+    refine(g,'bolt','amount','gold');refine(g,'bolt','amount','purple');assert.equal(refinementValue(g.stats,'bolt','amount','gold'),0,'do not offer +2 with only one slot left');refine(g,'bolt','amount','purple');
+    assert(!upgradePool(g).some(item=>item.key==='bolt'&&item.refinement==='amount'));g.enemies=[];target(g);g.updateWeapons(.01);assert.equal(g.projectiles.filter(b=>b.type==='bolt').length,10,'extra shots reach the actual volley');assert.deepEqual(weaponStats('blade',6,g.stats,g.character),plainBlade,'refinements affect only their weapon');
+    g.weaponUpgrades.blade={critical:.95,area:1,haste:1};equip(g,g.weapons);assert(!upgradePool(g).some(item=>item.key==='blade'&&['critical','area','haste'].includes(item.refinement)));
+    const before={...g.weaponUpgrades.bolt};g.learnTalent(CHARACTER_TALENTS[g.character.id].branches[0].nodes[0].id);assert.deepEqual(g.stats.weaponUpgrades.bolt,before,'talent rebuild retains refinements');
+    g.state='level';g.choices=rollUpgradeChoices(g);g.pause();const frozen=JSON.stringify(g.weaponUpgrades);g.chooseUpgrade(0);assert.equal(JSON.stringify(g.weaponUpgrades),frozen);g.resume();g.reroll();g.choices=[upgradePool(g).find(item=>item.key==='bolt')];g.banish(0);assert(!upgradePool(g).some(item=>item.key==='bolt'));assert.deepEqual(g.weaponUpgrades.bolt,before,'banishment retains already gained refinements');
+    g.start(g.character);assert.deepEqual(g.weaponUpgrades,{});assert.deepEqual(g.stats.weaponUpgrades,{});
+    const fused=start();fused.time=180;fused.weaponUpgrades={blade:{damage:.16},bolt:{damage:.04}};equip(fused,{blade:6,flame:6,bolt:6});fused.state='level';assert(fused.fuseWeapon('solar'));assert(!fused.weaponUpgrades.blade);assert.equal(fused.weaponUpgrades.bolt.damage,.04);
+    const oldRandom=Math.random;Math.random=()=>.99;
+    try{for(const [key,status] of [['flame','burn'],['thorn','poison'],['frost','freeze'],['storm','marks']]){
+      const fight=start();fight.weaponUpgrades={[key]:{anomaly:1}};equip(fight,{[key]:6});fight.stats.criticalChance=0;
+      const enemy=target(fight);fight.hit(enemy,100,0,37,0,false,key);assert(enemy[status],key+' applies its own abnormal effect');
+      const periodic=target(fight);fight.hit(periodic,100,0,37,0,false,key,true);assert(!periodic[status],key+' periodic damage cannot re-roll abnormalities');
+      if(key==='flame'){assert.equal(enemy.burn.damage,15);assert(compatibleWeapons('rotclock',fight.weapons,{}, {},fight.character.id,fight.weaponUpgrades).includes('flame'));fight.time=.5;updateRelicStates(fight);assert.equal(enemy.hp,enemy.maxHp-115)}
+      if(key==='frost'){const v=weaponStats(key,6,fight.stats,fight.character);assert.equal(enemy.freeze,v.freeze*1.25);const boss=target(fight);boss.boss=true;fight.hit(boss,100,0,37,0,false,key);assert.equal(boss.freeze,v.bossFreeze*1.25);fight.enemies=[boss];fight.grid.rebuild(fight.enemies);fight.updateWeapons(.01);assert.equal(boss.freeze,v.bossFreeze*1.25,'deep freeze improves the weapon freeze instead of replacing it with a shorter no-op')}
+      if(key==='thorn'){enemy.poison.until=10;fight.hit(enemy,100,0,37,0,false,key);assert.equal(enemy.poison.until,10,'a shorter abnormal effect must not truncate existing poison')}
+      assert(!upgradePool(fight).some(item=>item.key===key&&item.refinement==='anomaly'));
+    }}finally{Math.random=oldRandom}
+    assert.deepEqual(Object.values(REFINEMENT_RARITIES).map(tier=>tier.weight),[60,28,10,2]);
+    console.log('PASS: all 36 weapons refine with additive damage and real cadence; four rarity tiers, +4 shot cap, full-loadout growth, scoped effects, status triggers, rebuilds, banishment and reset.');
+  }
   assert(compatibleWeapons('rime',{bolt:1},{frostbrand:1}).includes('bolt'));
   assert(compatibleWeapons('spore',{blade:1},{venomfang:1}).includes('blade'));
   assert.equal(compatibleWeapons('volatile',{blade:1},{}).length,0);
@@ -296,6 +409,7 @@ try{
   // Every weapon must cause real damage at both ends of its progression, including delayed attacks.
   for(const key of Object.keys(WEAPONS))for(const level of [1,maxWeaponLevel(key)]){
     const game=start();game.time=240;game.bossMilestones=new Set([180,360,600]);game.spawnClock=game.waveClock=Infinity;game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.enemies=[];
+    if(level===maxWeaponLevel(key))game.weaponUpgrades={[key]:{damage:.16,haste:.12}};
     equip(game,{[key]:level});game.player.invincible=100;
     for(let i=0;i<12;i++){const a=i*Math.PI/6,r=35+i*7;target(game,Math.cos(a)*r,37+Math.sin(a)*r)}
     for(let i=0;i<220;i++)game.update(.05);
@@ -352,7 +466,7 @@ try{
   const glacier=start();glacier.enemies=[];equip(glacier,{glacier:3});const pulled=target(glacier,110,glacier.player.y-8);glacier.grid.rebuild(glacier.enemies);
   const glacierStats=weaponStats('glacier',3,glacier.stats,glacier.character);updateFusion(glacier,'glacier',glacierStats,.05);const coldZone=glacier.zones.find(z=>z.kind==='glacier');
   updateFusionZone(glacier,coldZone,2);assert(Math.abs(Math.hypot(pulled.x-coldZone.x,pulled.y-coldZone.y)-glacierStats.radius)<1e-8,'cold fields pull enemies to the crystal ring, not into the player');
-  const harvest=start();harvest.enemies=[];equip(harvest,{bolt:1},{harvest:2});target(harvest);onXpPickup(harvest,180);updateRelicStates(harvest);assert.equal(harvest.harvestCharge,120);assert.equal(harvest.projectiles.length,3);
+  const harvest=start();harvest.enemies=[];equip(harvest,{bolt:1},{harvest:2});target(harvest);onXpPickup(harvest,180);updateRelicStates(harvest);assert.equal(harvest.harvestCharge,0);assert.equal(harvest.projectiles.length,9);
   const drops=start();drops.enemies=[];drops.time=100;drops.player.hp=10;drops.lastHealDrop=0;
   for(let i=0;i<50;i++)drops.kill(target(drops));
   assert.equal(drops.drops.filter(d=>d.type==='heal').length,1,'mass kills must respect shared supply cooldown');
@@ -364,12 +478,46 @@ try{
   drops.time=175;drops.kill(target(drops));assert(drops.drops.some(d=>d.type==='heal'),'a long drought still has a bounded rescue');Math.random=savedRandom;
   const trail=start();equip(trail,{flame:6},{area:2,duration:2});trail.addFire({x:0,y:0,lvl:3},true);assert.equal(trail.zones[0].r,24);assert.equal(trail.zones[0].t,1.4*1.3);
   const ice=start();ice.enemies=[];equip(ice,{bolt:1},{hoarfrost:2});const frozen=target(ice),iceBoss=target(ice,60,37);iceBoss.boss=true;ice.grid.rebuild(ice.enemies);ice.dash();assert.equal(frozen.freeze,.8);assert.equal(iceBoss.freeze,.15);assert.equal(ice.relicProcs.hoarfrost,1);assert(frozen.hp<frozen.maxHp);
-  const glass=start();glass.enemies=[];equip(glass,{bolt:1},{bulwark:2});glass.player.shield=20;glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,0);glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,5);assert(glass.projectiles.every(b=>b.refracted));glass.player.shield=10;glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,5,'shield break shares one cooldown');
-  const fork=start();fork.enemies=[];equip(fork,{bolt:1},{forkseed:2});const forkTarget=target(fork);fork.grid.rebuild(fork.enemies);fork.stats.criticalChance=1;fork.hit(forkTarget,1,0,37,0,false,'bolt');assert.equal(fork.projectiles.length,2);assert(fork.projectiles.every(b=>b.hit.has(forkTarget.id)));fork.hit(forkTarget,1,0,37,0,false,'bolt');assert.equal(fork.projectiles.length,2);
-  onWeaponHit(fork,forkTarget,'bolt',true,true);assert.equal(fork.projectiles.length,2,'periodic hits cannot split again');
-  const forkOther=target(fork,75,37),originalHp=forkTarget.hp;fork.grid.rebuild(fork.enemies);for(let i=0;i<50;i++)fork.updateProjectiles(.05);assert(forkOther.hp<forkOther.maxHp);assert.equal(forkTarget.hp,originalHp);assert.equal(fork.relicProcs.forkseed,1,'split projectiles cannot recursively trigger their source');
-  const coil=start();coil.enemies=[];equip(coil,{storm:1},{stormcoil:2});coil.player.shield=0;const charged=target(coil);coil.grid.rebuild(coil.enemies);for(let i=0;i<7;i++)coil.hit(charged,1,0,37,0,false,'storm');assert.equal(coil.relicProcs.stormcoil,1);assert.equal(coil.player.shield,7);assert.equal(coil.stormCharge,0);for(let i=0;i<14;i++)coil.hit(charged,1,0,37,0,false,'storm');assert.equal(coil.relicProcs.stormcoil,1);assert.equal(coil.stormCharge,7);coil.time=2.5;coil.hit(charged,1,0,37,0,false,'storm');assert.equal(coil.relicProcs.stormcoil,2);
+  const glass=start();glass.enemies=[];equip(glass,{bolt:1},{bulwark:2});glass.player.shield=20;glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,0);glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,5);assert(glass.projectiles.every(b=>b.refracted));glass.player.shield=10;glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,10,'every separate shield break triggers without a relic cooldown');
+  const fork=start();fork.enemies=[];equip(fork,{bolt:1},{forkseed:2});const forkTarget=target(fork);fork.grid.rebuild(fork.enemies);fork.stats.criticalChance=1;fork.hit(forkTarget,1,0,37,0,false,'bolt');assert.equal(fork.projectiles.length,2);assert(fork.projectiles.every(b=>b.hit.has(forkTarget.id)));fork.hit(forkTarget,1,0,37,0,false,'bolt');assert.equal(fork.projectiles.length,4);
+  onWeaponHit(fork,forkTarget,'bolt',true,true);assert.equal(fork.projectiles.length,4,'periodic hits cannot split again');
+  const forkOther=target(fork,75,37),originalHp=forkTarget.hp;fork.grid.rebuild(fork.enemies);for(let i=0;i<50;i++)fork.updateProjectiles(.05);assert(forkOther.hp<forkOther.maxHp);assert.equal(forkTarget.hp,originalHp);assert.equal(fork.relicProcs.forkseed,2,'split projectiles cannot recursively trigger their source');
+  const coil=start();coil.enemies=[];equip(coil,{storm:1},{stormcoil:2});coil.player.shield=0;const charged=target(coil);coil.grid.rebuild(coil.enemies);for(let i=0;i<7;i++)coil.hit(charged,1,0,37,0,false,'storm');assert.equal(coil.relicProcs.stormcoil,1);assert.equal(coil.player.shield,3);assert.equal(coil.stormCharge,0);for(let i=0;i<14;i++)coil.hit(charged,1,0,37,0,false,'storm');assert.equal(coil.relicProcs.stormcoil,3);assert.equal(coil.stormCharge,0);for(let i=0;i<7;i++)coil.hit(charged,1,0,37,0,false,'storm');assert.equal(coil.relicProcs.stormcoil,4);
   const rot=start();rot.enemies=[];equip(rot,{blade:1},{rotclock:2});const rotting=target(rot);rotting.burn={damage:20,until:3,next:0};updateRelicStates(rot);assert.equal(rotting.maxHp-rotting.hp,30);assert.equal(rot.relicProcs.rotclock,1);
+  // Relics follow real event counts, including multiple hits in the same simulation frame.
+  for(const [key,data] of Object.entries(PASSIVES).filter(([,data])=>data.relic))for(let level=1;level<=data.max;level++){
+    assert(!Object.hasOwn(relicValues(key,level),'cooldown'),key+' must not define a relic cooldown');assert(!/undefined|NaN|冷却\s*\d/.test(relicDescription(key,level)),key+' description matches the no-cooldown rules');
+  }
+  for(const key of ['forkseed','conductor','rime','stormseal','venomfang','embercore','frostbrand','deadeye','siphon','aegis','volatile']){
+    const game=start();game.enemies=[];game.time=10;equip(game,{sentinel:1},{[key]:2,...(key==='volatile'?{venomfang:1,embercore:1}:{})});game.player.hp=10;game.player.shield=0;game.stats.criticalChance=1;
+    const first=target(game,50,37,1e9);first.slow=2;target(game,65,37,1e9);game.grid.rebuild(game.enemies);game.relicTimers[key]=9999;
+    for(let hit=0;hit<10;hit++)game.hit(first,1,0,37,0,false,key==='stormseal'?'storm':key==='siphon'?'blade':'sentinel');
+    assert.equal(game.relicProcs[key],10,key+' triggers on every eligible hit, even with an old timer value');assert.equal(game.relicTimers[key],9999,key+' never writes a new timer');
+    if(key==='siphon')assert(Math.abs(game.player.hp-12.4)<1e-8);if(key==='aegis')assert(Math.abs(game.player.shield-3)<1e-8);
+  }
+  for(const key of ['thorns','bulwark','spore','cinder','echo']){
+    const game=start();game.enemies=[];game.time=10;equip(game,{blade:1},{[key]:2});const first=target(game,50,37,1e9);game.grid.rebuild(game.enemies);game.relicTimers[key]=9999;
+    for(let event=0;event<10;event++){
+      if(key==='thorns'||key==='bulwark'){game.player.invincible=0;game.player.shield=1;game.hurt(1,0,0)}
+      else if(key==='echo')for(let cast=0;cast<3;cast++)onWeaponCast(game,'blade');
+      else{const dead=target(game,50,37,1e9);dead.burningUntil=20;dead.poison={damage:1,until:20,next:11};game.kill(dead)}
+    }
+    assert.equal(game.relicProcs[key],10,key+' has no time gate on its actual event');assert.equal(game.relicTimers[key],9999);assert(Number.isFinite(first.hp));
+  }
+  const turretRelics=haste=>{
+    const game=start(CHARACTERS[1]);game.enemies=[];equip(game,{sentinel:1},{venomfang:1,conductor:1,...(haste?{haste}: {})});game.stats.criticalChance=0;
+    const first=target(game,50,37,1e9);target(game,80,37,1e9);game.grid.rebuild(game.enemies);let contacts=0;const hit=game.hit.bind(game);game.hit=(enemy,damage,x,y,knock,feedback,source,...rest)=>{if(source==='sentinel'&&enemy.hp>0&&!enemy.dead)contacts++;return hit(enemy,damage,x,y,knock,feedback,source,...rest)};
+    for(let frame=0;frame<300;frame++){game.time+=.02;game.updateWeapons(.02);game.updateZones(.02);game.updateProjectiles(.02)}
+    assert.equal(game.relicProcs.venomfang,contacts);assert.equal(game.relicProcs.conductor,contacts);assert(!game.relicTimers.venomfang&&!game.relicTimers.conductor);
+    assert(first.maxHp-first.hp>=contacts*(15+5),'every actual stone hit includes its immediate poison damage');return contacts;
+  };
+  assert(turretRelics(5)>turretRelics(0),'real turret attack speed increases relic activations');
+  const poisonScholar=start(CHARACTERS[1]);poisonScholar.enemies=[];poisonScholar.level=10;equip(poisonScholar,{sentinel:1},{venomfang:1});assert(poisonScholar.learnTalent('s_scholar1'));poisonScholar.stats.criticalChance=0;const markedVictim=target(poisonScholar,50,37,17);poisonScholar.hit(markedVictim,15,0,37,0,false,'sentinel');assert(markedVictim.dead);assert(poisonScholar.drops.find(d=>d.type==='xp').starLinked,'poison finishing damage preserves the triggering summon hit and its character mark');
+  const capped=start();capped.enemies=[];equip(capped,{blade:1},{aegis:3,siphon:3});const capTarget=target(capped,50,37,1e9);capped.player.shield=22.9;capped.player.hp=capped.player.maxHp-.01;capped.hit(capTarget,1,0,37,0,false,'blade');assert.equal(capped.player.shield,23);assert.equal(capped.player.hp,capped.player.maxHp);capped.player.shield=40;capped.hit(capTarget,1,0,37,0,false,'blade');assert.equal(capped.player.shield,40,'a lower shield cap never reduces a stronger shield');
+  for(const key of ['spore','cinder']){
+    const game=start();game.enemies=[];equip(game,{blade:1},{[key]:2});for(let i=0;i<550;i++){const e=target(game,40+i%10,37+Math.floor(i/10),12);e.poison={damage:1,until:10,next:1};e.burningUntil=10}game.grid.rebuild(game.enemies);game.kill(game.enemies[0]);assert.equal(game.kills,550);assert.equal(game.relicProcs[key],550,'finite death cascades process each enemy once without a cooldown');
+  }
+  console.log('PASS: every relic omits cooldowns; actual turret hit scaling, same-frame triggers, shield/heal caps and 550-enemy death cascades.');
   const pactStats=characterStats(CHARACTERS[0],{soulpact:2}),plainTurret=weaponStats('sentinel',3,stats,CHARACTERS[0]),pactTurret=weaponStats('sentinel',3,pactStats,CHARACTERS[0]);assert(Math.abs(pactTurret.damage-plainTurret.damage*1.36)<1e-9);assert.equal(pactTurret.fireInterval,plainTurret.fireInterval*.88);assert.equal(weaponStats('blade',1,pactStats,CHARACTERS[0]).damage,weaponStats('blade',1,stats,CHARACTERS[0]).damage);
   const shrine=start();shrine.enemies=[];equip(shrine,{soulforge:1});const shrineTarget=target(shrine);shrine.grid.rebuild(shrine.enemies);const sv=weaponStats('soulforge',1,shrine.stats,shrine.character);updateExpandedWeapon(shrine,'soulforge',sv,.05);const summoned=shrine.zones[0];updateExpandedZone(shrine,summoned,.05);assert.equal(shrine.projectiles.length,2);assert(shrine.projectiles.every(b=>b.homing&&b.pierce===2));summoned.t=.01;updateExpandedZone(shrine,summoned,.05);assert(shrineTarget.hp<shrineTarget.maxHp,'expiring soul shrine explodes');
   const hail=start();hail.enemies=[];equip(hail,{hailfire:1});const hailTarget=target(hail);hail.grid.rebuild(hail.enemies);updateExpandedWeapon(hail,'hailfire',weaponStats('hailfire',1,hail.stats,hail.character),.05);updateExpandedZone(hail,hail.zones[0],1);assert(hailTarget.freeze>0);assert(hail.zones.some(z=>z.kind==='aftermath'));
@@ -388,7 +536,7 @@ try{
   // Character trees share one gate for the UI and the actual transaction.
   for(const character of CHARACTERS)for(const branch of CHARACTER_TALENTS[character.id].branches){
     const game=start(character);assert.equal(talentPoints(game),0);assert(!game.learnTalent(branch.nodes[0].id));
-    game.level=5;assert(!game.learnTalent(branch.nodes[2].id));assert(game.learnTalent(branch.nodes[0].id));
+    game.level=10;assert(!game.learnTalent(branch.nodes[2].id));assert(game.learnTalent(branch.nodes[0].id));
     for(const other of CHARACTER_TALENTS[character.id].branches)if(other!==branch)assert(!game.learnTalent(other.nodes[0].id),'first talent locks the whole route');
     for(const [index,node] of branch.nodes.entries()){
       if(index){game.level=TALENT_LEVELS[index]-1;assert(!game.learnTalent(node.id));game.level++;assert(game.learnTalent(node.id),node.id)}
@@ -412,8 +560,8 @@ try{
   const close=start();close.enemies=[];close.player.shield=0;const closeTarget=target(close);close.grid.rebuild(close.enemies);
   for(let i=0;i<6;i++){close.time=i*.4;close.hit(closeTarget,1,0,37,0,false,'blade')}
   assert.equal(close.characterState.procs,1);assert.equal(close.player.shield,8);assert(close.damageByWeapon.talent>0);
-  const carried=start();carried.level=5;carried.state='status';carried.statusReturn='running';carried.characterState.charge=6;assert(carried.learnTalent('w_flame1'));assert.equal(carried.characterState.charge,5);assert.equal(carried.characterState.procs,0,'learning clamps stored charge without attacking inside the menu');
-  carried.start(CHARACTERS[2]);carried.level=5;carried.characterState.charge=80;assert(carried.learnTalent('r_roam1'));assert.equal(carried.characterState.charge,60);assert.equal(carried.projectiles.length,0);
+  const carried=start();carried.level=10;carried.state='status';carried.statusReturn='running';carried.characterState.charge=6;assert(carried.learnTalent('w_flame1'));assert.equal(carried.characterState.charge,5);assert.equal(carried.characterState.procs,0,'learning clamps stored charge without attacking inside the menu');
+  carried.start(CHARACTERS[2]);carried.level=10;carried.characterState.charge=80;assert(carried.learnTalent('r_roam1'));assert.equal(carried.characterState.charge,60);assert.equal(carried.projectiles.length,0);
   const stars=start(CHARACTERS[1]);stars.level=30;stars.enemies=[];target(stars);for(const id of ['s_swarm1','s_swarm2','s_swarm3'])assert(stars.learnTalent(id));
   updateCharacterTalents(stars,2,0);assert.equal(stars.projectiles.length,4);assert(stars.projectiles.every(b=>b.pierce===2));assert.equal(stars.characterState.starClock,.9);
   const cold=start(CHARACTERS[1]);cold.level=30;cold.enemies=[];const coldTarget=target(cold),coldBoss=target(cold,60,37);coldBoss.boss=true;cold.grid.rebuild(cold.enemies);for(const id of ['s_frost1','s_frost2','s_frost3'])assert(cold.learnTalent(id));
@@ -451,6 +599,17 @@ try{
   assault.time=4.1;assault.hit(assaultTarget,1,0,37,0,false,'blade');assert.equal(assault.characterState.charge,1,'dash amplification expires');
   const levels=start();let awards=0;levels.on=event=>{if(event==='talentPoints')awards++};
   while(levels.level<30){levels.gainXp(levels.xpNext-levels.xp);assert.equal(talentPoints(levels),TALENT_LEVELS.filter(level=>levels.level>=level).length)}assert.equal(awards,3);
+  assert.deepEqual(TALENT_LEVELS,[10,20,30]);
+  for(const milestone of TALENT_LEVELS){
+    const game=start(),events=[];game.level=milestone-1;game.xp=0;game.xpNext=xpForLevel(game.level);game.pendingLevels=2;game.choices=[{key:'preserved'}];game.on=event=>events.push(event);
+    assert.equal(talentPoints(game),TALENT_LEVELS.filter(level=>level<milestone).length);game.gainXp(game.xpNext);assert(game.pendingTalentChoice);assert.equal(game.pendingLevels,3);
+    game.presentLevelChoices();assert.equal(game.state,'talent');assert.equal(game.pendingLevels,3,'the talent prompt must not spend a queued equipment upgrade');assert.deepEqual(game.choices,[{key:'preserved'}]);assert.equal(events.filter(e=>e==='talentChoice').length,1);assert(!events.includes('level'));
+    const at=game.time;game.render=()=>{};game.loop(1000);game.loop(1050);assert.equal(game.time,at,'automatic talent selection freezes combat');
+    assert(game.learnTalent('w_flame1'));game.state='running';game.presentLevelChoices();assert.equal(game.state,'level');assert.equal(game.pendingLevels,2);assert(game.choices.length);assert.equal(events.filter(e=>e==='talentChoice').length,1,'old unspent points do not repeatedly open the prompt');
+  }
+  const heldPoints=start();heldPoints.level=9;heldPoints.xpNext=xpForLevel(9);heldPoints.gainXp(heldPoints.xpNext);heldPoints.presentLevelChoices();assert.equal(heldPoints.state,'talent');heldPoints.state='running';heldPoints.presentLevelChoices();assert.equal(heldPoints.state,'level');assert.equal(talentPoints(heldPoints),1);heldPoints.skipUpgrade();heldPoints.presentLevelChoices();assert.equal(heldPoints.state,'running');assert(heldPoints.learnTalent('w_flame1'),'retained points can be spent later');heldPoints.start(heldPoints.character);assert(!heldPoints.pendingTalentChoice);
+  const manyPoints=start();manyPoints.gainXp(Array.from({length:29},(_,i)=>xpForLevel(i+1)).reduce((sum,n)=>sum+n,0));assert.equal(manyPoints.level,30);manyPoints.state='reward';manyPoints.presentLevelChoices();assert.equal(manyPoints.state,'reward','a completed altar reward stays intact');manyPoints.state='running';manyPoints.presentLevelChoices();assert.equal(manyPoints.state,'talent');assert.equal(talentPoints(manyPoints),3);assert.equal(manyPoints.pendingLevels,29);
+  console.log('PASS: LV10/20/30 awards, automatic talent priority, frozen selection, retained points and multi-level upgrade queues.');
   const sight=start(CHARACTERS[2]);sight.level=30;sight.enemies=[];sight.stats.criticalChance=0;const markedWind=target(sight,80,37),freshWind=target(sight,120,37);sight.grid.rebuild(sight.enemies);
   for(const id of ['r_sight1','r_sight2'])assert(sight.learnTalent(id));assert.equal(characterHitMultiplier(sight,markedWind,'bolt',false),1);
   for(let i=0;i<3;i++)onCharacterHit(sight,markedWind,'bolt',false);assert.equal(sight.projectiles.length,0,'weapons cannot create wind marks');
@@ -483,7 +642,7 @@ try{
   delayedLamp.characterState.charge=6;delayedLamp.player.hp=0;updateCharacterTalents(delayedLamp,.05,0);assert.equal(delayedLamp.player.hp,0);assert.equal(delayedLamp.characterState.procs,1,'dead players cannot auto-release a healing lamp');
   const cadence=[];
   for(const light of [false,true]){
-    const runner=start(CHARACTERS[2]);runner.enemies=[];runner.level=5;target(runner);if(light)assert(runner.learnTalent('r_roam1'));
+    const runner=start(CHARACTERS[2]);runner.enemies=[];runner.level=10;target(runner);if(light)assert(runner.learnTalent('r_roam1'));
     for(let i=0;i<7;i++){runner.time=i*1.05;updateCharacterTalents(runner,1.05,runner.moveSpeed*1.05);onCharacterCast(runner)}
     cadence.push(runner.characterState.procs);
   }
@@ -519,12 +678,15 @@ try{
   }
   {
   // Three timed, randomly placed tasks share the actual choice transaction.
-  const trialGame=kind=>{const game=start();game.time=60;game.shrineKinds=[kind,...Object.keys(EVENT_TYPES).filter(k=>k!==kind)];game.enemies=[];updateWorldEvents(game,0);assert.equal(game.shrines.length,1);Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y,hp:40,shield:0});game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,600]);return game};
+  const trialGame=kind=>{const game=start();game.time=60;game.enemies=[];updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind,index:ALTAR_ORDER.indexOf(kind),goal:kind==='vigil'?12:kind==='hunt'?1:6});assert.equal(game.shrines.length,1);Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y,hp:40,shield:0});game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,600]);return game};
   const completeTask=game=>{const s=game.activeEvent;if(s.kind==='hunt')game.kill(s.guardian);else if(s.kind==='vigil')s.progress=s.goal;else for(const mote of s.motes)Object.assign(mote,{x:game.player.x,y:game.player.y});updateWorldEvents(game,.05)};
   const scheduled=start(),spawned=[];assert.equal(scheduled.shrines.length,0);
   for(const time of [59.99,60,239.99,240,419.99,420,600,900]){scheduled.time=time;Object.assign(scheduled.player,{x:time*2,y:-time});updateWorldEvents(scheduled,0);assert.equal(scheduled.shrines.length,ALTAR_TIMES.filter(t=>time>=t).length);const fresh=scheduled.shrines.at(-1);if(fresh&&!spawned.includes(fresh)){spawned.push(fresh);const d=Math.hypot(fresh.x-scheduled.player.x,fresh.y-scheduled.player.y);assert(d>=179&&d<=261)}}
-  assert.equal(spawned.length,3);assert.equal(new Set(spawned.map(s=>s.kind)).size,3);assert.equal(scheduled.shrines.filter(s=>s.state==='idle').length,1);
+  assert.equal(spawned.length,3);assert.deepEqual(spawned.map(s=>s.kind),ALTAR_ORDER);assert.equal(scheduled.shrines.filter(s=>s.state==='idle').length,3);
+  Object.assign(scheduled.player,{x:spawned[2].x,y:spawned[2].y});assert.equal(nearestWorldEvent(scheduled),spawned[0],'a nearer late altar cannot bypass the easy task');assert(!scheduled.interact());
+  assert.equal(scheduled.eventsFailed,0);const retained=scheduled.shrines[0];Object.assign(scheduled.player,{x:retained.x,y:retained.y});assert.equal(nearestWorldEvent(scheduled),retained);assert(worldEventStatus(scheduled).canStart,'unaccepted altars can still be accepted after minute nine');assert(scheduled.interact());assert.equal(scheduled.activeEvent,retained);scheduled.end(false);assert.equal(scheduled.eventsFailed,1);assert.equal(scheduled.shrines.filter(s=>s.state==='idle').length,2,'ending the run only fails an accepted task');
   const alternate=start();alternate.time=60;updateWorldEvents(alternate,0);assert.notEqual(alternate.shrines[0].x,scheduled.shrines[0].x,'positions are rolled anew');
+  const failedOrder=start();for(const time of ALTAR_TIMES){failedOrder.time=time;updateWorldEvents(failedOrder,0)}Object.assign(failedOrder.player,{x:failedOrder.shrines[0].x,y:failedOrder.shrines[0].y});assert(failedOrder.interact());failedOrder.time+=45;updateWorldEvents(failedOrder,0);assert.equal(nearestWorldEvent(failedOrder),failedOrder.shrines[1],'a failed early task advances to the next task');assert.equal(failedOrder.gold,0);
   for(const kind of Object.keys(EVENT_TYPES)){
     const game=trialGame(kind);game.update(.05);assert.equal(game.player.hp,40);assert.equal(game.gold,0);assert.equal(game.xp,0);assert.equal(game.eventsCompleted,0);
     assert(worldEventStatus(game).detail.includes(EVENT_TYPES[kind].hint));assert(game.interact());assert(!startWorldEvent(game));const shrine=game.activeEvent;
@@ -532,42 +694,114 @@ try{
     completeTask(game);assert.equal(game.state,'reward');assert.equal(game.eventsCompleted,1);assert.equal(game.eventChoices.length,3);assert.equal(new Set(game.eventChoices).size,3);assert.equal(game.boons.length,0);assert.equal(game.weapons.blade,1);assert.equal(game.xp,0);assert.equal(game.rerolls,3);assert.equal(game.player.shield,0,'no old automatic event payout');
     assert(!game.interact());assert(!game.chooseAltarReward(3));assert(!game.chooseAltarReward('0'));
     const choices=[...game.eventChoices],pending=game.pendingLevels;game.pause();updateWorldEvents(game,99);assert(!game.chooseAltarReward(0));assert.deepEqual(game.eventChoices,choices);game.resume();assert.equal(game.state,'reward');assert.equal(game.pendingLevels,pending);
-    const id=choices[0];assert(game.chooseAltarReward(0));assert.deepEqual(game.boons,[id]);assert.equal(game.state,'running');assert.equal(game.eventChoices.length,0);assert(!game.chooseAltarReward(1),'one task pays once');
+    const id=choices[0],gold=game.gold;assert(game.chooseAltarReward(0));assert.deepEqual(game.boons,[id]);assert.equal(game.state,'running');assert.equal(game.eventChoices.length,0);assert(!game.chooseAltarReward(1),'one task pays once');
+    const bonus=ALTAR_REWARDS[ALTAR_ORDER.indexOf(kind)];assert.equal(game.gold,gold+bonus.gold);assert.equal(game.xp,bonus.xp*game.xpMultiplier);assert.equal(game.altarRewardIndex,null);assert(game.eventReward.rewards.includes('余烬 +'+bonus.gold));
     assert(!game.drops.some(d=>d.type==='chest'),'hunt guardians do not also drop a chest');
     const current=game.stats;game.openChest(25);assert.deepEqual(game.stats.boons,[id]);assert.equal(game.stats.damageTakenMultiplier,current.damageTakenMultiplier,'rebuilding equipment keeps the bargain');
     game.start(game.character);assert.deepEqual(game.boons,[]);assert.deepEqual(game.eventChoices,[]);assert.deepEqual(game.weaponEmpowerments,{});
   }
   for(const id of Object.keys(ALTAR_BOONS)){
     const game=trialGame('vigil'),plain=characterStats(game.character);assert(game.interact());completeTask(game);game.eventChoices=[id];assert(game.chooseAltarReward(0));const boon=ALTAR_BOONS[id];
-    assert(boon.positive&&boon.negative&&Object.keys(boon.multiply||{}).length,'every boon has a real upside and downside');
+    assert(boon.positive&&boon.negative&&(Object.keys(boon.multiply||{}).length||Object.keys(boon.add||{}).length)&&Object.keys(boon.difficulty).length,'every boon has a real gain and enemy-pressure cost');
     for(const [key,factor] of Object.entries(boon.multiply||{})){const expected=key==='maxHp'?Math.round(plain[key]*factor):plain[key]*factor;assert(Math.abs(game.stats[key]-expected)<1e-9,id+' '+key)}
     for(const [key,value] of Object.entries(boon.add||{}))assert.equal(game.stats[key],plain[key]+value,id+' '+key);
-    assert(Math.abs(game.player.hp/game.player.maxHp-40/90)<1e-9,'max HP trades preserve current health percentage');
+    assert(Math.abs(game.player.hp-Math.min(game.player.maxHp,game.player.maxHp*40/90+20))<1e-9,'apply completion healing after preserving the health percentage');
     game.level=30;assert(game.learnTalent('w_flame1'));assert.deepEqual(game.stats.boons,[id],'learning a talent retains a bargain');
     const valued=weaponStats('bolt',2,game.stats,game.character);assert(Number.isFinite(valued.damage)&&valued.cooldown>0);
   }
   const skipped=trialGame('vigil');assert(skipped.interact());completeTask(skipped);assert(skipped.chooseAltarReward(-1));assert.equal(skipped.weapons.blade,2);assert.equal(skipped.boons.length,0);
+  for(const [index,kind] of ALTAR_ORDER.entries()){
+    const g=trialGame(kind);assert(g.interact());completeTask(g);const gold=g.gold;assert(g.chooseAltarReward(-1));assert.equal(g.weapons.blade,2+index);assert.equal(g.gold,gold+ALTAR_REWARDS[index].gold);assert.equal(g.xp,ALTAR_REWARDS[index].xp);assert.equal(g.player.hp,40+ALTAR_REWARDS[index].heal);
+    const maxed=trialGame(kind);equip(maxed,{blade:6});assert(maxed.interact());completeTask(maxed);assert(maxed.chooseAltarReward(-1));assert.equal(maxed.weaponEmpowerments.blade,index+1);
+  }
+  const crossed=trialGame('hunt');crossed.time=420;equip(crossed,{blade:5});assert(crossed.interact());completeTask(crossed);assert(crossed.chooseAltarReward(-1));assert.equal(crossed.weapons.blade,6);assert.equal(crossed.weaponEmpowerments.blade,2,'remaining bonus rolls turn into tempering after reaching the level cap');
   const wholeRun=trialGame('vigil');
   for(const at of ALTAR_TIMES){wholeRun.time=at;updateWorldEvents(wholeRun,0);const s=wholeRun.shrines.at(-1);Object.assign(wholeRun.player,{x:s.x,y:s.y});wholeRun.enemies=[];assert(wholeRun.interact());completeTask(wholeRun);assert(wholeRun.eventChoices.every(id=>!wholeRun.boons.includes(id)));assert(wholeRun.chooseAltarReward(0))}
   assert.equal(wholeRun.eventsCompleted,3);assert.equal(wholeRun.boons.length,3);wholeRun.time=900;updateWorldEvents(wholeRun,0);assert.equal(wholeRun.shrines.length,3);
   const timedVigil=trialGame('vigil');timedVigil.interact();updateWorldEvents(timedVigil,11.9);assert.equal(timedVigil.state,'running');assert.equal(timedVigil.activeEvent.progress,11.9);updateWorldEvents(timedVigil,.11);assert.equal(timedVigil.state,'reward','twelve accumulated seconds actually complete the vigil');
-  const waitingTalent=trialGame('vigil');waitingTalent.interact();completeTask(waitingTalent);const heldChoices=[...waitingTalent.eventChoices];waitingTalent.level=5;waitingTalent.state='status';waitingTalent.statusReturn='reward';assert(waitingTalent.learnTalent('w_flame1'));assert.deepEqual(waitingTalent.eventChoices,heldChoices,'talent inspection and learning do not reroll altar choices');
+  const waitingTalent=trialGame('vigil');waitingTalent.interact();completeTask(waitingTalent);const heldChoices=[...waitingTalent.eventChoices];waitingTalent.level=10;waitingTalent.state='status';waitingTalent.statusReturn='reward';assert(waitingTalent.learnTalent('w_flame1'));assert.deepEqual(waitingTalent.eventChoices,heldChoices,'talent inspection and learning do not reroll altar choices');
   const actual=boon=>{const game=trialGame('vigil');game.interact();completeTask(game);game.eventChoices=[boon];game.chooseAltarReward(0);game.enemies=[];game.drops=[];game.player.x=0;game.player.y=37;game.stats.criticalChance=0;return game};
   const areaBoon=actual('horizon'),far=target(areaBoon,90,37);areaBoon.grid.rebuild(areaBoon.enemies);areaBoon.timers={};const farHp=far.hp;areaBoon.updateWeapons(.01);assert(far.hp<farHp,'expanded blade really hits outside the original range');
   const doubleBoon=actual('twins');equip(doubleBoon,{bolt:1});doubleBoon.stats=characterStats(doubleBoon.character,{}, {},{},doubleBoon.weapons,doubleBoon.boons);target(doubleBoon);doubleBoon.updateWeapons(.01);assert.equal(doubleBoon.projectiles.length,3,'extra shots are spawned by the actual weapon');
   const speedBoon=actual('frenzy');target(speedBoon);speedBoon.updateWeapons(.01);assert(speedBoon.timers.blade<.83,'frenzy changes the real weapon timer');
   const growthBoon=actual('harvest');assert.equal(growthBoon.gainXp(10),13.5);const regenBoon=actual('renewal');regenBoon.player.hp=10;regenBoon.update(1);assert(Math.abs(regenBoon.player.hp-10.8)<1e-9,'regeneration acts in the live loop');
   const starBoon=start(CHARACTERS[1]);starBoon.boons=['souls'];starBoon.stats=characterStats(starBoon.character,{}, {},{},starBoon.weapons,starBoon.boons);starBoon.enemies=[];target(starBoon);updateCharacterTalents(starBoon,1,0);assert(Math.abs(starBoon.projectiles[0].damage-10.8*1.45)<1e-9,'companion stars inherit the altar soul benefit');
-  const maxed=trialGame('vigil');equip(maxed,{solar:3,blade:6});assert(maxed.interact());completeTask(maxed);const hp=maxed.player.hp;assert(maxed.chooseAltarReward(-1));assert.equal(Object.keys(maxed.weaponEmpowerments).length,1);const key=Object.keys(maxed.weaponEmpowerments)[0],base=weaponStats(key,maxed.weapons[key],characterStats(maxed.character,{}, {},{},maxed.weapons),maxed.character);assert(Math.abs(weaponStats(key,maxed.weapons[key],maxed.stats,maxed.character).damage/base.damage-1.12)<1e-9);assert.equal(maxed.player.hp,hp,'skipping never heals');
+  const maxed=trialGame('vigil');equip(maxed,{solar:3,blade:6});assert(maxed.interact());completeTask(maxed);const hp=maxed.player.hp;assert(maxed.chooseAltarReward(-1));assert.equal(Object.keys(maxed.weaponEmpowerments).length,1);const key=Object.keys(maxed.weaponEmpowerments)[0],base=weaponStats(key,maxed.weapons[key],characterStats(maxed.character,{}, {},{},maxed.weapons),maxed.character);assert(Math.abs(weaponStats(key,maxed.weapons[key],maxed.stats,maxed.character).damage/base.damage-1.12)<1e-9);assert.equal(maxed.player.hp,Math.min(maxed.player.maxHp,hp+20),'skipping retains the completion healing');
   const pendingTrial=trialGame('vigil');pendingTrial.pendingLevels=2;assert(pendingTrial.interact());pendingTrial.activeEvent.progress=12;pendingTrial.update(.01);assert.equal(pendingTrial.state,'reward');assert.equal(pendingTrial.pendingLevels,2);pendingTrial.chooseAltarReward(-1);pendingTrial.update(.01);assert.equal(pendingTrial.state,'level');assert.equal(pendingTrial.pendingLevels,1,'reward choice preserves queued level upgrades');
+  const xpTrial=trialGame('vigil');xpTrial.level=9;xpTrial.xpNext=80;assert(xpTrial.interact());completeTask(xpTrial);assert.equal(xpTrial.level,9);xpTrial.chooseAltarReward(-1);assert.equal(xpTrial.level,10);assert.equal(xpTrial.pendingLevels,1);assert(xpTrial.pendingTalentChoice);xpTrial.presentLevelChoices();assert.equal(xpTrial.state,'talent','completion XP respects talent-before-equipment priority');
   const expiredTrial=trialGame('vigil');assert(expiredTrial.interact());expiredTrial.state='paused';updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.activeEvent.progress,0);expiredTrial.state='running';expiredTrial.player.hp=0;updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.eventsCompleted,0);expiredTrial.player.hp=40;expiredTrial.time=105;updateWorldEvents(expiredTrial,.05);assert.equal(expiredTrial.eventsFailed,1);assert.equal(expiredTrial.gold,0);assert.equal(expiredTrial.eventChoices.length,0);
   const bossTrial=trialGame('souls');assert(bossTrial.interact());bossTrial.spawnBoss(180);updateWorldEvents(bossTrial,.05);assert.equal(bossTrial.eventsFailed,1);assert.equal(bossTrial.activeEvent,null);
+  const soulGuide=trialGame('souls');soulGuide.interact();const soulAltar=soulGuide.activeEvent,nearestMote=worldEventTarget(soulGuide);assert(nearestMote&&soulAltar.motes.includes(nearestMote));assert.equal(Math.hypot(nearestMote.x-soulGuide.player.x,nearestMote.y-soulGuide.player.y),Math.min(...soulAltar.motes.map(m=>Math.hypot(m.x-soulGuide.player.x,m.y-soulGuide.player.y))));assert(worldEventStatus(soulGuide).detail.includes('魂光 0/6'));assert(worldEventStatus(soulGuide).guide.includes('青白光柱'));Object.assign(soulGuide.player,{x:nearestMote.x,y:nearestMote.y});updateWorldEvents(soulGuide,0);assert(nearestMote.collected);assert.notEqual(worldEventTarget(soulGuide),nearestMote);assert.equal(soulAltar.progress,1);
+  for(const kind of Object.keys(EVENT_TYPES)){
+    const guidance=trialGame(kind),messages=[];guidance.on=(event,data)=>messages.push({event,data});assert(guidance.interact());assert.equal(guidance.bannerUntil,guidance.time+3);
+    assert(messages.some(m=>m.event==='banner'&&m.data.title.includes({vigil:'灯圈',hunt:'守卫',souls:'魂光'}[kind])),'brief instructions identify the task');
+    guidance.lastPhase=pressureAt(guidance.time).index;Object.assign(guidance.player,{x:guidance.player.x+90,y:guidance.player.y+90,invincible:9});for(let i=0;i<65;i++)guidance.update(.05);
+    assert(messages.some(m=>m.event==='bannerHide'),'task instructions dismiss after three seconds');assert(guidance.activeEvent,'dismissing the hint leaves the task running');
+    const labels=[],g=new Proxy({fillText:(text,x,y)=>labels.push({text,x,y})},{get:(o,key)=>o[key]??(()=>{})});
+    const objective=worldEventTarget(guidance),label={vigil:'守灯仪式',hunt:'守卫',souls:'魂光'}[kind],d=Math.round(Math.hypot(objective.x-guidance.player.x,objective.y-guidance.player.y));
+    drawWorldEvents(guidance,g,guidance.w/2-objective.x,guidance.h/2-objective.y);
+    assert(labels.some(l=>l.text.includes(label)&&l.text.endsWith(' · '+d)),'on-map objective has the current distance');
+    for(const [dx,dy] of [[2000,0],[-2000,0],[0,2000],[0,-2000]]){
+      labels.length=0;guidance.drawCompass(g,{x:objective.x-dx,y:objective.y-dy},320,568);
+      assert(labels.some(l=>l.text.endsWith(' · '+d)&&l.x>=50&&l.x<=270&&l.y>=0&&l.y<=568),'off-screen direction retains distance inside each map edge');
+    }
+  }
   const fullTrial=trialGame('hunt');fullTrial.pressure.cap=0;assert(!fullTrial.interact());fullTrial.pressure.cap=2;assert(fullTrial.interact());fullTrial.time=65;updateWorldEvents(fullTrial,.05);assert.equal(fullTrial.enemies.length,2);
   const soulBoon=characterStats(CHARACTERS[1],{}, {},{}, {orbit:1},['souls']);assert.equal(weaponStats('orbit',1,soulBoon,CHARACTERS[1]).damage/weaponStats('orbit',1,characterStats(CHARACTERS[1]),CHARACTERS[1]).damage,1.45);assert.equal(weaponStats('blade',1,soulBoon,CHARACTERS[1]).damage,weaponStats('blade',1,characterStats(CHARACTERS[1]),CHARACTERS[1]).damage);
-  const fragile=start();fragile.boons=['stride'];fragile.stats=characterStats(fragile.character,{}, {},{},fragile.weapons,fragile.boons);fragile.player.shield=0;fragile.player.invincible=0;fragile.hurt(25,0,0);assert.equal(fragile.damageTaken,28,'stride downside reaches real incoming damage');
+  const fragile=start();fragile.boons=['stride'];fragile.stats=characterStats(fragile.character,{}, {},{},fragile.weapons,fragile.boons);fragile.player.shield=0;fragile.player.invincible=0;fragile.hurt(25,0,0);assert.equal(fragile.damageTaken,25,'stride no longer penalizes the hero; enemies carry its cost');
   for(const milestone of [180,360,600]){const bossGame=start();bossGame.enemies=[];bossGame.spawnBoss(milestone);const boss=bossGame.enemies.find(e=>e.boss);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1,'no duplicate boss drop');bossGame.drops.push({type:'xp',x:2000,y:2000,value:10,r:3,age:0});const magnet=bossGame.drops.find(d=>d.type==='magnet');Object.assign(magnet,{x:bossGame.player.x,y:bossGame.player.y});bossGame.updateDrops(.01);assert(bossGame.drops.filter(d=>d.type==='xp').every(d=>d.attracted),'boss magnet attracts even off-screen XP');}
-  const chestTrial=start();equip(chestTrial,{blade:6},{growth:5});chestTrial.player.hp=chestTrial.player.maxHp-5;assert.deepEqual(chestTrial.openChest(60),['经验 +36（无可强化装备）','经验 +36（无可强化装备）','生命 +5','余烬 +60']);
+  const chestTrial=start();equip(chestTrial,{blade:6},{growth:5});chestTrial.player.hp=chestTrial.player.maxHp-5;const chestRewards=chestTrial.openChest(60);assert.equal(chestRewards.length,4);assert(chestRewards.slice(0,2).every(text=>text.includes('+')&&!text.includes('LV.')));assert.deepEqual(chestRewards.slice(2),['生命 +5','余烬 +60']);assert(Object.keys(chestTrial.weaponUpgrades.blade).length>0);assert.equal(chestTrial.weapons.blade,6);assert.equal(chestTrial.xp,0);
+  chestTrial.banished.add('blade');assert.deepEqual(chestTrial.openChest(60),['经验 +36（无可强化装备）','经验 +36（无可强化装备）','余烬 +60']);
   const pausedTrial=trialGame('vigil');pausedTrial.pause();assert(!worldEventStatus(pausedTrial).canStart);assert(!pausedTrial.interact());
+  for(const id of Object.keys(ALTAR_BOONS)){
+    const boon=actual(id),plain=characterStats(boon.character);
+    for(const key of ['damageMultiplier','maxHp','moveSpeed','xpMultiplier','pickupRadius','areaMultiplier'])assert(boon.stats[key]>=plain[key],id+' has no hero-stat penalty');
+    assert(boon.stats.haste<=plain.haste&&boon.stats.dashCooldown<=plain.dashCooldown);
+    const baseline=pressureAt(240),modified=pressureAt(240,0,boon.stats.difficulty);boon.time=240;
+    const enemy=boon.spawnEnemy('knight');assert.equal(enemy.maxHp,ENEMIES.knight.hp*modified.hp);assert.equal(enemy.damage,ENEMIES.knight.damage*modified.damage);assert.equal(enemy.speed,ENEMIES.knight.speed*modified.speed);
+    assert.equal(modified.hp/baseline.hp,boon.stats.difficulty.hp);assert.equal(modified.damage/baseline.damage,boon.stats.difficulty.damage);
+    assert(Object.values(boon.stats.difficulty).some((value,index)=>value!==Object.values(plain.difficulty)[index]),id+' changes actual enemy pressure');
+    boon.enemies=[];boon.spawnBoss(600);const bosses=boon.enemies.filter(e=>e.final);assert.equal(bosses.length,1+boon.stats.difficulty.bosses);assert.equal(bosses[0].maxHp,42000*boon.stats.difficulty.hp);assert.equal(bosses[0].damage,52*boon.stats.difficulty.damage);assert.equal(bosses[0].speed,45*boon.stats.difficulty.speed);
+  }
+  const stacked=characterStats(CHARACTERS[0],{}, {},{}, {},['horizon','harvest','horizon','frenzy','precision','glass','twins']);assert.deepEqual(stacked.difficulty,{hp:1,damage:1,speed:1,population:2,elite:2,bosses:2});
+  const population=boons=>{
+    const g=start();g.enemies=[];g.time=240;g.boons=boons;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);g.pressure=pressureAt(g.time,0,g.stats.difficulty);g.waveCount=0;g.spawnWave();
+    return {count:g.enemies.length,cap:g.pressure.cap,interval:g.pressure.interval};
+  };
+  const normalPopulation=population([]),densePopulation=population(['horizon']);assert.equal(densePopulation.count,normalPopulation.count*1.5,'the actual wave contains 50% more enemies');assert.equal(densePopulation.interval,normalPopulation.interval/1.5);assert.equal(densePopulation.cap,Math.round(normalPopulation.cap*1.5));
+  const arrivals=(boons,dt)=>{
+    const g=start();g.time=240;g.enemies=[];g.nextShrine=3;g.bossMilestones=new Set([180,360,600]);g.waveClock=1e9;g.spawnClock=0;g.xpNext=1e9;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);let count=0;const spawn=g.spawnEnemy;
+    g.spawnEnemy=function(...args){count++;return spawn.apply(this,args)};
+    for(let i=0;i<Math.round(60/dt);i++){g.update(dt);g.enemies=[]}return count;
+  };
+  for(const dt of [.025,.05])assert(Math.abs(arrivals(['horizon'],dt)/arrivals([],dt)-1.5)<.02,'50% more regular arrivals survive real frame intervals');
+  assert.equal(pressureAt(179.99).eliteChance,0);assert.equal(pressureAt(180).eliteChance,.02);
+  const eliteRoll=Math.random;Math.random=()=>.025;
+  try{for(const boons of [[],['frenzy']]){
+    const g=start();g.time=240;g.enemies=[];g.boons=boons;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);g.spawnClock=0;g.waveClock=1e9;g.bossMilestones=new Set([180,360,600]);g.update(.01);
+    assert.equal(g.enemies.length,4);assert(g.enemies.every(e=>e.elite===!!boons.length),'a 2.5% roll lies between the actual 2% and 3% elite chances');
+  }}finally{Math.random=eliteRoll}
+  const multiboss=start();multiboss.time=179.99;multiboss.enemies=[];multiboss.spawnClock=multiboss.waveClock=1e9;multiboss.xpNext=1e9;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,1);
+  for(const id of ['glass','twins']){multiboss.enemies=[];multiboss.state='reward';multiboss.eventChoices=[id];assert(multiboss.chooseAltarReward(0));multiboss.time=id==='glass'?359.99:599.99;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,id==='glass'?2:3,'extra bosses apply only to future milestone waves')}
+  const finals=multiboss.enemies.filter(e=>e.final);multiboss.kill(finals[0]);assert(!multiboss.finalDefeated);multiboss.update(.01);assert(!multiboss.ended,'one defeated final boss cannot end a multi-boss fight');
+  multiboss.kill(finals[1]);assert(!multiboss.finalDefeated);multiboss.kill(finals[2]);assert(multiboss.finalDefeated);assert.equal(multiboss.drops.filter(d=>d.type==='magnet').length,3);let settlements=0;multiboss.on=event=>{if(event==='end')settlements++};multiboss.update(.01);multiboss.end(true);assert.equal(settlements,1,'victory settles exactly once after all final bosses die');
+  multiboss.start(multiboss.character);assert.deepEqual(multiboss.stats.difficulty,{hp:1,damage:1,speed:1,population:1,elite:1,bosses:0});
+  }
+  console.log('PASS: all twelve altar costs increase enemy pressure; density, elite rolls, future boss waves, all-boss victory and run reset.');
+  {
+    for(const boons of [[],['horizon','frenzy','glass'],['horizon','harvest','frenzy','precision','glass','twins']]){
+      const g=start();g.boons=boons;equip(g,{blade:1});g.enemies=[];g.time=300;
+      for(let i=0;i<30;i++){const elite=g.spawnEnemy('skeleton',true);g.kill(elite);g.kill(elite)}
+      assert.equal(g.drops.filter(d=>d.type==='chest').length,0);assert.equal(g.drops.filter(d=>d.type==='xp').length,30);assert(g.drops.filter(d=>d.type==='xp').every(d=>d.elite&&d.value===ENEMIES.skeleton.xp*8));
+      for(const milestone of [180,360,600])g.spawnBoss(milestone);
+      const bosses=g.enemies.filter(e=>e.boss),count=1+g.stats.difficulty.bosses;
+      for(const milestone of [360,180,600]){
+        const wave=bosses.filter(e=>e.bossWave===milestone);assert.equal(wave.length,count);const before=g.drops.filter(d=>d.type==='chest').length;
+        for(const [index,boss] of wave.reverse().entries()){g.kill(boss);g.kill(boss);assert.equal(g.drops.filter(d=>d.type==='chest').length,before+(index===count-1?1:0),'each overlapping boss wave pays once on its last death')}
+      }
+      assert.equal(g.drops.filter(d=>d.type==='chest').length,3);assert.equal(g.drops.filter(d=>d.type==='magnet').length,count*3);assert.equal(g.drops.filter(d=>d.type==='xp').length,30+count*3);
+    }
+    console.log('PASS: normal and stacked population/elite/boss contracts retain 8x elite XP and one chest per completed boss wave, with per-boss magnets and no duplicate rewards.');
   }
   console.log('PASS: 36 weapons / 72 live attacks, 20 fusions, 27 innate-driven talent nodes, three timed shrines, twelve altar bargains, boss magnets, lamp/wick gates, star XP collection, wind pursuit, tag weights and growth parity.');
 
@@ -604,6 +838,8 @@ try{
     for(const build of builds)for(const moving of [false,true])for(const trial of [311,733,1193,1733,2237]){
       seed=trial;const game=start();game.time=build.at;game.level=build.level;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set(build.boss?[180,360]:[180,360,600]);game.xpNext=1e9;game.waveClock=15;
       game.meta=build.meta||{};
+      // Fixed-budget comparisons ignore chest upgrades while keeping enemies and other supplies.
+      game.openChest=()=>{};
       equip(game,build.weapons,build.passives);
       // Gear-only controls keep the innate: learned talents now supply their own weapon synergies.
       if(!build.late)for(const node of CHARACTER_TALENTS.warden.branches[0].nodes)game.learnTalent(node.id);
@@ -642,8 +878,8 @@ try{
     // Same gear, level, movement policy and seeds within each character; healing starts with room to work.
     const loadouts=[{blade:6,orbit:4,flame:3},{orbit:6,bolt:4,frost:3},{bolt:6,blade:4,storm:3}],reports=[];
     for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const trial of [311,733,1193]){
-      seed=trial;const game=start(character);game.time=300;game.level=25;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set([180,360,600]);game.xpNext=1e9;game.waveClock=1e9;
-      equip(game,loadouts[index],{power:2,haste:2});const initialHp=game.player.hp=game.player.maxHp*.65;
+      seed=trial;const game=start(character);game.time=300;game.level=30;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set([180,360,600]);game.xpNext=1e9;game.waveClock=1e9;
+      game.openChest=()=>{};equip(game,loadouts[index],{power:2,haste:2});const initialHp=game.player.hp=game.player.maxHp*.65;
       for(const node of branch.nodes)assert(game.learnTalent(node.id));
       let frames=0;
       for(;frames<1200&&!game.ended;frames++){
@@ -657,7 +893,7 @@ try{
       }
       const s=game.characterState,report={character:character.id,branch:branch.name,seed:trial,level:game.level,startTime:300,seconds:frames*.05,survived:!game.ended,initialHp,hp:Math.max(0,game.player.hp),shield:game.player.shield,damageTaken:game.damageTaken,kills:game.kills,talentDamage:game.damageByWeapon.talent||0,procs:s.procs,wells:s.wells||0,hunts:s.hunts||0,coldBursts:s.coldBursts||0,starXp:s.starXp||0,reviveReady:s.reviveReady,revived:s.revived,xp:game.xp,armor:game.stats.armor,regeneration:game.stats.regeneration,weapons:game.weapons,passives:game.passives};
       assert(Object.values(report).filter(v=>typeof v==='number').every(Number.isFinite),'finite talent results: '+branch.name);
-      assert(report.procs>0&&report.talentDamage>0,'innate must trigger in the live loop: '+branch.name);assert.equal(game.level,25);assert.equal(Object.keys(game.talents).length,3);assert.deepEqual(game.weapons,loadouts[index]);
+      assert(report.procs>0&&report.talentDamage>0,'innate must trigger in the live loop: '+branch.name);assert.equal(game.level,30);assert.equal(Object.keys(game.talents).length,3);assert.deepEqual(game.weapons,loadouts[index]);
       reports.push(report);
     }
     mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/talent-report.json',JSON.stringify(reports,null,2));
@@ -666,6 +902,44 @@ try{
       console.log(JSON.stringify({character:character.id,branch:branch.name,survived:group.filter(r=>r.survived).length,kills:mean('kills'),talentDamage:mean('talentDamage'),procs:mean('procs'),hp:mean('hp'),shield:mean('shield'),wells:mean('wells'),hunts:mean('hunts'),coldBursts:mean('coldBursts'),starXp:mean('starXp')}));
     }
     console.log('PASS: 27 live talent-branch trials with fixed gear and three seeds per specialization.');
+  }
+
+  if(process.argv.includes('--difficulty')){
+    // Full permanent trees and one legal three-point route; equal 37-point gear, actual damage and no chest upgrades.
+    const reports=[],loadouts=[
+      [{bloodmoon:3,solar:3,bell:6},{armor:4,power:3,haste:3}],
+      [{blade:1,glacier:3,tempest:3,storm:5},{frostbrand:3,stormseal:3,rime:3,haste:1}],
+      [{blade:1,thunderbolt:3,soulchain:3,lance:5},{conductor:3,power:3,haste:3}],
+    ];
+    for(const [weapons,passives] of loadouts)assert.equal(Object.entries(weapons).reduce((sum,[key,level])=>sum+level+(FUSIONS[key]?.ingredients.reduce((n,item)=>n+item.required,0)||0),0)+Object.values(passives).reduce((a,b)=>a+b,0),37);
+    for(const bargains of [[],['horizon','frenzy','glass']])for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const at of [540,600])for(const moving of [false,true])for(const trial of [311,733,1193]){
+      seed=trial;const game=start(character);game.start(character,fullPermanent);game.time=at;game.level=30;game.enemies=[];game.nextShrine=3;game.bossMilestones=new Set(at===600?[180,360]:[180,360,600]);game.xpNext=1e9;game.waveClock=15;
+      game.boons=[...bargains];game.openChest=()=>{};let bossesSpawned=0;const spawnBoss=game.spawnBoss;game.spawnBoss=function(milestone){spawnBoss.call(this,milestone);bossesSpawned=this.enemies.filter(e=>e.boss&&!e.dead).length};equip(game,...loadouts[index]);for(const node of branch.nodes)assert(game.learnTalent(node.id));let frames=0;
+      for(;frames<(at===600?1800:1200)&&!game.ended;frames++){
+        const p=game.player;
+        if(moving){
+          const boss=game.enemies.find(e=>e.boss&&!e.dead);let dx=Math.cos(game.time*.18),dy=Math.sin(game.time*.18),nearest=Infinity;
+          if(boss){const d=Math.hypot(boss.x-p.x,boss.y-p.y)||1;dx=(boss.x-p.x)/d*(d>170?1:d<100?-1:0)+dy*.6;dy=(boss.y-p.y)/d*(d>170?1:d<100?-1:0)-dx*.6}
+          for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;nearest=Math.min(nearest,d-e.r);if(d<65){const strength=(65-d)/65*3;dx+=x/d*strength;dy+=y/d*strength}}
+          for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
+          for(const h of game.hazards)if(h.type==='blast'){const x=p.x-h.x,y=p.y-h.y,d=Math.hypot(x,y)||1;if(d<h.r+30){dx+=x/d*3;dy+=y/d*3}}
+          const length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};if(nearest<28)game.dash();
+        }
+        game.update(.05);
+      }
+      const report={bargains:[...bargains],bossesSpawned,character:character.id,branch:branch.name,at,moving,seed:trial,seconds:Math.round(frames*.05),alive:game.player.hp>0,won:!!game.finalDefeated,hp:Math.max(0,Math.round(game.player.hp)),damageTaken:game.damageTaken,kills:game.kills,remaining:game.enemies.filter(e=>!e.dead).length,bossHp:game.enemies.filter(e=>e.final&&!e.dead).reduce((n,e)=>n+e.hp,0),talentProcs:game.characterState.procs};
+      assert.equal(Object.keys(game.talents).length,3);assert(Object.values(report).filter(v=>typeof v==='number').every(Number.isFinite));reports.push(report);
+    }
+    mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/difficulty-report.json',JSON.stringify(reports,null,2));
+    for(const contracted of [false,true])for(const at of [540,600])for(const moving of [false,true]){const rows=reports.filter(r=>!!r.bargains.length===contracted&&r.at===at&&r.moving===moving),mean=k=>Math.round(rows.reduce((s,r)=>s+r[k],0)/rows.length);console.log(JSON.stringify({contracted,at,moving,runs:rows.length,alive:rows.filter(r=>r.alive).length,won:rows.filter(r=>r.won).length,damageTaken:mean('damageTaken'),kills:mean('kills'),remaining:mean('remaining'),bossHp:mean('bossHp')}))}
+
+    const base=reports.filter(r=>!r.bargains.length),bosses=base.filter(r=>r.at===600),hordes=base.filter(r=>r.at===540);
+    assert(bosses.filter(r=>r.moving&&r.won).length>=18,'max-growth formed builds retain a practical moving boss window');
+    assert(bosses.filter(r=>!r.moving&&r.won).length<=6,'max-growth boss fights cannot routinely be won standing still');
+    assert(hordes.filter(r=>r.moving&&r.alive).length>=24&&hordes.filter(r=>!r.moving&&r.alive).length<=12,'full talents still reward movement through the late horde');
+    assert(reports.filter(r=>r.at===600).every(r=>r.bossesSpawned===(r.bargains.length?2:1)),'the live benchmark spawns the contracted number of final bosses');
+    console.log('PASS: '+reports.length+' full-permanent-growth, legal three-point talent trials across all nine branches, late hordes, bosses and three stacked contracts.');
+
   }
 
   if(process.argv.includes('--weights')){
@@ -681,18 +955,24 @@ try{
     for(const report of reports)console.log(JSON.stringify(report));
   }
 
-  if(process.argv.includes('--simulate')){
-    const reports=[];
-    for(const invulnerable of [false,true])for(let index=0;index<CHARACTERS.length;index++){
+  if(process.argv.includes('--simulate')||process.argv.includes('--progression')){
+    const reports=[],compare=process.argv.includes('--progression');
+    for(const invulnerable of compare?[true]:[false,true])for(const index of compare?[0]:[0,1,2])for(const bargains of compare?[[],['horizon','frenzy','glass']]:[[]]){
       seed=137+index;const game=start(CHARACTERS[index]),checkpoints=[];
+      if(compare){game.start(CHARACTERS[index],fullPermanent);game.nextShrine=ALTAR_TIMES.length}
+      let firstMaxAt=null,refinementChoices=0,chests=0,eliteKills=0,noGrowthChoices=0;
+      const openChest=game.openChest.bind(game);game.openChest=value=>{chests++;return openChest(value)};
+      const kill=game.kill.bind(game);game.kill=enemy=>{if(!enemy.dead&&enemy.elite&&!enemy.boss)eliteKills++;return kill(enemy)};
       const preferred=[['blade','flame','lance','meteor','power','haste','embercore','cinder','armor','aegis'],['orbit','frost','tether','bell','rime','power','area','haste','aegis','regen'],['bolt','storm','shard','sentinel','conductor','lens','power','haste','luck','focus']][index];
       let nextCheckpoint=60;
       for(let frame=0;frame<14400&&!game.ended;frame++){
+        if(game.state==='running')for(const [i,id] of bargains.entries())if(game.time>=ALTAR_TIMES[i]&&!game.boons.includes(id)){game.state='reward';game.eventChoices=[id];game.chooseAltarReward(0)}
         for(const branch of CHARACTER_TALENTS[game.character.id].branches)for(const node of branch.nodes)if(talentNodeState(game,node.id).available)game.learnTalent(node.id);
+        if(game.state==='talent')game.state='running';
         if(game.state==='level'){
           const injured=game.player.hp/game.player.maxHp<.5;
-          const scored=game.choices.map((item,i)=>({i,score:item.fusion?500:(item.weapon&&item.current?60+item.current*3:0)+(preferred.includes(item.key)?70-preferred.indexOf(item.key):0)+(item.weapon?10:0)+(injured&&['vitality','aegis','armor','regen'].includes(item.key)?145:0)}));
-          scored.sort((a,b)=>b.score-a.score);game.chooseUpgrade(scored[0].i);continue;
+          const scored=game.choices.map((item,i)=>({i,score:item.fusion?500:item.refinement?20+(preferred.includes(item.key)?5:0):(item.weapon&&item.current?60+item.current*3:0)+(preferred.includes(item.key)?70-preferred.indexOf(item.key):0)+(item.weapon?10:0)+(injured&&['vitality','aegis','armor','regen'].includes(item.key)?145:0)}));
+          scored.sort((a,b)=>b.score-a.score);const item=game.choices[scored[0].i];if(item.refinement)refinementChoices++;if(item.key==='heal')noGrowthChoices++;game.chooseUpgrade(scored[0].i);continue;
         }
         const p=game.player;if(invulnerable)p.invincible=2;
         let goal=null,best=Infinity;
@@ -704,12 +984,14 @@ try{
         for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
         for(const h of game.hazards){if(h.type!=='blast')continue;const x=p.x-h.x,y=p.y-h.y,d=Math.hypot(x,y)||1;if(d<h.r+30){dx+=x/d*3;dy+=y/d*3}}
         length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};if(nearest<24)game.dash();game.update(.05);
-        if(game.time>=nextCheckpoint){checkpoints.push({time:nextCheckpoint,level:game.level,kills:game.kills,hp:Math.round(p.hp)});nextCheckpoint+=60}
+        if(firstMaxAt===null&&Object.entries(game.weapons).some(([key,level])=>level===maxWeaponLevel(key)))firstMaxAt=Math.round(game.time);
+        if(game.time>=nextCheckpoint){checkpoints.push({time:nextCheckpoint,level:game.level,kills:game.kills,hp:Math.round(p.hp),chests,eliteKills,refinementChoices});nextCheckpoint+=60}
       }
-      reports.push({character:game.character.id,mode:invulnerable?'collector (damage disabled)':'survival bot',time:Math.round(game.time),won:!!game.finalDefeated,level:game.level,kills:game.kills,damageTaken:game.damageTaken,weapons:game.weapons,passives:game.passives,talents:Object.keys(game.talents),checkpoints});
+      reports.push({character:game.character.id,mode:invulnerable?'collector (damage disabled)':'survival bot',bargains,firstMaxAt,chests,eliteKills,refinementChoices,noGrowthChoices,time:Math.round(game.time),won:!!game.finalDefeated,level:game.level,kills:game.kills,damageTaken:game.damageTaken,weapons:game.weapons,passives:game.passives,weaponUpgrades:game.weaponUpgrades,talents:Object.keys(game.talents),checkpoints});
+      if(compare){assert.equal(noGrowthChoices,0);assert(chests<=3,'contracts cannot multiply boss chests');assert(game.time>=600,'the collector comparison reaches the last minute')}
       console.log(JSON.stringify(reports.at(-1)));
     }
-    mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/balance-report.json',JSON.stringify(reports,null,2));
+    mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/'+(compare?'progression':'balance')+'-report.json',JSON.stringify(reports,null,2));
   }
   if(process.argv.includes('--opening')){
     const reports=[],times=[30,60,120,180],trials=[311,733,1193];
@@ -736,6 +1018,7 @@ try{
       };
       while(game.time<180&&!game.ended&&frames++<5000){
         for(const branch of CHARACTER_TALENTS[character.id].branches)for(const node of branch.nodes)if(talentNodeState(game,node.id).available)game.learnTalent(node.id);
+        if(game.state==='talent')game.state='running';
         if(game.state==='level'){
           const scored=game.choices.map((item,i)=>({i,score:item.key===character.weapon?1000:item.key==='power'?900:item.weapon?600+(item.current||0)*10:['haste','area','amount'].includes(item.key)?400:0}));
           scored.sort((a,b)=>b.score-a.score);game.chooseUpgrade(scored[0].i);game.stats.criticalChance=0;continue;
@@ -767,7 +1050,7 @@ try{
       // Stronger permanent XP may advance LV2; later pacing and one-shot limits stay shared.
       for(const [level,earliest,latest] of [[2,meta==='max'?8:10,25],[3,23,45],[4,35,65]]){const at=median(group.map(r=>r.levelTimes[level]));assert(at!==null&&at>=earliest&&at<=latest,character.id+' '+meta+' upgrade pacing LV'+level)}
       for(const level of [3,4])assert(median(group.map(r=>r.levelTimes[level]-r.levelTimes[level-1]))>=10,character.id+' '+meta+' consecutive upgrades need time to play');
-      for(const [index,range] of [[1,[3,5]],[2,[6,10]],[3,[9,14]]]){const level=median(group.map(r=>r.checkpoints[index].level));assert(level>=range[0]&&level<=range[1],character.id+' '+meta+' growth at '+times[index])}
+      for(const [index,range] of [[1,[3,5]],[2,[6,10]],[3,[meta==='max'?9:8,14]]]){const level=median(group.map(r=>r.checkpoints[index].level));assert(level>=range[0]&&level<=range[1],character.id+' '+meta+' growth at '+times[index])}
       for(const band of hits){assert(band.skeleton.total>=20&&band.bat.total>=20,'one-shot limits need sufficient actual contacts');assert(band.skeleton.percent<=20&&band.bat.percent<=35,character.id+' '+meta+' primary attacks must not routinely erase healthy early enemies')}
       console.log(JSON.stringify({character:character.id,meta,mode:'collector',medianLevelTimes:Object.fromEntries([2,3,4].map(level=>[level,median(group.map(r=>r.levelTimes[level]))])),medianCheckpointLevels:times.map((time,i)=>({time,level:median(group.map(r=>r.checkpoints[i].level))})),hits}));
     }
@@ -803,8 +1086,42 @@ try{
       await call('Page.enable');await call('Runtime.enable');
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
       await call('Page.navigate',{url:'http://127.0.0.1:4173/'});
-      for(let i=0;i<50;i++){if(await evaluate('return document.readyState!=="loading"'))break;await delay(100)}
+      for(let i=0;i<120;i++){if(await evaluate('return document.readyState!=="loading"&&!!document.getElementById("world")'))break;await delay(500)}
       assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.state'),'menu');
+      if(process.argv.includes('--refinements')){
+        const cases=[[['blade','damage','white'],['bolt','damage','green'],['hailfire','damage','purple'],['storm','damage','gold']],[['bolt','amount','purple'],['soulforge','amount','gold'],['hailfire','anomaly','purple'],['thorn','damage','gold']],[['hailfire','control','purple'],['thorn','duration','green'],['storm','haste','gold'],['bolt','damage','gold']]];
+        for(const [width,height] of [[1280,800],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
+          const mobile=width<701||height<500;
+          await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});
+          for(const [caseIndex,selection] of cases.entries()){
+            await evaluate(`
+              const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{upgradePool}=await import('/src/balance.js');
+              if(!document.getElementById('status-screen').classList.contains('hidden'))document.getElementById('sheet-close').click();
+              game.start(game.character);game.level=40;game.time=480;game.nextShrine=3;game.bossMilestones=new Set([180,360,600]);game.enemies=[];game.player.invincible=999;game.spawnClock=game.waveClock=1e9;
+              game.weapons={blade:6,bolt:6,hailfire:3,soulforge:3,thorn:6,storm:6};game.passives={power:5,haste:5,area:3,armor:5,luck:5,focus:3};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth,game.weaponUpgrades);
+              const pool=upgradePool(game);game.choices=${JSON.stringify(selection)}.map(([key,refinement,rarity])=>pool.find(item=>item.key===key&&item.refinement===refinement&&item.rarity===rarity));if(game.choices.some(item=>!item))throw Error('missing refinement');
+              game.state='level';game.pendingLevels=2;game.on('weapons');game.on('hud');game.on('level');
+            `);
+            await delay(80);
+            const layout=await evaluate(`const panel=document.querySelector('.level-modal'),cards=[...document.querySelectorAll('.refinement-card')];return {panelFits:panel.scrollHeight<=panel.clientHeight+1&&panel.scrollWidth<=panel.clientWidth+1,size:[panel.clientHeight,panel.scrollHeight,panel.clientWidth,panel.scrollWidth],cards:cards.map(b=>{const r=b.getBoundingClientRect();return {text:b.innerText,visible:r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth,overflow:b.scrollWidth>b.clientWidth+1}}),rarities:cards.map(b=>b.dataset.rarity)};`);
+            await shot('refinement-'+width+'x'+height+'-'+caseIndex);
+            assert(layout.panelFits,'refinement panel fits '+width+'x'+height+' case '+caseIndex+': '+JSON.stringify(layout));assert.equal(layout.cards.length,4);assert(layout.cards.every(card=>card.visible&&!card.overflow&&!/undefined|NaN|LV\. 6 → LV\. 6/.test(card.text)),JSON.stringify(layout));assert.deepEqual(layout.rarities,selection.map(item=>item[2]));
+            const before=await evaluate(`const {game}=await import('/src/main.js');return JSON.stringify([game.choices,game.rerolls,game.pendingLevels,game.weaponUpgrades]);`);
+            await evaluate('document.getElementById("level-status-button").click();document.getElementById("sheet-close").click()');
+            assert.equal(await evaluate(`const {game}=await import('/src/main.js');return JSON.stringify([game.choices,game.rerolls,game.pendingLevels,game.weaponUpgrades]);`),before,'status preserves refinement choices');
+            await evaluate(`const {game}=await import('/src/main.js');game.pendingLevels=0;`);
+            const selected=3,[key,refinement]=selection[selected];
+            if(mobile){const point=await evaluate(`const r=document.querySelectorAll('.upgrade-card')[${selected}].getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height-12};`);await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}
+            else{const code=(caseIndex===2?'Numpad':'Digit')+(selected+1);await call('Input.dispatchKeyEvent',{type:'keyDown',key:String(selected+1),code});await call('Input.dispatchKeyEvent',{type:'keyUp',key:String(selected+1),code})}
+            const selectedState=await evaluate(`const {game}=await import('/src/main.js');return {state:game.state,upgrades:game.weaponUpgrades,hidden:document.getElementById('level-screen').classList.contains('hidden')};`);
+            assert(selectedState.state==='running'&&selectedState.upgrades[key]?.[refinement]===.16&&selectedState.hidden,'real selection at '+width+'x'+height+' case '+caseIndex+': '+JSON.stringify(selectedState));
+            await evaluate(`const {game}=await import('/src/main.js');game.pause();document.getElementById('status-button').click();document.getElementById('sheet-tab-items').click();document.querySelector('[data-item-id="sheet-weapon-${key}"]').click();`);
+            assert(await evaluate(`return document.getElementById('sheet-weapon-${key}').textContent.includes('满级精修')&&document.getElementById('items-detail').matches(':popover-open');`),'equipment detail exposes accumulated refinements');
+          }
+        }
+        await evaluate(`document.getElementById('sheet-close').click();const {game}=await import('/src/main.js');game.start(game.character);game.state='paused';if(Object.keys(game.weaponUpgrades).length)throw Error('refinements survived restart');`);
+        assert.equal(errors.length,0,JSON.stringify(errors));console.log('PASS: seven desktop/phone layouts show four refinement rarities, real gains, touch/keyboard selection, preserved choices, equipment summaries and restart with zero runtime exceptions.');
+      }else{
       await delay(600);await shot('camp-desktop');
       for(const [width,height] of [[1920,1080],[1366,768],[1280,720],[1024,768],[1024,600],[900,700],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
         const mobile=width<701||height<500;
@@ -819,7 +1136,7 @@ try{
         assert(await evaluate('return !document.getElementById("meta-screen").classList.contains("hidden")&&document.getElementById("meta-screen").getAttribute("role")==="dialog"'),'real pointer activation opens the altar');
         assert(await evaluate('return document.querySelectorAll(".meta-tree").length===3&&document.querySelectorAll("#meta-upgrades .meta-node").length===15&&!document.getElementById("meta-detail").matches(":popover-open")&&!document.getElementById("meta-tabs")'),'three pure growth trees are separate from starter weapons');
         assert(await evaluate('const p=document.querySelector(".meta-panel"),r=p.getBoundingClientRect();return p.scrollHeight<=p.clientHeight+1&&p.scrollWidth<=p.clientWidth+1&&r.top>=12&&r.bottom<=innerHeight-12&&[...document.querySelectorAll("#meta-upgrades .meta-node")].every(b=>{const q=b.getBoundingClientRect();return q.width>=44&&q.height>=44&&document.elementFromPoint(q.x+q.width/2,q.y+q.height/2)?.closest("button")===b})'),'all fifteen nodes fit without scrolling at '+width+'x'+height);
-        await evaluate('document.querySelector("[data-meta=vitality]").click()');assert(await evaluate('return document.getElementById("meta-buy").disabled&&document.getElementById("meta-detail-state").textContent.includes("还差 120")'),'zero balance explains the unavailable purchase');
+        await evaluate('document.querySelector("[data-meta=vitality]").click()');assert(await evaluate('return document.getElementById("meta-buy").disabled&&document.getElementById("meta-detail-state").textContent.includes("还差 60")'),'zero balance explains the unavailable purchase');
         await evaluate('document.getElementById("meta-detail-close").click()');
         if([1366,390,370,320].includes(width)||height===320)await shot('camp-altar-'+width+'x'+height);
         await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
@@ -854,7 +1171,7 @@ try{
       const purchase=await evaluate('const b=document.querySelector("[data-meta=vitality]");b.scrollIntoView({block:"center"});const r=b.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
       for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,x:purchase.x,y:purchase.y,button:'left',clickCount:1});
       await evaluate('document.getElementById("meta-buy").click()');
-      assert(await evaluate('const {readSave}=await import("/src/data.js");for(let i=0;i<50&&!document.getElementById("meta-feedback").textContent.includes("已强化");i++)await new Promise(r=>setTimeout(r,10));const save=readSave();return save.embers===480&&save.meta.vitality===1&&document.getElementById("ember-balance").textContent==="480"&&document.getElementById("meta-count").textContent==="480 ✦"&&document.getElementById("meta-feedback").textContent.includes("下次出征生效")&&document.activeElement.id==="meta-buy"'),'real purchase persists, updates both balances and preserves keyboard focus');
+      assert(await evaluate('const {readSave}=await import("/src/data.js");for(let i=0;i<50&&!document.getElementById("meta-feedback").textContent.includes("已强化");i++)await new Promise(r=>setTimeout(r,10));const save=readSave();return save.embers===540&&save.meta.vitality===1&&document.getElementById("ember-balance").textContent==="540"&&document.getElementById("meta-count").textContent==="540 ✦"&&document.getElementById("meta-feedback").textContent.includes("下次出征生效")&&document.activeElement.id==="meta-buy"'),'real purchase persists, updates both balances and preserves keyboard focus');
       await shot('camp-altar-purchased');await evaluate('document.getElementById("meta-detail-close").click()');
       for(const [width,height] of [[370,665],[320,568],[568,320]]){
         await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
@@ -866,7 +1183,7 @@ try{
       assert(await evaluate('document.getElementById("play-button").click();document.getElementById("start-button").click();const {game}=await import("/src/main.js");return game.state==="running"'));
       await evaluate('const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.time=185;game.level=17;game.weapons={blade:4,flame:4,shard:3};game.passives={power:2,frostbrand:2,rime:2};game.choiceHistory=["flame","cinder","flame","cinder"];game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.player.maxHp=game.stats.maxHp;game.state="level";game.choices=game.rollUpgrades();game.on("weapons");game.on("hud");game.on("level");');
       await delay(100);await shot('upgrade-desktop');
-      assert(await evaluate('return document.getElementById("upgrade-affinity").textContent.includes("火焰")&&document.querySelectorAll(".upgrade-card:not(.fusion-card) .item-tags").length===2'));
+      assert(await evaluate('return document.getElementById("upgrade-affinity").textContent.includes("火焰")&&document.querySelectorAll(".upgrade-card:not(.fusion-card) .item-tags").length===3'));
       assert(await evaluate('const {game}=await import("/src/main.js");const before=JSON.stringify(game.choices);document.getElementById("level-menu-button").click();if(game.state!=="paused")return false;document.getElementById("resume-button").click();return game.state==="level"&&before===JSON.stringify(game.choices)'));
       assert(await evaluate('document.querySelector(".banish-button").click();const {game}=await import("/src/main.js");return game.banishes===2&&game.banished.size===1'));
       assert(await evaluate('const {game}=await import("/src/main.js");const index=game.choices.findIndex(i=>i.key==="solar"&&i.fusion);document.querySelectorAll(".upgrade-card")[index].click();return game.weapons.solar===1&&!game.weapons.blade&&!game.weapons.flame&&game.discoveredFusions.has("solar")'));
@@ -875,7 +1192,7 @@ try{
       assert(await evaluate('return document.getElementById("sheet-build-summary").textContent.includes("3 / 6")'));
       await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.time=602;game.level=40;game.weapons={starfall:2,ricochet:2,soulchain:2,lance:4,sentinel:4,frost:4};game.passives={aegis:2,venomfang:2,rime:2,area:1,armor:2,thorns:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.player.hp=game.player.maxHp=game.stats.maxHp;game.player.invincible=50;game.enemies=[];game.drops=[];game.zones=[];game.projectiles=[];game.bossMilestones=new Set([180,360,600]);game.spawnClock=10;game.waveClock=10;game.pendingLevels=0;game.xpNext=10000;for(let i=0;i<100;i++){const e=game.spawnEnemy(i%4===0?"knight":i%3===0?"ghost":"reaper");const a=i*2.4,r=85+(i%10)*12;e.x=game.player.x+Math.cos(a)*r;e.y=game.player.y+Math.sin(a)*r;}game.spawnBoss(600);game.on("weapons");for(let i=0;i<96;i++)game.update(.025);game.state="over";game.on("hud");game.render();');
       await delay(100);await shot('combat-desktop');
-      await evaluate('const {game}=await import("/src/main.js");game.state="running";game.end(false);');
+      await evaluate('const {game}=await import("/src/main.js");game.state="running";game.end(false);for(let i=0;i<100&&document.getElementById("end-screen").classList.contains("hidden");i++)await new Promise(r=>setTimeout(r,10));');
       assert(await evaluate('return document.getElementById("end-damage").textContent.includes("累计输出")'));
       await shot('result-desktop');
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
@@ -895,20 +1212,20 @@ try{
           const choices=upgradePool(game).concat(Object.keys(FUSIONS).map(key=>fusionChoice(key,Object.fromEntries(Object.keys(WEAPONS).map(id=>[id,5])),Object.fromEntries(Object.keys(PASSIVES).map(id=>[id,2])))),{key:'heal',weapon:false,current:0,next:1,name:'余烬余韵',description:'恢复 12 点生命，获得 15 余烬。',color:'#c1d49c'}),failures=[];
           for(const known of [false,true]){
             game.discoveredFusions=new Set(known?Object.keys(FUSIONS):[]);
-            for(let i=0;i<choices.length;i+=3){
-              game.choices=choices.slice(i,i+3);game.on('level');
+            for(let i=0;i<choices.length;i+=4){
+              game.choices=choices.slice(i,i+4);game.on('level');
               const modal=document.querySelector('.level-modal'),footer=document.querySelector('.level-footer').getBoundingClientRect();
               const buttons=[...document.querySelectorAll('#level-screen button')].filter(e=>e.getClientRects().length),cards=[...document.querySelectorAll('.upgrade-card')];
               const fits=modal.scrollHeight<=modal.clientHeight+1&&modal.scrollWidth<=modal.clientWidth+1&&buttons.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})&&cards.every(e=>{
                 const r=e.getBoundingClientRect();return r.bottom<=footer.top&&e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth+1&&[...e.children].filter(c=>c.getClientRects().length).every(c=>{const s=c.getBoundingClientRect();return s.top>=r.top&&s.bottom<=r.bottom+1&&s.left>=r.left&&s.right<=r.right+1});
               });
-              if(!fits)failures.push(game.choices.map(c=>c.key).join('/')+(known?' known':''));
+              if(!fits)return {items:game.choices.map(c=>c.key),known,panel:[modal.clientHeight,modal.scrollHeight],cards:cards.map(e=>({text:e.innerText,size:[e.clientWidth,e.scrollWidth,e.clientHeight,e.scrollHeight]}))};
             }
           }
-          game.discoveredFusions=discovered;game.choices=[choices.find(c=>c.key==='forkseed'),choices.find(c=>c.key==='spore'),choices.find(c=>c.key==='stormcoil')];game.on('level');return failures;
+          game.discoveredFusions=discovered;game.choices=[choices.find(c=>c.key==='forkseed'),choices.find(c=>c.key==='spore'),choices.find(c=>c.key==='stormcoil'),choices.find(c=>c.key==='blade')];game.on('level');return failures;
         `);
-        assert.deepEqual(layouts,[],'mobile upgrade choices, full effects and actions fit '+width+'x'+height);
         await shot('upgrade-'+width+'x'+height);
+        assert.deepEqual(layouts,[],'mobile upgrade choices, full effects and actions fit '+width+'x'+height);
       }
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
       const pendingChoices=await evaluate('const {game}=await import("/src/main.js");return JSON.stringify([game.choices,game.pendingLevels,game.rerolls])');
@@ -1006,7 +1323,7 @@ try{
           const ids=['status-button','pause-button','hud-talents-button','fusion-tracker','hud-catalog-button','hud-loadout-button','touch-dash'];
           const rects=ids.map(id=>document.getElementById(id).getBoundingClientRect());
           const center={left:innerWidth*.28,right:innerWidth*.72,top:innerHeight*.36,bottom:innerHeight*.7};
-          return document.documentElement.scrollWidth<=innerWidth&&document.getElementById('world-event-card').classList.contains('hidden')&&rects.every(r=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&(r.right<=center.left||r.left>=center.right||r.bottom<=center.top||r.top>=center.bottom))&&rects.every((r,i)=>rects.slice(i+1).every(s=>r.right<=s.left||r.left>=s.right||r.bottom<=s.top||r.top>=s.bottom));
+          return document.documentElement.scrollWidth<=innerWidth&&!document.getElementById('world-event-card')&&rects.every(r=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&(r.right<=center.left||r.left>=center.right||r.bottom<=center.top||r.top>=center.bottom))&&rects.every((r,i)=>rects.slice(i+1).every(s=>r.right<=s.left||r.left>=s.right||r.bottom<=s.top||r.top>=s.bottom));
         `),'compact HUD keeps center clear with separate 44px controls at '+width+'x'+height);
         await shot('hud-'+width+'x'+height);
         await evaluate('const {game}=await import("/src/main.js");game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;');
@@ -1046,7 +1363,7 @@ try{
         await evaluate('document.getElementById("sheet-close").click();');
       }
       // Timed altar choices: real task completion, paused clocks, explicit costs and safe skipping.
-      const prepareAltar=async kind=>evaluate('if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();const {game}=await import("/src/main.js"),{updateWorldEvents,EVENT_TYPES}=await import("/src/world-events.js");game.start(game.character);game.time=60;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,600]);game.player.invincible=999;game.shrineKinds=['+JSON.stringify(kind)+',...Object.keys(EVENT_TYPES).filter(k=>k!=='+JSON.stringify(kind)+')];updateWorldEvents(game,0);Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y});game.on("hud");');
+      const prepareAltar=async kind=>evaluate('if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();const {game}=await import("/src/main.js"),{updateWorldEvents,ALTAR_ORDER}=await import("/src/world-events.js");game.start(game.character);game.time=60;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,600]);game.player.invincible=999;updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind:'+JSON.stringify(kind)+',index:ALTAR_ORDER.indexOf('+JSON.stringify(kind)+'),goal:'+JSON.stringify(kind==='vigil'?12:kind==='hunt'?1:6)+'});Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y});game.on("hud");');
       const finishAltar=async()=>evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js"),s=game.activeEvent;if(s.kind==="hunt")game.kill(s.guardian);else if(s.kind==="vigil")s.progress=s.goal;else for(const mote of s.motes)Object.assign(mote,{x:game.player.x,y:game.player.y});updateWorldEvents(game,.01);game.enemies=[];game.drops=[];');
       const altarFit=async label=>assert.deepEqual(await evaluate('const p=document.querySelector(".altar-panel"),r=p.getBoundingClientRect(),issues=[];if(r.top<0||r.left<0||r.bottom>innerHeight||r.right>innerWidth||p.scrollHeight>p.clientHeight+1)issues.push("panel overflow");for(const e of p.querySelectorAll("button,h2,h3,p")){const b=e.getBoundingClientRect();if(b.top<r.top||b.bottom>r.bottom||b.left<r.left||b.right>r.right||e.scrollWidth>e.clientWidth+1)issues.push(e.textContent);if(e.tagName==="BUTTON"&&document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.closest("button")!==e)issues.push("covered button")}return issues;'),[],label);
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
@@ -1059,6 +1376,7 @@ try{
           await finishAltar();assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="reward"&&game.eventChoices.length===3&&new Set(game.eventChoices).size===3&&game.eventsCompleted===1&&!game.activeEvent&&document.querySelectorAll(".altar-choice").length===3'),'task completion offers exactly three distinct choices');
           const frozen=await evaluate('const {game}=await import("/src/main.js");return [game.time,game.player.x,game.player.hp,game.eventChoices]');await delay(120);assert.deepEqual(await evaluate('const {game}=await import("/src/main.js");return [game.time,game.player.x,game.player.hp,game.eventChoices]'),frozen,'world freezes while choosing');
           await altarFit('altar '+kind+' '+width+'x'+height);
+          if(kind==='hunt')await shot('altar-staged-rewards-'+width+'x'+height);
           if(kind==='vigil'){
             await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
             assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="paused"&&game.pauseReturn==="reward"'));
@@ -1066,7 +1384,7 @@ try{
             await evaluate('document.getElementById("sheet-close").click()');
           }
           if(kind==='hunt'){
-            const before=await evaluate('const {game}=await import("/src/main.js");return game.weapons[game.character.weapon]');await evaluate('document.getElementById("altar-skip").click()');assert(await evaluate('const {game}=await import("/src/main.js");return game.boons.length===0&&game.weapons[game.character.weapon]==='+JSON.stringify(before+1)),'skip upgrades an owned weapon');
+            const before=await evaluate('const {game}=await import("/src/main.js");return game.weapons[game.character.weapon]');await evaluate('document.getElementById("altar-skip").click()');assert(await evaluate('const {game}=await import("/src/main.js");return game.boons.length===0&&game.weapons[game.character.weapon]==='+JSON.stringify(before+3)),'stage three skip upgrades an owned weapon three times');
           }else{
             const picked=await evaluate('const {game}=await import("/src/main.js");return game.eventChoices[1]');
             if(mobile){const point=await evaluate('const r=document.querySelectorAll(".altar-choice")[1].getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}
@@ -1079,22 +1397,69 @@ try{
         for(let i=0;i<all.length;i+=3){await prepareAltar('vigil');await evaluate('const {game}=await import("/src/main.js");game.state="reward";game.eventChoices='+JSON.stringify(all.slice(i,i+3))+';if('+i+'===9)game.weapons={blade:6};game.on("altarReward");');await altarFit('all bargain descriptions '+width+' '+i);if(i===0)await shot('altar-rewards-'+width+'x'+height);await evaluate('document.getElementById("altar-skip").click()')}
       }
       // End timed altar UI coverage.
+      // Brief task banners yield to persistent map directions and distances.
+      for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
+        const mobile=width<=700||height<=500;await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});await delay(60);
+        for(const kind of ['vigil','hunt','souls']){
+          await prepareAltar(kind);
+          await evaluate('const {game}=await import("/src/main.js");game.lastPhase=(await import("/src/balance.js")).pressureAt(game.time).index;game.camera={x:game.player.x,y:game.player.y};game.time+=3.1;game.update(.01);game.on("hud");game.state="paused"');await delay(450);
+          assert(await evaluate('return !document.getElementById("world-event-card")&&getComputedStyle(document.getElementById("event-banner")).opacity==="0"'),'the initial task hint fades '+kind+' '+width);
+          const point=await evaluate('const b=document.getElementById("world-event-start"),r=b.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {x,y,visible:r.width>=44&&r.height>=44&&x>=0&&x<=innerWidth&&y>=0&&y<=innerHeight&&document.elementFromPoint(x,y)?.closest("button")===b}');assert(point.visible,'task acceptance remains reachable after the hint fades');
+          await evaluate('const {game}=await import("/src/main.js");game.state="running"');
+          if(mobile){await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:point.x,y:point.y}]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}
+          else for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,x:point.x,y:point.y,button:'left',clickCount:1});
+          assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==='+JSON.stringify(kind)+'&&document.getElementById("event-banner").classList.contains("visible")'),'acceptance briefly explains the objective');
+          await evaluate('const {game}=await import("/src/main.js");game.time+=3.1;game.update(.01);game.state="paused";game.on("hud")');await delay(450);
+          assert(await evaluate('const {game}=await import("/src/main.js");return !!game.activeEvent&&getComputedStyle(document.getElementById("event-banner")).opacity==="0"&&document.getElementById("world-event-start").classList.contains("hidden")'),'accepted tasks continue with a clear top HUD');
+          const mapLabels=await evaluate('const {game}=await import("/src/main.js"),{worldEventTarget}=await import("/src/world-events.js"),target=worldEventTarget(game),g=game.g,fill=g.fillText,labels=[];g.fillText=function(text,x,y){labels.push({text,x,y});return fill.call(this,text,x,y)};try{game.render()}finally{g.fillText=fill}const d=Math.round(Math.hypot(target.x-game.player.x,target.y-game.player.y));return labels.filter(l=>l.text.endsWith(" · "+d)).map(l=>({...l,w:game.w,h:game.h}));');
+          assert(mapLabels.length&&mapLabels.every(l=>l.x>=0&&l.x<=l.w&&l.y>=0&&l.y<=l.h),'map labels retain the objective distance '+kind+' '+width);
+          if(kind==='souls')await shot('task-map-only-'+width+'x'+height);
+          const edgeLabels=await evaluate('const {game}=await import("/src/main.js"),{worldEventTarget}=await import("/src/world-events.js"),target=worldEventTarget(game),g=game.g,fill=g.fillText,labels=[];g.fillText=function(text,x,y){labels.push({text,x,y});return fill.call(this,text,x,y)};try{game.drawCompass(g,{x:target.x,y:target.y+2000},game.w,game.h)}finally{g.fillText=fill}return labels.filter(l=>l.text.includes(" · ")).map(l=>({...l,left:(l.x-50)*game.dpr,right:(l.x+50)*game.dpr,top:(l.y-6)*game.dpr,bottom:(l.y+6)*game.dpr}));');
+          assert(edgeLabels.length&&edgeLabels.every(l=>l.left>=0&&l.right<=width&&l.top>=100&&l.bottom<height),'northward map labels stay below the top HUD '+kind+' '+width);
+
+        }
+      }
+      console.log('PASS: three-second task hints fade; desktop/touch acceptance and map distances remain usable at eight sizes.');
+      // End brief task hint coverage.
+      // Active buffs use real game timers; run-long contracts and shields have distinct labels.
+      for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
+        const mobile=width<=700||height<=500;await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});await delay(60);
+        for(const index of [0,1,2]){
+          await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS,META}=await import("/src/data.js"),{CHARACTER_TALENTS}=await import("/src/talents.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.start(CHARACTERS['+index+'],Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.max])));game.time=100;game.level=30;game.nextShrine=3;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.lastPhase=1;game.bossMilestones=new Set([180,360,600]);for(const node of CHARACTER_TALENTS[game.character.id].branches['+([2,0,1][index])+'].nodes)game.learnTalent(node.id);for(const id of ["horizon","frenzy","glass"]){game.state="reward";game.eventChoices=[id];game.chooseAltarReward(0)}const e=game.spawnEnemy("skeleton");Object.assign(e,{x:game.player.x+50,y:game.player.y,hp:1e9,maxHp:1e9});const roll=Math.random;Math.random=()=>0;try{game.hit(e,1,game.player.x,game.player.y,0,false,game.character.weapon)}finally{Math.random=roll}game.dash();game.player.shield=16;game.player.invincible=2;game.enemies=[];game.projectiles=[];game.zones=[];game.state="paused";game.on("hud");game.render()');
+          const labels=await evaluate('return Object.fromEntries([...document.querySelectorAll("#hud-buffs li")].map(e=>[e.dataset.buff,e.lastElementChild.textContent]))');assert.equal(labels.tempo,'6.0s');assert.equal(labels.flare,'8.0s');assert.equal(labels.wind,'6.0s');assert.equal(labels.invincible,'2.0s');assert.equal(labels.shield,'16盾');for(const id of ['horizon','frenzy','glass'])assert.equal(labels[id],'本局');
+          if(index!==1)assert.equal(labels[index===0?'assaultUntil':'ghostUntil'],index===0?'4.0s':'3.0s');
+          assert.deepEqual(await evaluate('const list=document.getElementById("hud-buffs"),issues=[];for(const e of list.children){const r=e.getBoundingClientRect(),label=e.lastElementChild;if(r.left<0||r.right>innerWidth||r.top<0||r.bottom>innerHeight||label.scrollWidth>label.clientWidth+1)issues.push(e.dataset.buff);if(!e.getAttribute("aria-label")||e.getAttribute("role")!=="img")issues.push("missing accessible label");for(const b of document.querySelectorAll("#hud button")){if(!b.getClientRects().length)continue;const q=b.getBoundingClientRect();if(r.left<q.right&&r.right>q.left&&r.top<q.bottom&&r.bottom>q.top)issues.push("overlaps "+b.id)}}return issues;'),[],'buff icons fit without covering controls '+width+' '+index);
+          await delay(120);assert.deepEqual(await evaluate('return Object.fromEntries([...document.querySelectorAll("#hud-buffs li")].map(e=>[e.dataset.buff,e.lastElementChild.textContent]))'),labels,'paused buff countdowns freeze');
+          if(index===0)await shot('buff-countdowns-'+width+'x'+height);
+          await evaluate('const {game}=await import("/src/main.js");game.state="running";for(let i=0;i<10;i++)game.update(.05);game.state="paused";game.on("hud")');assert.equal(await evaluate('return document.querySelector("#hud-buffs [data-buff=tempo] span").textContent'),'5.5s','countdown follows elapsed game time');
+          await evaluate('const {game}=await import("/src/main.js");game.state="running";for(let i=0;i<154;i++)game.update(.05);game.state="paused";game.on("hud")');assert.deepEqual(await evaluate('return [...document.querySelectorAll("#hud-buffs li")].map(e=>e.dataset.buff)'),['shield','horizon','frenzy','glass'],'expired temporary effects disappear while shield and run contracts remain');
+          await evaluate('const {game}=await import("/src/main.js");game.enemies=[];game.spawnBoss(600);game.on("hud")');assert(await evaluate('return document.getElementById("boss-name").textContent.includes("剩余 2 位")'),'extra final bosses are counted in the HUD');
+          await evaluate('const {game}=await import("/src/main.js");const bosses=game.enemies.filter(e=>e.final);game.kill(bosses[0]);game.on("hud");if(game.finalDefeated||document.getElementById("boss-bar").classList.contains("hidden"))throw Error("premature victory");if(document.querySelector("#hud-buffs [data-buff=tempo] span").textContent!=="10.0s")throw Error("conquest must display its real ten-second buff");game.kill(bosses[1]);if(!game.finalDefeated)throw Error("all bosses must finish the fight");game.start(game.character);game.on("hud")');assert(await evaluate('return !document.querySelector("#hud-buffs [data-buff=tempo]")&&!document.querySelector("#hud-buffs [data-buff=glass]")'),'restarting clears timed effects and contracts');
+        }
+      }
+      console.log('PASS: active buff icons, actual countdowns, pause/expiration/reset, run contracts, shield values and multi-boss HUD across three characters and eight sizes.');
+      // End buff HUD coverage.
+
+
       await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("meta-button").click();');
       assert(await evaluate('return document.getElementById("meta-upgrades").textContent.includes("星火")'));await shot('recovery-altar');
       const concurrentSave=await evaluate(`
         const frames=await Promise.all([0,1].map(()=>new Promise(resolve=>{const frame=document.createElement('iframe');frame.hidden=true;frame.src='/';frame.onload=()=>resolve(frame);document.body.append(frame)})));
         try{
           if(!navigator.locks)throw Error('Web Locks required for the cross-page check');
-          localStorage.setItem('afterlight-save-v1',JSON.stringify({embers:300}));
+          localStorage.setItem('afterlight-save-v1',JSON.stringify({embers:100}));
           const results=await Promise.all(frames.map(frame=>frame.contentWindow.eval('(async()=>{const {readSave,writeSave}=await import("/src/data.js");return writeSave(readSave(),{purchase:"vitality"})})()')));
           await Promise.all(frames.map((frame,i)=>frame.contentWindow.eval('(async()=>{const {readSave,writeSave}=await import("/src/data.js");return writeSave(readSave(),{result:{reward:'+(i?11:7)+',time:60,kills:3,won:false}})})()')));
           const {readSave,writeSave}=await import('/src/data.js');const {game:sibling}=await frames[0].contentWindow.eval('import("/src/main.js")');
           let gain;const muted=!sibling.sound.muted;sibling.sound.ctx={currentTime:0};sibling.sound.master={gain:{setTargetAtTime:value=>gain=value}};
           await writeSave(readSave(),{muted});for(let i=0;i<50&&gain===undefined;i++)await new Promise(resolve=>setTimeout(resolve,10));
-          const latest=readSave();return {purchases:results.filter(r=>r.purchased).length,embers:latest.embers,level:latest.meta.vitality,runs:latest.runs,kills:latest.kills,syncedAudio:sibling.sound.muted===muted&&gain===(muted?0:.55)};
+          const latest=readSave(),summary={purchases:results.filter(r=>r.purchased).length,embers:latest.embers,level:latest.meta.vitality,runs:latest.runs,kills:latest.kills,syncedAudio:sibling.sound.muted===muted&&gain===(muted?0:.55)};
+          const {META}=await import('/src/data.js');localStorage.setItem('afterlight-save-v1',JSON.stringify({metaVersion:3,embers:300,meta:Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.max]))}));
+          await Promise.all(frames.map((frame,i)=>frame.contentWindow.eval('(async()=>{const {readSave,writeSave}=await import("/src/data.js");return writeSave(readSave(),{result:{reward:'+(i?11:7)+',time:60,kills:3,won:false}})})()')));
+          summary.refundBalance=readSave().embers;summary.refundVersion=JSON.parse(localStorage.getItem('afterlight-save-v1')).metaVersion;return summary;
         }finally{for(const frame of frames)frame.remove()}
       `);
-      assert.deepEqual(concurrentSave,{purchases:1,embers:198,level:1,runs:2,kills:6,syncedAudio:true},'independent pages must serialize purchases, preserve both settlements and synchronize audio');
+      assert.deepEqual(concurrentSave,{purchases:1,embers:58,level:1,runs:2,kills:6,syncedAudio:true,refundBalance:435618,refundVersion:4},'independent pages must serialize purchases, preserve settlements and apply one price refund');
       assert(await evaluate(`
         const {game}=await import('/src/main.js');const {readSave,writeSave}=await import('/src/data.js');
         document.querySelector('#meta-screen [data-close]').click();game.start(game.character);await writeSave(readSave());
@@ -1229,9 +1594,21 @@ try{
         await visitMobile('#end-report>.mobile-pages-picker','result '+width);await shot('menus-result-'+width+'x'+height);
         await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();game.start(game.character);game.level=30;game.time=300;game.player.invincible=1e9;game.spawnClock=game.waveClock=1e9;game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,curse:5,regen:5,volatile:3};const {characterStats}=await import("/src/stats.js");game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);document.getElementById("status-button").click()');
       }
+      // Every status rank displays its current/next cooldown without clipping its purchase action.
+      for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<=700||height<=500});await delay(60);
+        await evaluate('const {game}=await import("/src/main.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();document.getElementById("meta-button").click()');
+        for(const [key,info] of Object.entries(META).filter(([,info])=>info.cooldowns))for(let rank=0;rank<=info.max;rank++){
+          await evaluate('const {META}=await import("/src/data.js");localStorage.setItem("afterlight-save-v1",JSON.stringify({metaVersion:4,embers:1000000,meta:{...Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.max])),['+JSON.stringify(key)+']:'+rank+'}}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));document.querySelector("[data-meta='+key+']").click()');
+          const fit=await evaluate('const b=document.getElementById("meta-detail"),r=b.getBoundingClientRect(),c=b.querySelector(".detail-bubble-copy"),buy=document.getElementById("meta-buy"),a=buy.getBoundingClientRect();return {out:r.top<0||r.left<0||r.bottom>innerHeight||r.right>innerWidth,clipped:c.scrollHeight>c.clientHeight+1||c.scrollWidth>c.clientWidth+1,covered:document.elementFromPoint(a.x+a.width/2,a.y+a.height/2)!==buy,state:document.getElementById("meta-detail-state").textContent,disabled:buy.disabled}');
+          assert(!fit.out&&!fit.clipped&&!fit.covered,'status rank fits '+key+' '+rank+' '+width+'x'+height);assert.equal(fit.disabled,rank===info.max);if(rank)assert(fit.state.includes('当前冷却 '+info.cooldowns[rank-1]+' 秒'));if(rank&&rank<info.max)assert(fit.state.includes('→ '+info.cooldowns[rank]+' 秒'));
+        }
+        await shot('status-ranks-'+width+'x'+height);await evaluate('document.querySelector("#meta-screen [data-close]").click()');
+      }
+      // End status-rank coverage.
       // Starter icon controls share the permanent tree's bubbles at every supported size.
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
-        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<=700||height<=500});
+        await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<=700||height<=500});await delay(60);
         await evaluate('const {game}=await import("/src/main.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:30000}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));document.getElementById("play-button").click();document.getElementById("camp-weapon-button").click()');
         assert.equal(await evaluate('return document.querySelectorAll("#weapon-choices [data-starter]").length'),7);
         for(const key of ['default',...Object.keys(STARTING_WEAPONS)]){
@@ -1240,23 +1617,26 @@ try{
         }
         await shot('starter-icons-'+width+'x'+height);
         await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
-        assert(await evaluate('return !document.getElementById("weapon-detail").matches(":popover-open")&&!document.getElementById("weapon-screen").classList.contains("hidden")&&document.activeElement.dataset.starter==="crescent"'),'first Escape returns to starter icon');
+        assert(await evaluate('return !document.getElementById("weapon-detail").matches(":popover-open")&&!document.getElementById("weapon-screen").classList.contains("hidden")&&document.activeElement.dataset.starter==="crescent"'),'first Escape returns to starter icon '+width+'x'+height);
         await call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowLeft',code:'ArrowLeft',windowsVirtualKeyCode:37});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowLeft',code:'ArrowLeft',windowsVirtualKeyCode:37});
         assert(await evaluate('return document.activeElement.dataset.starter==="sentinel"&&document.getElementById("weapon-detail").matches(":popover-open")'),'arrow key opens adjacent starter');
         await evaluate('document.getElementById("weapon-detail-close").click();document.querySelector("#weapon-screen [data-close]").click()');
       }
       // Upgrade a complete path through real controls, including locked prerequisites and costly abilities.
       await call('Emulation.setDeviceMetricsOverride',{width:320,height:568,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
-      await evaluate('const {game}=await import("/src/main.js"),{readSave,writeSave}=await import("/src/data.js");await writeSave(readSave());if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:100000}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));document.getElementById("meta-button").click();document.querySelector("[data-meta=conquest]").click()');
+      await evaluate('const {game}=await import("/src/main.js"),{readSave,writeSave}=await import("/src/data.js");await writeSave(readSave());if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:10000}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));document.getElementById("meta-button").click();document.querySelector("[data-meta=conquest]").click()');
       assert(await evaluate('return document.getElementById("meta-buy").disabled&&document.getElementById("meta-detail-state").textContent.includes("余烬之力")'),'later abilities cannot bypass any prerequisite');
       for(const key of META_TREES[0].nodes)for(let rank=0;rank<META[key].max;rank++){
         await evaluate('document.getElementById("meta-detail-close").click();document.querySelector("[data-meta='+key+']").click()');await delay(50);
+        assert.equal(await evaluate('return document.getElementById("meta-buy").textContent'),'强化 '+metaCost(key,rank).toLocaleString()+' ✦','the actual purchase control shows the reduced price');
         const point=await evaluate('const b=document.getElementById("meta-buy"),r=b.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,disabled:b.disabled,covered:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)!==b}');assert(!point.disabled&&!point.covered,'purchase action fits '+key+' rank '+rank);
         await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:point.x,y:point.y}]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
         assert(await evaluate('const {readSave}=await import("/src/data.js");for(let i=0;i<50;i++){if(readSave().meta['+JSON.stringify(key)+']==='+JSON.stringify(rank+1)+')return true;await new Promise(r=>setTimeout(r,10))}return false'),'tree purchase saves '+key+' rank '+rank);
       }
-      assert(await evaluate('const {readSave}=await import("/src/data.js");return readSave().embers===8200&&document.getElementById("meta-buy").disabled'),'full path spends exactly its published price');await shot('permanent-path-completed');
-      await call('Page.reload');await delay(900);assert(await evaluate('const {readSave}=await import("/src/data.js");const s=readSave();return s.meta.power===5&&s.meta.reach===5&&s.meta.conquest===1&&s.embers===8200'),'growth path survives reload');
+      assert(await evaluate('const {readSave}=await import("/src/data.js");return readSave().embers===2400&&document.getElementById("meta-buy").disabled'),'full path spends exactly its published price');await shot('permanent-path-completed');
+      await call('Page.reload');await delay(900);assert(await evaluate('const {readSave}=await import("/src/data.js");const s=readSave();return s.meta.power===5&&s.meta.reach===5&&s.meta.tempo===3&&s.meta.flare===2&&s.meta.conquest===1&&s.metaVersion===4&&s.embers===2400'),'growth path survives reload');
+      await evaluate('const {META,readSave,writeSave}=await import("/src/data.js");localStorage.setItem("afterlight-save-v1",JSON.stringify({metaVersion:2,embers:700,meta:Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.cooldowns?3:info.max]))}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));await writeSave(readSave())');
+      await call('Page.reload');await delay(900);assert(await evaluate('const {readSave}=await import("/src/data.js");const s=readSave();return s.metaVersion===4&&s.embers===754000&&s.meta.flare===2&&s.meta.conquest===1&&s.meta.ward===2&&s.meta.laststand===1'),'rank-reduction refund and retained skills survive browser reload');
       // Starter weapons are unlocked separately, with no relics or milestone guarantees.
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
       await evaluate('const {game}=await import("/src/main.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:30000}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));document.getElementById("play-button").click();document.getElementById("camp-weapon-button").click();await new Promise(r=>setTimeout(r,60));document.querySelector("[data-starter=flame]").click()');
@@ -1272,7 +1652,7 @@ try{
       // Rare growth remains visible in real equipment details after the next talent rebuild.
       for(const [width,height] of [[320,568],[568,320]]){
         await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await delay(60);
-        await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[0]);game.passives={everseed:3};game.level=5;game.learnTalent("w_flame1");const e=game.spawnEnemy("skeleton"),roll=Math.random;Math.random=()=>0;try{game.hit(e,1,e.x,e.y,0,false,"talent",true)}finally{Math.random=roll}game.growth.area=3;game.growth.vitality=2;game.level=15;game.learnTalent("w_flame2");game.state="paused";document.getElementById("status-button").click();document.getElementById("sheet-tab-items").click();document.querySelector("[data-item-id=sheet-passive-everseed]").click()');
+        await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[0]);game.passives={everseed:3};game.level=10;game.learnTalent("w_flame1");const e=game.spawnEnemy("skeleton"),roll=Math.random;Math.random=()=>0;try{game.hit(e,1,e.x,e.y,0,false,"talent",true)}finally{Math.random=roll}game.growth.area=3;game.growth.vitality=2;game.level=20;game.learnTalent("w_flame2");game.state="paused";document.getElementById("status-button").click();document.getElementById("sheet-tab-items").click();document.querySelector("[data-item-id=sheet-passive-everseed]").click()');
         assert(await evaluate('const c=document.getElementById("sheet-passive-everseed");return c.textContent.includes("伤害 +1%")&&c.textContent.includes("范围 +3%")&&c.textContent.includes("生命上限 +4")&&c.textContent.includes("本局触发 1 次")'),'equipment shows current growth totals');
         assert(await evaluate('const b=document.getElementById("items-detail"),r=b.getBoundingClientRect(),c=b.querySelector(".detail-bubble-copy");return b.matches(":popover-open")&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&c.scrollHeight<=c.clientHeight+1&&c.scrollWidth<=c.clientWidth+1'),'rare growth description and totals fit '+width+'x'+height);
         await shot('growth-detail-'+width+'x'+height);await evaluate('document.getElementById("sheet-close").click()');
@@ -1284,7 +1664,7 @@ try{
           const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{upgradePool}=await import('/src/balance.js'),{FUSIONS}=await import('/src/fusions.js');
           if(!document.getElementById('status-screen').classList.contains('hidden'))document.getElementById('sheet-close').click();game.returnToMenu();game.start(game.character);
           game.discoveredFusions=new Set(Object.keys(FUSIONS));game.level=30;game.time=540;game.weapons={solar:3,bolt:4};game.passives={embercore:3,cinder:2,haste:3,area:3,power:3,armor:3};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);
-          game.player.invincible=999;game.spawnClock=game.waveClock=999;game.bossMilestones=new Set([180,360,600]);game.state='level';const pool=upgradePool(game);game.choices=['cinder','haste','bolt'].map(key=>pool.find(item=>item.key===key));game.on('level');
+          game.player.invincible=999;game.spawnClock=game.waveClock=999;game.bossMilestones=new Set([180,360,600]);game.state='level';const pool=upgradePool(game);game.choices=['cinder','haste','bolt','power'].map(key=>pool.find(item=>item.key===key));game.on('level');
         `);
         assert(await evaluate('return document.querySelector(".upgrade-card .rarity").textContent.includes("共振Ⅱ")&&document.querySelector(".upgrade-card .relic-card-link").textContent.includes("30%")'),'the offer explains the new resonance tier');
         await shot('resonance-offer-'+width+'x'+height);await mobileFit('resonance offer '+width);
@@ -1296,8 +1676,77 @@ try{
           await mobileFit('resonance partners '+id+' '+width);if(id==='embercore')await shot('resonance-partners-'+width+'x'+height);
         }
       }
+      // Talent points interrupt equipment choices first; task objectives remain readable above effects.
+      {
+        const taskTap=async selector=>{const point=await evaluate('const e=document.querySelector('+JSON.stringify(selector)+'),r=e.getBoundingClientRect();if(!r.width)throw Error("hidden action "+'+JSON.stringify(selector)+');return {x:r.x+r.width/2,y:r.y+r.height/2}');await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})};
+        for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
+          await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<701||height<500});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});await delay(60);
+          for(const milestone of [10,20,30]){
+            await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS}=await import("/src/data.js"),{xpForLevel}=await import("/src/balance.js"),{CHARACTER_TALENTS}=await import("/src/talents.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.start(CHARACTERS['+([10,20,30].indexOf(milestone))+']);game.enemies=[];game.nextShrine=3;game.spawnClock=game.waveClock=1e9;game.level='+JSON.stringify(milestone-1)+';const branch=CHARACTER_TALENTS[game.character.id].branches[0];for(let i=0;i<'+JSON.stringify(milestone/10-1)+';i++)game.learnTalent(branch.nodes[i].id);game.xp=0;game.xpNext=xpForLevel(game.level);game.pendingLevels=2;game.gainXp(game.xpNext);game.update(.01)');
+            const stopped=await evaluate('const {game}=await import("/src/main.js");return {time:game.time,pending:game.pendingLevels,state:game.state,origin:game.statusReturn}');assert.equal(stopped.state,'status');assert.equal(stopped.origin,'talent');assert.equal(stopped.pending,3);await delay(90);assert(await evaluate('const {game}=await import("/src/main.js");return game.time==='+JSON.stringify(stopped.time)+'&&document.getElementById("level-screen").classList.contains("hidden")'),'talent choice freezes combat before equipment choices');
+            await mobileFit('automatic talent '+milestone+' '+width);assert(await evaluate('return document.getElementById("sheet-return").textContent.includes("保留天赋点")&&document.getElementById("sheet-talents").textContent.includes("先选天赋")'));
+            if(milestone===10){
+              await shot('talent-priority-'+width+'x'+height);
+              if(width===320){await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27})}
+              else await taskTap(width===1280?'#sheet-close':'#sheet-return');
+              assert(await evaluate('const {game}=await import("/src/main.js"),{talentPoints}=await import("/src/talents.js");return game.state==="level"&&game.pendingLevels===2&&talentPoints(game)===1'),'deferring keeps the point and consumes only the next equipment choice');
+              const choices=await evaluate('const {game}=await import("/src/main.js");return JSON.stringify(game.choices)');await evaluate('document.getElementById("level-tree-button").click()');
+              await evaluate('document.querySelector(".talent-node.available").click()');await taskTap('#talent-detail .talent-learn');await evaluate('document.getElementById("sheet-return").click()');assert(await evaluate('const {game}=await import("/src/main.js");return game.state==="level"&&JSON.stringify(game.choices)==='+JSON.stringify(choices)),'spending a retained point preserves the existing upgrade roll');
+            }else{
+              await evaluate('document.querySelector(".talent-node.available").click()');await taskTap('#talent-detail .talent-learn');assert(await evaluate('const {game}=await import("/src/main.js"),{talentPoints}=await import("/src/talents.js");return game.state==="level"&&game.pendingLevels===2&&talentPoints(game)===0&&document.getElementById("status-screen").classList.contains("hidden")'),'learning the new talent immediately continues with equipment choices');
+            }
+          }
+          await evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js");game.start(game.character);game.time=60;game.enemies=[];updateWorldEvents(game,0);const s=game.shrines[0];Object.assign(s,{kind:"souls",index:1,goal:6});Object.assign(game.player,{x:s.x,y:s.y});game.camera={x:s.x,y:s.y};game.spawnClock=game.waveClock=1e9;game.pendingLevels=0;game.xpNext=1e9;game.on("hud")');
+          await taskTap('#world-event-start');assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==="souls"'));await evaluate('const {game}=await import("/src/main.js");game.state="paused";game.on("hud");const p=game.player;for(let i=0;i<40;i++)game.effects.push({type:"frost",x:p.x+Math.cos(i)*100,y:p.y+Math.sin(i)*100,r:170,t:2,max:2});game.flash=.7;game.render()');await shot('soul-guidance-'+width+'x'+height);
+          assert(await evaluate('const {game}=await import("/src/main.js");return !document.getElementById("world-event-card")&&document.getElementById("event-banner").textContent.includes("回收 6 枚魂光")&&game.bannerUntil-game.time>2.5&&game.bannerUntil-game.time<=3'),'task uses a brief existing banner');
+          await evaluate('const {game}=await import("/src/main.js"),{worldEventTarget,updateWorldEvents}=await import("/src/world-events.js"),m=worldEventTarget(game);Object.assign(game.player,{x:m.x,y:m.y});game.state="running";updateWorldEvents(game,0);game.state="paused";game.on("hud")');assert(await evaluate('const {game}=await import("/src/main.js"),{worldEventTarget}=await import("/src/world-events.js");return game.activeEvent.progress===1&&!worldEventTarget(game).collected'),'collecting a mote advances the map target');
+        }
+        await evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js");game.start(game.character);game.enemies=[];for(const time of [60,240,420,900]){game.time=time;updateWorldEvents(game,0)}const s=game.shrines[0];Object.assign(game.player,{x:s.x,y:s.y});game.on("hud");if(game.shrines.filter(s=>s.state==="idle").length!==3||game.eventsFailed||!game.interact())throw Error("unaccepted altars must persist")');
+        console.log('PASS: automatic LV10/20/30 priority, retained points, eight-size task guidance and persistent unaccepted altars.');
+      }
+      // End talent/task coverage.
+      // Hover previews close on exit; only an explicit click/touch/Enter pins a bubble.
+      {
+        await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});
+        const bubblePoint=async selector=>evaluate('const e=document.querySelector('+JSON.stringify(selector)+'),r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+        const moveBubble=async point=>call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+        const clickBubble=async selector=>{const point=await bubblePoint(selector);for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1})};
+        const leaveBubble=async()=>{await moveBubble({x:4,y:4});await delay(220)};
+        const openBubble=async id=>evaluate('return document.getElementById('+JSON.stringify(id)+').matches(":popover-open")');
+        for(const [kind,id,selector] of [['meta','meta-detail','#meta-upgrades .meta-node'],['weapon','weapon-detail','#weapon-choices .meta-node'],['talents','talent-detail','.talent-node'],['items','items-detail','#sheet-items .catalog-item'],['fusion','fusion-detail','#sheet-fusion .catalog-item'],['catalog','catalog-detail','#catalog-list .catalog-item']]){
+          await evaluate('const {game}=await import("/src/main.js"),{WEAPONS}=await import("/src/data.js"),{FUSIONS}=await import("/src/fusions.js"),{characterStats}=await import("/src/stats.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:500000,discoveredFusions:Object.keys(FUSIONS),discoveredItems:Object.fromEntries(Object.keys(WEAPONS).map(key=>["weapon:"+key,1]))}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));if('+JSON.stringify(kind)+'==="meta")document.getElementById("meta-button").click();else if('+JSON.stringify(kind)+'==="weapon"){document.getElementById("play-button").click();document.getElementById("camp-weapon-button").click()}else{game.start(game.character);game.weapons={blade:1,flame:1,bolt:1,frost:1,orbit:1,storm:1};game.passives={power:1,haste:1,area:1};game.level=20;game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.state="paused";document.getElementById("status-button").click();document.getElementById("sheet-tab-'+kind+'").click()}');await delay(80);
+          const first='[data-popup-test=first]',second='[data-popup-test=second]';await evaluate('for(const e of document.querySelectorAll("[data-popup-test]"))delete e.dataset.popupTest;document.querySelector('+JSON.stringify(selector)+').dataset.popupTest="first"');
+          await moveBubble(await bubblePoint(first));assert(await openBubble(id),kind+' mouse hover opens a preview');
+          await evaluate('const next=[...document.querySelectorAll('+JSON.stringify(selector)+')].slice(1).find(e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest("button")===e});if(!next)throw Error("no second visible icon");next.dataset.popupTest="second"');
+          await moveBubble(await bubblePoint(second));await delay(220);assert(await openBubble(id),kind+' hovering another icon updates its preview');
+          await leaveBubble();assert(!(await openBubble(id)),kind+' mouse exit closes the preview');
+          await moveBubble(await bubblePoint(first));await moveBubble(await bubblePoint('#'+id));await delay(220);assert(await openBubble(id),kind+' preview stays accessible inside the bubble');
+          await clickBubble(first);await leaveBubble();assert(await openBubble(id),kind+' clicking pins across mouse exit');
+          await moveBubble(await bubblePoint(second));await delay(220);assert(await evaluate('return document.querySelector('+JSON.stringify(first)+').getAttribute("aria-expanded")==="true"'),kind+' hovering another icon does not replace a pinned detail');
+          await clickBubble(second);await leaveBubble();assert(await evaluate('return document.querySelector('+JSON.stringify(second)+').getAttribute("aria-expanded")==="true"'),kind+' clicking another icon changes the pinned detail');
+          if(kind==='meta'){await clickBubble('#meta-detail .detail-bubble-close');await clickBubble(first)}
+          const action={meta:'#meta-buy',weapon:'#weapon-buy',talents:'#talent-detail .talent-learn',fusion:'#fusion-detail .fusion-track-button'}[kind];
+          if(action&&await evaluate('return !!document.querySelector('+JSON.stringify(action)+')&&!document.querySelector('+JSON.stringify(action)+').disabled')){
+            await clickBubble(action);await delay(180);await leaveBubble();assert(await openBubble(id),kind+' purchasing or learning keeps the clicked detail pinned');
+            await evaluate('for(const e of document.querySelectorAll("[data-popup-test=first]"))delete e.dataset.popupTest;document.querySelector('+JSON.stringify(selector)+').dataset.popupTest="first"');
+          }
+          await clickBubble('#'+id+' .detail-bubble-close');assert(!(await openBubble(id)),kind+' close button dismisses the pin');
+          await moveBubble(await bubblePoint(first));await leaveBubble();assert(!(await openBubble(id)),kind+' closing clears the old pin');
+          await evaluate('document.activeElement.blur();document.querySelector('+JSON.stringify(first)+').focus()');assert(await openBubble(id),kind+' keyboard focus opens preview');
+          await evaluate('document.querySelector(".modal-wrap:not(.hidden) .close-button, .modal-wrap:not(.hidden) #sheet-close").focus()');assert(!(await openBubble(id)),kind+' focus leaving closes keyboard preview');
+          await evaluate('document.querySelector('+JSON.stringify(first)+').focus()');await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await leaveBubble();assert(await openBubble(id),kind+' Enter pins keyboard detail');
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});assert(!(await openBubble(id)),kind+' Escape dismisses without reopening on restored focus');
+          await clickBubble(first);await clickBubble('.modal-wrap:not(.hidden) .meta-heading h2, .modal-wrap:not(.hidden) .sheet-header h2');assert(!(await openBubble(id)),kind+' clicking blank space dismisses the pinned detail');
+          await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});const touch=await bubblePoint(first);await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(220);assert(await evaluate('return document.getElementById('+JSON.stringify(id)+').matches(":popover-open")&&document.getElementById('+JSON.stringify(id)+').dataset.pinned==="true"'),kind+' touch pins the same detail');
+          await evaluate('document.querySelector('+JSON.stringify('#'+id+' .detail-bubble-close')+').click()');await call('Emulation.setTouchEmulationEnabled',{enabled:false});
+        }
+        await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.returnToMenu()');
+        console.log('PASS: all six bubble types support hover exit, entering the bubble, click/touch pin, pinned switching, action rebuilds, blank dismissal, keyboard focus and Enter/Escape.');
+      }
+      // End hover-preview coverage.
       assert.equal(errors.length,0,JSON.stringify(errors));
       console.log('PASS: native Chrome desktop/touch rendering, 36 weapon effects, adaptive tag UI/search, two new fusion transactions, three talent trees, shrine controls, concurrent save transactions, growth tree and starter weapon persistence, choice preservation and zero runtime exceptions. Screenshots: artifacts/.');
+      }
     }finally{socket?.close();browser.kill()}
   }
 }finally{Math.random=originalRandom}

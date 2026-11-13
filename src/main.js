@@ -4,13 +4,13 @@ import {paintIcon,paintAvatar,fire,glow,drawSprite} from './art.js';
 import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,META,META_TREES,metaState,STARTING_WEAPONS,startingLoadout,formatTime,readSave,writeSave,refreshSave,catalogItem} from './data.js';
 import {CharacterSheet} from './status.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData,fusionUsesRelic} from './fusions.js';
-import {compatibleWeapons,relicDescription,BUILD_TAGS,itemTags,ALTAR_BOONS} from './content.js';
+import {compatibleWeapons,relicDescription,BUILD_TAGS,itemTags,ALTAR_BOONS,REFINEMENT_RARITIES} from './content.js';
 import {rememberItems,rememberInventory,recoverFusionDiscoveries} from './discovery.js';
-import {pressureAt,itemRarity,buildProfile,upgradePool} from './balance.js';
+import {pressureAt,itemRarity,buildProfile} from './balance.js';
 import {characterStats,weaponStats} from './stats.js';
-import {passiveEffect,resonanceText} from './item-info.js';
+import {passiveEffect,resonanceText,weaponFacts} from './item-info.js';
 import {CHARACTER_TALENTS,talentPoints,characterTalentStatus,characterTalentProgress} from './talents.js';
-import {worldEventStatus} from './world-events.js';
+import {ALTAR_REWARDS,worldEventStatus,worldEventTarget} from './world-events.js';
 
 const $=id=>document.getElementById(id);
 const show=id=>$(id).classList.remove('hidden');
@@ -68,14 +68,31 @@ function updateTalentHud(){
 function updateEventHud(){
  const reward=game.eventReward,notice=$('event-reward-toast');notice.classList.toggle('hidden',!reward);
  if(reward){text('event-reward-toast',reward.name+' · 完成\n'+reward.rewards.join(' · '));notice.style.opacity=Math.min(1,Math.max(0,reward.expiresAt-game.time))}
- const event=worldEventStatus(game),card=$('world-event-card'),visible=event.visible;card.classList.toggle('hidden',!visible);
- const button=$('world-event-start'),host=touchInput.matches?$('touch-controls'):card.querySelector('.world-event-heading');
+ const event=worldEventStatus(game),button=$('world-event-start'),host=touchInput.matches?$('touch-controls'):$('hud');
  if(button.parentElement!==host)host.append(button);
  button.classList.toggle('hidden',!event.canStart);button.disabled=!event.canStart;
- if(!visible)return;
- text('world-event-name',event.name);text('world-event-detail',event.detail);text('world-event-reward','奖励：'+event.reward);
- button.setAttribute('aria-label','接受任务：'+event.name);card.classList.toggle('active',event.active);
- const meter=$('world-event-meter');meter.classList.toggle('hidden',!event.active);meter.max=event.max||1;meter.value=event.progress||0;meter.setAttribute('aria-label',event.name+' · '+event.detail);
+ button.setAttribute('aria-label','接受任务：'+event.name);button.title=event.guide+' · '+event.reward;
+ const target=event.canStart&&worldEventTarget(game);
+ button.style.left=!touchInput.matches&&target?(target.x-game.camera.x+game.w/2)*game.dpr+'px':'';
+ button.style.top=!touchInput.matches&&target?(target.y-game.camera.y+game.h/2+18)*game.dpr+'px':'';
+}
+function updateBuffHud(){
+ const buffs=[];
+ for(const [key,name,icon] of [['tempo','战意攻速','haste'],['flare','扩焰范围','area'],['wind','猎风移速','speed']]){
+  const remaining=(game.relicTimers['meta_'+key+'_until']||0)-game.time;if(remaining>0)buffs.push({key,name,icon,label:remaining.toFixed(1)+'s'});
+ }
+ for(const [key,name,icon] of [['assaultUntil','逐日余势','lance'],['ghostUntil','无踪风矢','crescent']]){
+  const remaining=(game.characterState[key]||0)-game.time;if(remaining>0)buffs.push({key,name,icon,label:remaining.toFixed(1)+'s'});
+ }
+ if(game.player.invincible>0)buffs.push({key:'invincible',name:'无敌保护',icon:'aegis',label:game.player.invincible.toFixed(1)+'s'});
+ if(game.characterState.reviveReady&&!game.characterState.revived)buffs.push({key:'revive',name:'灯芯 · 可抵挡一次致命伤害',icon:'vitality',label:'待命'});
+ if(game.player.shield>0)buffs.push({key:'shield',name:'护盾',icon:'aegis',label:Math.ceil(game.player.shield)+'盾'});
+ for(const id of game.boons){const boon=ALTAR_BOONS[id];buffs.push({key:id,name:boon.name+' · '+boon.positive+'；'+boon.negative,icon:boon.icon,label:'本局'})}
+ const list=$('hud-buffs');
+ if([...list.children].map(e=>e.dataset.buff).join()!==buffs.map(b=>b.key).join())list.replaceChildren(...buffs.map(buff=>{
+  const item=document.createElement('li');item.dataset.buff=buff.key;item.setAttribute('role','img');const art=document.createElement('canvas');art.width=art.height=24;art.setAttribute('aria-hidden','true');paintIcon(art,buff.icon);item.append(art,document.createElement('span'));return item;
+ }));
+ buffs.forEach((buff,index)=>{const item=list.children[index];item.title=buff.name+' · '+buff.label;item.setAttribute('aria-label',item.title);item.lastElementChild.textContent=buff.label});
 }
 
 function buildCharacters(){
@@ -118,12 +135,13 @@ function updateHud(){
  const phase=game.pressure||pressureAt(game.time);text('phase-label',phase.name);text('threat-label',phase.hint);
  updateTalentHud();
  updateEventHud();
+ updateBuffHud();
  text('shield-label',game.player.shield>0?'◇ 护盾 '+Math.ceil(game.player.shield):'');
  $('night-progress-fill').style.width=Math.min(100,game.time/RUN_DURATION*100)+'%';
  text('next-encounter',game.time<180?'03:00 · 墓园看守':game.time<360?'06:00 · 无名葬钟':game.time<600?'10:00 · 蚀月君王':'终局 · 击败君王');
  text('curse-label',game.stats.curse?'禁忌 '+game.stats.curse+' · 怪物强化':'');
  const maxCooldown=game.stats.dashCooldown;$('dash-cooldown').style.height=Math.min(100,game.player.dashCooldown/maxCooldown*100)+'%';$('touch-dash').style.opacity=game.player.dashCooldown>0?'.45':'1';
- const bosses=game.enemies.filter(e=>e.boss&&!e.dead);const boss=bosses.find(e=>e.final)||bosses[0];if(boss){show('boss-bar');text('boss-name',boss.name+(boss.enraged?' · 狂怒':''));$('boss-fill').style.width=Math.max(0,boss.hp/boss.maxHp*100)+'%';text('boss-health',Math.max(0,Math.ceil(boss.hp)).toLocaleString()+' / '+boss.maxHp.toLocaleString());lastBoss=boss.id}else{hide('boss-bar');lastBoss=null}
+ const bosses=game.enemies.filter(e=>e.boss&&!e.dead);const boss=bosses.find(e=>e.final)||bosses[0];if(boss){show('boss-bar');text('boss-name',boss.name+(bosses.length>1?' · 剩余 '+bosses.length+' 位':'')+(boss.enraged?' · 狂怒':''));$('boss-fill').style.width=Math.max(0,boss.hp/boss.maxHp*100)+'%';text('boss-health',Math.max(0,Math.ceil(boss.hp)).toLocaleString()+' / '+boss.maxHp.toLocaleString());lastBoss=boss.id}else{hide('boss-bar');lastBoss=null}
 }
 function buildDock(){
  const dock=$('weapon-dock');dock.replaceChildren();for(const [key,level] of Object.entries(game.weapons)){
@@ -157,20 +175,21 @@ function updateFusionTracker(){
  $('fusion-tracker').setAttribute('aria-label',$('fusion-tracker-title').textContent+' · '+$('fusion-tracker-detail').textContent+' · 查看融合图谱');$('fusion-tracker').title=$('fusion-tracker').getAttribute('aria-label')+' [G]';
 }
 function buildAltarRewards(){
+ const bonus=ALTAR_REWARDS[game.altarRewardIndex];
+ text('altar-description',bonus?'第 '+(game.altarRewardIndex+1)+' 阶段完成 · 额外经验 '+bonus.xp+' / 余烬 '+bonus.gold+' / 治疗 '+bonus.heal+'。经验受加成影响。':'挑战完成 · 三选一，仅本局生效，不占装备位');
  $('altar-choices').replaceChildren(...game.eventChoices.map((id,index)=>{
   const boon=ALTAR_BOONS[id],button=document.createElement('button');button.className='altar-choice';
   const icon=document.createElement('canvas');icon.width=icon.height=24;icon.setAttribute('aria-hidden','true');paintIcon(icon,boon.icon);
-  const heading=document.createElement('h3'),gain=document.createElement('p'),cost=document.createElement('p');heading.textContent=(index+1)+' · '+boon.name;gain.className='altar-gain';gain.textContent='收益 · '+boon.positive;cost.className='altar-cost';cost.textContent='代价 · '+boon.negative;
+  const heading=document.createElement('h3'),gain=document.createElement('p'),cost=document.createElement('p');heading.textContent=(index+1)+' · '+boon.name;gain.className='altar-gain';gain.textContent='收益 · '+boon.positive;cost.className='altar-cost';cost.textContent='难度 · '+boon.negative;
   button.append(icon,heading,gain,cost);button.addEventListener('click',()=>game.chooseAltarReward(index));return button;
  }));
- const canUpgrade=upgradePool(game).some(item=>item.weapon&&item.current>0);
- text('altar-skip',canUpgrade?'跳过 · 随机强化一件武器 1 级':'跳过 · 随机淬炼一件武器（伤害 +12%）');
+ text('altar-skip','放弃契约 · 武器强化 '+(bonus?.upgrades||1)+' 次（满级每次伤害 +12%）');
  openModal('reward-screen');announce('祭坛挑战完成。选择一项特殊奖励，或跳过并强化武器。');
 }
 function buildUpgrades(reveal=true){
  text('new-level','等级 '+game.level);text('rerolls-left',game.rerolls);$('reroll-button').disabled=game.rerolls===0;$('upgrade-cards').replaceChildren();
  text('upgrade-capacity','武器 '+Object.keys(game.weapons).length+'/'+WEAPON_SLOTS+'  ·  道具 '+Object.keys(game.passives).length+'/'+PASSIVE_SLOTS+'  ·  放逐剩余 '+game.banishes+' 次');
- text('upgrade-era',game.time<120?'02:00 解锁独立进化 · 03:00 解锁融合':game.time<180?'独立进化已开放 · 03:00 解锁融合':'融合已开放 · 留意材料间的共鸣');
+ text('upgrade-era',game.time<120?'02:00 解锁独立进化 · 03:00 解锁融合':game.time<180?'独立进化已开放 · 03:00 解锁融合':'融合已开放 · 满级武器可继续精修');
  const profile=buildProfile(game),trend=$('upgrade-affinity');trend.replaceChildren();
  const lead=document.createElement('b');lead.textContent=profile.leading.length?'本局倾向':'尚在探索';trend.append(lead);
  for(const tag of profile.leading){const chip=document.createElement('span');chip.className='build-tag matched';chip.style.setProperty('--tag-color',BUILD_TAGS[tag].color);chip.textContent=BUILD_TAGS[tag].name;trend.append(chip)}
@@ -180,17 +199,19 @@ function buildUpgrades(reveal=true){
   const fusedUpgrade=item.weapon&&WEAPONS[item.key].fusion,unknown=item.fusion&&!game.discoveredFusions.has(item.key),relic=!item.weapon&&PASSIVES[item.key]?.relic;
   const goal=!item.fusion&&FUSIONS[game.trackedFusion]?.ingredients.some(i=>i.id===item.key&&item.current<i.required);
   let resonance=null;
-  if(!item.fusion&&item.key!=='heal'){
-   const weapons={...game.weapons,...(item.weapon?{[item.key]:item.next}:{})},passives={...game.passives,...(!item.weapon?{[item.key]:item.next}:{})},stats=characterStats(game.character,passives,game.meta,game.talents,weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth);
+  if(!item.fusion&&!item.refinement&&item.key!=='heal'){
+   const weapons={...game.weapons,...(item.weapon?{[item.key]:item.next}:{})},passives={...game.passives,...(!item.weapon?{[item.key]:item.next}:{})},stats=characterStats(game.character,passives,game.meta,game.talents,weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth,game.weaponUpgrades);
    for(const [kind,level] of Object.entries(weapons)){const after=weaponStats(kind,level,stats,game.character),before=game.weapons[kind]?weaponStats(kind,game.weapons[kind],game.stats,game.character):null;if((after.resonance?.rank||0)>(before?.resonance?.rank||0)){resonance=after;break}}
   }
   const button=document.createElement('button');button.className='upgrade-card'+(item.evolution?' evolution':'')+(item.fusion?' fusion-card':'')+(goal?' tracked-material':'')+(relic?' relic-card':!item.weapon&&PASSIVES[item.key]?' blessing-card':'');button.style.setProperty('--card-color',item.color);
   const rarity=document.createElement('div');rarity.className='rarity';const type=document.createElement('span');type.textContent=item.fusion?(unknown?'◇ 首次共鸣 · 未知融合':fusionUsesRelic(item.key)?'◆ 武器与道具融合':'◆ 双武器融合'):goal?'◇ 已追踪的融合材料':fusedUpgrade?'◆ 融合武器强化':item.evolution?'✦ 传说 · 武器进化':itemRarity(item.weapon?WEAPONS[item.key]:PASSIVES[item.key]).name+' · '+(item.weapon?(item.current?'武器强化':'全新武器'):relic?'联动遗物':'属性祝福');const key=document.createElement('kbd');key.textContent=index+1;rarity.append(type,key);
   if(resonance)type.textContent='✦ 解锁共振'+(resonance.resonance.rank===2?'Ⅱ':'Ⅰ')+' · '+resonance.resonance.name;
+  if(item.refinement){button.classList.add('refinement-card');button.dataset.rarity=item.rarity;type.textContent=REFINEMENT_RARITIES[item.rarity].name+' · 满级精修'}
   const art=document.createElement('canvas');art.width=24;art.height=24;if(!unknown)paintIcon(art,item.key==='heal'?'vitality':item.key);else{art.className='unknown-fusion-art';const g=art.getContext('2d');g.fillStyle='#d0bd92';g.font='20px monospace';g.textAlign='center';g.fillText('?',12,19)}
-  const title=document.createElement('h3');title.textContent=unknown?'未命名的力量':item.name;title.style.color=item.fusion?item.color:item.evolution?'#ebc78d':'';
+  const title=document.createElement('h3');title.textContent=unknown?'未命名的力量':item.refinement?weaponName(item.key,item.current):item.name;title.style.color=item.fusion?item.color:item.evolution?'#ebc78d':'';
   const category=document.createElement('span');category.className='upgrade-type';category.textContent=unknown?'融合成功后揭晓':item.weapon?WEAPONS[item.key].category:relic?'遗物 / '+PASSIVES[item.key].trigger:'被动 / 永续生效';
   const description=document.createElement('p');description.textContent=unknown?'消耗下列材料，铸成未知武器并记入图谱。'+(fusionUsesRelic(item.key)?'道具的独立效果随之失去。':''):relic?relicDescription(item.key,item.next,game.stats):item.description;const bottom=document.createElement('div');bottom.className='upgrade-bottom';const from=document.createElement('span');from.textContent=item.fusion?(fusionUsesRelic(item.key)?'武器＋道具':'双武器')+' → LV. '+item.next:item.evolution?'LV. 5 → EVOLVED':item.current?'LV. '+item.current+' → LV. '+item.next:'解锁 · LV. 1';const arrow=document.createElement('span');arrow.textContent=item.fusion?'融合 ↗':'选择 ↗';bottom.append(from,arrow);button.append(rarity,art,title,category,description);
+  if(item.refinement){from.textContent='满级 · 属性继续成长';arrow.textContent='精修 ↗'}
   if(item.reason){const reason=document.createElement('span');reason.className='upgrade-reason';reason.textContent=item.reason;button.append(reason)}
   if(!unknown&&itemTags(item.key).length){
    const tags=document.createElement('div');tags.className='item-tags';
@@ -199,14 +220,16 @@ function buildUpgrades(reveal=true){
    if(item.affinity>=1.1){const note=document.createElement('small');note.className='affinity-boost';note.textContent='标签加权 ×'+item.affinity.toFixed(2);note.title='这是本局标签对抽取权重的倍率，不是出现概率。稀有度、装备位和联动条件也会影响最终结果。';button.append(note)}
   }
   if(item.weapon&&!item.fusion){
-   const next=weaponStats(item.key,item.next,game.stats,game.character),current=item.current?weaponStats(item.key,item.current,game.stats,game.character):null;
+   const upgrades=game.weaponUpgrades[item.key]||{},preview=item.refinement?{...game.stats,weaponUpgrades:{...game.weaponUpgrades,[item.key]:{...upgrades,[item.refinement]:(upgrades[item.refinement]||0)+item.value}}}:game.stats;
+   const next=weaponStats(item.key,item.next,preview,game.character),current=item.current?weaponStats(item.key,item.current,game.stats,game.character):null;
    const facts=document.createElement('div');facts.className='upgrade-gains';
    const fields=[['damage','伤害'],['cooldown','间隔'],next.count?['count','数量']:next.radius?['radius','范围']:['range','距离']];
-   for(const [key,label] of fields){if(!next[key])continue;const row=document.createElement('span');row.textContent=label+' '+(current?Number(current[key].toFixed(2))+' → ':'')+Number(next[key].toFixed(2))+(key==='cooldown'?'s':'');facts.append(row)}button.append(facts);
+   if(item.refinement){const before=Object.fromEntries(weaponFacts(item.key,current));for(const [label,value] of weaponFacts(item.key,next).filter(([label,value])=>before[label]!==value).slice(0,3)){const row=document.createElement('span');row.textContent=label+' '+(before[label]||'0')+' → '+value;facts.append(row)}}
+   else for(const [key,label] of fields){if(!next[key])continue;const row=document.createElement('span');row.textContent=label+' '+(current?Number(current[key].toFixed(2))+' → ':'')+Number(next[key].toFixed(2))+(key==='cooldown'?'s':'');facts.append(row)}button.append(facts);
   }else if(!item.weapon&&!relic&&PASSIVES[item.key]){const total=document.createElement('div');total.className='upgrade-gains';total.textContent='升级后：'+passiveEffect(item.key,item.next);button.append(total)}
-  if(item.fusion){const ingredients=document.createElement('div');ingredients.className='fusion-card-materials';ingredients.textContent='消耗：'+item.ingredients.map(i=>`${ingredientData(i).name} LV.${i.level}`).join(' ＋ ');button.append(ingredients)}
+  if(item.fusion){const ingredients=document.createElement('div');ingredients.className='fusion-card-materials';ingredients.textContent='消耗：'+item.ingredients.map(i=>`${ingredientData(i).name} LV.${i.level}`).join(' ＋ ')+(item.ingredients.some(i=>game.weaponUpgrades[i.id])?' · 材料精修不继承':'');button.append(ingredients)}
   if(relic){
-   const linked=compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id),note=document.createElement('div');note.className='relic-card-link';
+   const linked=compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades),note=document.createElement('div');note.className='relic-card-link';
    const broad=PASSIVES[item.key].families.some(tag=>['guard','dash','pickup'].includes(tag)),companion=item.key==='soulpact'&&game.talents.s_swarm1;
    note.textContent=(companion?'当前联动：星群伴星'+(linked.length?'、'+linked.map(id=>WEAPONS[id].name).join('、'):''):linked.length?(broad?'触发方式：'+PASSIVES[item.key].trigger:'当前联动：'+linked.map(id=>WEAPONS[id].name).join('、')):'尚缺稳定触发来源')+(PASSIVES[item.key].catalyst?' · 可作为融合材料':'');note.dataset.compact=linked.length||companion?'联动已就绪':'尚缺触发来源';if(!resonance)button.append(note);
   }
@@ -252,7 +275,7 @@ async function endRun(result){
  openModal('end-screen');updateMenu();announce(result.won?'远征胜利。长夜已尽。':'远征结束。获得 '+result.reward+' 余烬。');
 }
 function buildMeta(){
- const reopen=$('meta-detail').matches(':popover-open');hideMetaDetail();
+ const reopen=$('meta-detail').matches(':popover-open'),pinned=$('meta-detail').dataset.pinned;hideMetaDetail();
  text('ember-balance',save.embers.toLocaleString());$('meta-upgrades').replaceChildren(...META_TREES.map(tree=>{
   const row=document.createElement('section');row.className='meta-tree';row.setAttribute('aria-label',tree.name+'成长树');
   const heading=document.createElement('h3');heading.textContent=tree.name;const hint=document.createElement('small');hint.textContent=tree.hint;heading.append(hint);row.append(heading);
@@ -264,7 +287,7 @@ function buildMeta(){
    button.addEventListener('keydown',event=>{const step={ArrowLeft:-1,ArrowRight:1}[event.code];if(!step)return;event.preventDefault();row.querySelectorAll('button')[(index+step+tree.nodes.length)%tree.nodes.length].focus({preventScroll:true})});row.append(button);
   }return row;
  }));
- if(reopen&&!$('meta-screen').classList.contains('hidden'))showMetaDetail(viewedMeta);
+ if(reopen&&!$('meta-screen').classList.contains('hidden')){showMetaDetail(viewedMeta);if(pinned)$('meta-detail').dataset.pinned=pinned}
  text('meta-best',`远征 ${save.runs} 次  ·  最长守夜 ${formatTime(save.best)}  ·  累计击败 ${save.kills.toLocaleString()}  ·  破晓 ${save.wins} 次`);
 }
 function hideMetaDetail(focus=false){
@@ -274,13 +297,13 @@ function showMetaDetail(key){
  if(metaClosing||$('meta-screen').classList.contains('hidden'))return;
  viewedMeta=key;const info=META[key],state=metaState(save.meta,key),button=document.querySelector('[data-meta="'+key+'"]');
  for(const node of document.querySelectorAll('#meta-upgrades .meta-node')){node.classList.toggle('selected',node===button);node.setAttribute('aria-expanded',String(node===button))}
- text('meta-detail-title',info.name+' · '+state.level+' / '+info.max);text('meta-detail-effect',info.desc);
- text('meta-detail-state',state.maxed?'已达最高等级':state.prerequisite?'前置「'+META[state.prerequisite].name+'」满级后开放':save.embers<state.cost?'还差 '+(state.cost-save.embers).toLocaleString()+' 余烬':'可强化 · 下次出征生效');
+ text('meta-detail-title',info.name+' · '+state.level+' / '+info.max);text('meta-detail-effect',info.desc+(info.cooldowns?' 各级共享冷却 '+info.cooldowns.join(' / ')+' 秒。':''));
+ text('meta-detail-state',(state.cooldown?'当前冷却 '+state.cooldown+' 秒'+(state.nextCooldown?' → '+state.nextCooldown+' 秒':'')+' · ':'')+(state.maxed?'已达最高等级':state.prerequisite?'前置「'+META[state.prerequisite].name+'」满级后开放':save.embers<state.cost?'还差 '+(state.cost-save.embers).toLocaleString()+' 余烬':'可强化 · 下次出征生效'));
  $('meta-buy').disabled=buyingMeta||!state.available||save.embers<state.cost;text('meta-buy',state.maxed?'已满级':'强化 '+state.cost.toLocaleString()+' ✦');
  if(!$('meta-detail').matches(':popover-open'))$('meta-detail').showPopover();sheet.positionBubble($('meta-detail'),button);
 }
 function buildWeaponChoices(){
- const reopen=$('weapon-detail').matches(':popover-open');hideWeaponDetail();text('weapon-balance',save.embers.toLocaleString());
+ const reopen=$('weapon-detail').matches(':popover-open'),pinned=$('weapon-detail').dataset.pinned;hideWeaponDetail();text('weapon-balance',save.embers.toLocaleString());
  $('weapon-choices').replaceChildren(...['default',...Object.keys(STARTING_WEAPONS)].map((key,index,keys)=>{
   const unlocked=key==='default'||save.weaponUnlocks.includes(key),equipped=save.selectedWeapon===(key==='default'?null:key),name=WEAPONS[key==='default'?CHARACTERS[selected].weapon:key].name;
   const button=document.createElement('button');button.className='meta-node'+(equipped?' learned':unlocked?' available':' locked');button.dataset.starter=key;button.setAttribute('aria-label',(key==='default'?'角色默认 · ':'')+name+' · '+(equipped?'已选择':unlocked?'已解锁':STARTING_WEAPONS[key].cost+' 余烬'));button.setAttribute('aria-pressed',String(equipped));button.setAttribute('aria-controls','weapon-detail');button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-expanded','false');
@@ -288,7 +311,7 @@ function buildWeaponChoices(){
   button.addEventListener('click',event=>{showWeaponDetail(key);if(event.detail===0)($('weapon-buy').disabled?$('weapon-equip').disabled?$('weapon-detail-close'):$('weapon-equip'):$('weapon-buy')).focus({preventScroll:true})});button.addEventListener('focus',()=>showWeaponDetail(key));button.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&button.getAttribute('aria-expanded')!=='true')showWeaponDetail(key)});
   button.addEventListener('keydown',event=>{const columns=getComputedStyle($('weapon-choices')).gridTemplateColumns.split(' ').length,step={ArrowLeft:-1,ArrowRight:1,ArrowUp:-columns,ArrowDown:columns}[event.code];if(!step)return;event.preventDefault();$('weapon-choices').children[(index+step+keys.length)%keys.length].focus({preventScroll:true})});return button;
  }));
- if(reopen&&!$('weapon-screen').classList.contains('hidden'))showWeaponDetail(viewedWeapon);
+ if(reopen&&!$('weapon-screen').classList.contains('hidden')){showWeaponDetail(viewedWeapon);if(pinned)$('weapon-detail').dataset.pinned=pinned}
 }
 function hideWeaponDetail(focus=false){
  const bubble=$('weapon-detail');if(!bubble.matches(':popover-open'))return;weaponClosing=true;bubble.hidePopover();if(focus)document.querySelector('[data-starter="'+viewedWeapon+'"]').focus({preventScroll:true});weaponClosing=false;
@@ -335,9 +358,11 @@ game.on=(event,data)=>{
  if(event==='fusionBook')openFusionBook();
  if(event==='talentTree')openTalentTree();
  if(event==='talentPoints')updateTalentHud();
+ if(event==='talentChoice')openStatus({tab:'talents'});
  if(event==='talentLearned'){
   if(sheet.visible){
-   sheet.build();$('talent-'+data).focus({preventScroll:true});
+   if(sheet.origin==='talent'&&talentPoints(game)===0){sheet.close();announce('天赋已学习，继续选择升级。');return}
+   const pinned=$('talent-detail').dataset.pinned;sheet.build();$('talent-'+data).focus({preventScroll:true});if(pinned)$('talent-detail').dataset.pinned=pinned;
   }
   if(game.state==='level'||sheet.visible&&sheet.origin==='level')buildUpgrades(false);
   announce('已学会角色天赋。剩余 '+talentPoints(game)+' 个天赋点。');
@@ -408,6 +433,38 @@ document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',
 for(const id of ['archive-screen','meta-screen','weapon-screen'])$(id).addEventListener('click',e=>{if(e.target===$(id))closeModal(id)});
 sheet.mobilePages(document.querySelector('.guide-grid'),'选择手记主题',[...document.querySelectorAll('.guide-grid article')].map((article,i)=>[String(i),article.querySelector('h3').textContent,[article]]));
 sheet.mobilePages($('end-report'),'选择结算内容',[['summary','远征概览',[$('end-stats')]],['damage','战斗记录',[$('end-damage')]]]);
+
+// Every icon bubble uses aria-controls: hover previews, while click/touch/Enter pins it.
+let detailExitTimer;
+for(const type of ['pointermove','pointerout'])document.addEventListener(type,event=>{
+ if(event.pointerType!=='mouse'||type==='pointerout'&&event.relatedTarget)return;
+ const bubble=document.querySelector('.detail-bubble:popover-open');if(!bubble)return;
+ const anchor=document.querySelector('[aria-controls="'+bubble.id+'"][aria-expanded="true"]'),target=type==='pointerout'?null:event.target;
+ if(bubble.dataset.pinned){
+  clearTimeout(detailExitTimer);detailExitTimer=null;
+  if(target?.closest('[aria-controls="'+bubble.id+'"]')&& !anchor?.contains(target))event.stopPropagation();
+  return;
+ }
+ if(anchor?.contains(target)||bubble.contains(target)){clearTimeout(detailExitTimer);detailExitTimer=null;return}
+ if(detailExitTimer)return;
+ detailExitTimer=setTimeout(()=>{
+  detailExitTimer=null;
+  const current=document.querySelector('[aria-controls="'+bubble.id+'"][aria-expanded="true"]');
+  if(bubble.matches(':popover-open')&&!bubble.dataset.pinned&&!bubble.matches(':hover')&&!current?.matches(':hover'))bubble.hidePopover();
+ },150);
+},true);
+document.addEventListener('click',event=>{
+ const trigger=event.target.closest('[aria-controls]'),bubble=trigger?$(trigger.getAttribute('aria-controls')):event.target.closest('.detail-bubble');
+ if(bubble?.classList.contains('detail-bubble')){clearTimeout(detailExitTimer);detailExitTimer=null;bubble.dataset.pinned='true'}
+},true);
+document.addEventListener('focusout',event=>{
+ const bubble=document.querySelector('.detail-bubble:popover-open');if(!bubble||bubble.dataset.pinned)return;
+ const anchor=document.querySelector('[aria-controls="'+bubble.id+'"][aria-expanded="true"]');
+ if(!anchor?.contains(event.relatedTarget)&&!bubble.contains(event.relatedTarget))bubble.hidePopover();
+});
+document.addEventListener('beforetoggle',event=>{
+ if(event.newState==='closed'&&event.target.classList.contains('detail-bubble')){clearTimeout(detailExitTimer);detailExitTimer=null;delete event.target.dataset.pinned}
+},true);
 
 // Keep keyboard focus inside dialogs without interfering with gameplay shortcuts.
 document.addEventListener('keydown',e=>{
