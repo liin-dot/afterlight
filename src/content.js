@@ -30,7 +30,8 @@ export const NEW_WEAPONS = {
 };
 
 export const RELICS = {
-  soulpact:{name:'牧魂契',color:'#acd3da',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'灵魂与召唤武器',families:['spirit','summon'],desc:'强化灵魂与召唤武器的伤害，并加快石像的射击节奏。角色默认伴星不属于武器。',lore:'灯火有了守护灯火的人。'},
+  everseed:{name:'无尽薪种',color:'#e4cc82',max:3,relic:true,rarity:'rare',trigger:'学习天赋后，角色能力命中',families:['talent'],desc:'学会任一天赋后，灯火震荡、星火或风矢命中有 12% / 18% / 24% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2。本局累计无层数上限，共享冷却 4 秒；增加生命上限不治疗。',lore:'偶然拾到的微光，也能燃成无尽长夜。'},
+  soulpact:{name:'牧魂契',color:'#acd3da',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'灵魂与召唤武器',families:['spirit','summon'],desc:'强化灵魂与召唤武器的伤害，并加快石像的射击节奏。学习星群路线后，也强化角色伴星。',lore:'灯火有了守护灯火的人。'},
   hoarfrost:{name:'霜行石',color:'#b7dce2',max:3,relic:true,rarity:'uncommon',trigger:'主动冲刺',families:['dash'],desc:'冲刺起点爆发冰环，冻结并减速追兵；可为碎冰、雷霜反应提供寒冷状态。',lore:'踏过的地方，脚步仍留在冬天。'},
   rotclock:{name:'腐时沙漏',color:'#c6bd81',max:3,relic:true,rarity:'uncommon',trigger:'燃烧与侵蚀状态伤害',families:['fire','poison'],desc:'提高附着在敌人身上的燃烧与侵蚀伤害；地面火场、毒池的独立伤害不受影响。',lore:'流逝的不是沙，是尚未腐尽的时间。'},
   bulwark:{name:'碎灯棱片',color:'#d1dbae',max:3,relic:true,rarity:'rare',trigger:'护盾被击破',families:['guard'],desc:'护盾归零时向外释放追踪棱片；补盾后可再次触发，有共享冷却。',lore:'每一片碎光，都记得来袭的方向。'},
@@ -76,6 +77,7 @@ export const BUILD_TAGS={
   mobility:{name:'游击',color:'#bfce9d'},growth:{name:'成长',color:'#bdd396'},versatile:{name:'通用',color:'#b8baa6'},
 };
 const EXTRA_TAGS={
+  everseed:['growth'],
   meteor:['area'],mine:['area'],tether:['control'],lance:['melee'],starfall:['area'],bastion:['guard'],wintermine:['area','control'],soulchain:['control','area'],supernova:['area'],pestilence:['area'],
   orbit:['guard'],storm:['area'],flame:['area'],frost:['area','control'],thorn:['area'],bell:['area','control'],solar:['area'],glacier:['control','guard'],requiem:['area'],plague:['area'],bloodmoon:['guard'],absolute:['control','area'],hailfire:['area','control'],soulforge:['area'],
   power:['versatile'],haste:['versatile'],vitality:['guard'],speed:['mobility'],magnet:['growth'],armor:['guard'],regen:['guard'],luck:['critical'],area:['area'],duration:['fire','poison','control','summon'],amount:['projectile','spirit','lightning'],focus:['critical'],growth:['growth'],curse:['growth'],
@@ -89,21 +91,21 @@ export function itemTags(key){
 }
 
 export const SYNERGIES=[
-  {items:['hoarfrost','rime'],name:'踏雪碎镜',desc:'冲刺冻结追兵，后续武器命中触发碎冰。'},
-  {items:['hoarfrost','stormseal'],name:'逐雷寒径',desc:'冲刺施加寒冷，再由雷电武器传导冻结。'},
-  {items:['embercore','rotclock'],name:'迟燃余烬',desc:'燃芯提供附着灼烧，沙漏提高每次灼烧伤害。'},
-  {items:['venomfang','rotclock'],name:'侵蚀倒计时',desc:'蚀骨针附加侵蚀，沙漏强化每次侵蚀伤害。'},
+  {items:['hoarfrost','rime'],name:'踏雪碎镜',resonance:true,desc:'冲刺冻结追兵，后续武器命中触发碎冰。'},
+  {items:['hoarfrost','stormseal'],name:'逐雷寒径',resonance:true,desc:'冲刺施加寒冷，再由雷电武器传导冻结。'},
+  {items:['embercore','rotclock'],name:'迟燃余烬',resonance:true,desc:'燃芯提供附着灼烧，沙漏提高每次灼烧伤害。'},
+  {items:['venomfang','rotclock'],name:'侵蚀倒计时',resonance:true,desc:'蚀骨针附加侵蚀，沙漏强化每次侵蚀伤害。'},
   {items:['aegis','bulwark'],name:'碎光再生',desc:'灯塔补充护盾，护盾被击破后棱片追击敌群。'},
   {items:['stormcoil','bulwark'],name:'雷光碎盾',desc:'雷环提供护盾，破盾时释放追踪棱片。'},
-  {items:['luck','forkseed'],name:'命运分岔',desc:'提高暴击频率，更稳定地触发骨片追击。'},
-  {items:['soulpact','duration'],name:'长明魂契',desc:'延长石像存在时间，让更快、更强的射击持续输出。'},
-  {items:['frostbrand','rime'],name:'冰针碎镜',desc:'远程命中施加减速，后续命中触发范围碎冰。'},
-  {items:['venomfang','spore'],name:'侵蚀播种',desc:'先附加侵蚀，击杀后传播毒素与孢爆。'},
-  {items:['embercore','cinder'],name:'余火连爆',desc:'命中点燃，燃烧目标死亡触发爆燃。'},
-  {items:['embercore','venomfang','volatile'],name:'炼金沸腾',desc:'火与毒在同一目标上相遇，消耗状态换取爆炸。'},
-  {items:['frostbrand','stormseal'],name:'霜雷回路',desc:'先以投射物减速，再由雷属性武器引发冰雷反应。'},
-  {items:['luck','deadeye'],name:'猎魂印记',desc:'提高暴击频率，让易伤标记更稳定。'},
-  {items:['focus','executioner'],name:'破军终结',desc:'高倍暴击配合低血增伤，更快击破重型目标。'},
+  {items:['luck','forkseed'],name:'命运分岔',resonance:true,desc:'提高暴击频率，更稳定地触发骨片追击。'},
+  {items:['soulpact','duration'],name:'长明魂契',resonance:true,desc:'延长石像存在时间，让更快、更强的射击持续输出。'},
+  {items:['frostbrand','rime'],name:'冰针碎镜',resonance:true,desc:'远程命中施加减速，后续命中触发范围碎冰。'},
+  {items:['venomfang','spore'],name:'侵蚀播种',resonance:true,desc:'先附加侵蚀，击杀后传播毒素与孢爆。'},
+  {items:['embercore','cinder'],name:'余火连爆',resonance:true,desc:'命中点燃，燃烧目标死亡触发爆燃。'},
+  {items:['embercore','venomfang','volatile'],name:'炼金沸腾',resonance:true,desc:'火与毒在同一目标上相遇，消耗状态换取爆炸。'},
+  {items:['frostbrand','stormseal'],name:'霜雷回路',resonance:true,desc:'先以投射物减速，再由雷属性武器引发冰雷反应。'},
+  {items:['luck','deadeye'],name:'猎魂印记',resonance:true,desc:'提高暴击频率，让易伤标记更稳定。'},
+  {items:['focus','executioner'],name:'破军终结',resonance:true,desc:'高倍暴击配合低血增伤，更快击破重型目标。'},
   {items:['aegis','thorns'],name:'灯盾反击',desc:'护盾承受的攻击也会触发铁棘反击。'},
   {items:['armor','thorns'],name:'重甲荆棘',desc:'护甲既减伤，也直接提高铁棘反击伤害。'},
   {items:['speed','dashfire'],name:'踏火游击',desc:'缩短冲刺冷却，留下更多火场阻断追兵。'},
@@ -113,6 +115,7 @@ export const SYNERGIES=[
 export function relicValues(key,level,stats) {
   const damage=base=>base*(stats?.damageMultiplier||1);
   switch(key) {
+    case 'everseed': return {chance:.06+level*.06,cooldown:4};
     case 'soulpact': return {multiplier:1+level*.18,interval:1-level*.06};
     case 'hoarfrost': return {damage:damage(15+level*13),radius:65+level*9,freeze:.4+level*.2,bossFreeze:.15,slowDuration:2+level*.4};
     case 'rotclock': return {multiplier:1+level*.25};
@@ -143,7 +146,8 @@ export function relicValues(key,level,stats) {
 export function relicDescription(key,level,stats) {
   const v=relicValues(key,level,stats),d=n=>Math.round(n),s=n=>Number(n.toFixed(2));
   switch(key) {
-    case 'soulpact': return '灵魂、召唤武器伤害 +'+d((v.multiplier-1)*100)+'%；石像与灵龛射击间隔缩短 '+d((1-v.interval)*100)+'%。不影响角色默认伴星。';
+    case 'everseed': return '学会任一天赋后，灯火震荡、星火或风矢命中有 '+d(v.chance*100)+'% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2；本局累计无层数上限，共享冷却 '+v.cooldown+' 秒。增加生命上限不治疗，离局清空。';
+    case 'soulpact': return '灵魂、召唤武器伤害 +'+d((v.multiplier-1)*100)+'%；石像与灵龛射击间隔缩短 '+d((1-v.interval)*100)+'%。学习星群路线后，伴星继承上述两项加成。';
     case 'hoarfrost': return '冲刺起点爆发半径 '+v.radius+' 冰环，造成 '+d(v.damage)+' 伤害；冻结普通敌人 '+s(v.freeze)+' 秒、首领 '+v.bossFreeze+' 秒，再减速 55% 持续 '+s(v.slowDuration)+' 秒。';
     case 'rotclock': return '附着燃烧、侵蚀的每次状态伤害 +'+d((v.multiplier-1)*100)+'%；地面火场与毒池伤害不变。';
     case 'bulwark': return '护盾被击破时释放 '+v.count+' 枚追踪棱片，各造成 '+d(v.damage)+' 伤害；冷却 '+v.cooldown+' 秒。棱片不暴击或触发命中遗物。';
@@ -170,7 +174,24 @@ export function relicDescription(key,level,stats) {
   }
 }
 
+// Run-only altar bargains: modifiers compose with equipment, never consume an equipment slot.
+export const ALTAR_BOONS={
+  horizon:{name:'裂界星图',icon:'area',positive:'范围 +45%',negative:'攻击间隔 +12%',multiply:{areaMultiplier:1.45,haste:1.12}},
+  frenzy:{name:'疾鸣沙漏',icon:'haste',positive:'攻击频率 +35%',negative:'伤害 −12%',multiply:{haste:1/1.35,damageMultiplier:.88}},
+  glass:{name:'碎命烛冠',icon:'curse',positive:'伤害 +40%',negative:'最大生命 −15%',multiply:{damageMultiplier:1.4,maxHp:.85}},
+  stride:{name:'逐风契约',icon:'speed',positive:'移速 +25%，冲刺冷却 −20%',negative:'受到伤害 +12%',multiply:{moveSpeed:1.25,dashCooldown:.8,damageTakenMultiplier:1.12}},
+  winter:{name:'长夜寒誓',icon:'duration',positive:'持续时间 +55%，范围 +15%',negative:'移速 −10%',multiply:{durationMultiplier:1.55,areaMultiplier:1.15,moveSpeed:.9}},
+  twins:{name:'破碎双生',icon:'amount',positive:'投射物、环绕物与落雷目标 +2',negative:'伤害 −15%',add:{amount:2},multiply:{damageMultiplier:.85}},
+  harvest:{name:'饥渴灵冠',icon:'growth',positive:'经验 +35%，拾取范围 +60%',negative:'伤害 −10%',multiply:{xpMultiplier:1.35,pickupRadius:1.6,damageMultiplier:.9}},
+  fortress:{name:'负山灯壁',icon:'armor',positive:'最大生命 +30%，护甲 +3',negative:'移速 −10%',add:{armor:3},multiply:{maxHp:1.3,moveSpeed:.9}},
+  precision:{name:'孤注猎瞳',icon:'focus',positive:'暴击率 +20 个百分点，暴击倍率 +0.5',negative:'范围 −15%',add:{criticalChance:.2,criticalMultiplier:.5},multiply:{areaMultiplier:.85}},
+  renewal:{name:'回生苔心',icon:'regen',positive:'每秒恢复 0.8 生命',negative:'经验获取 −10%',add:{regeneration:.8},multiply:{xpMultiplier:.9}},
+  pilgrim:{name:'灰烬行者',icon:'dashfire',positive:'冲刺冷却 −40%，冲刺保护 +0.12 秒',negative:'最大生命 −10%',add:{dashInvincibility:.12},multiply:{dashCooldown:.6,maxHp:.9}},
+  souls:{name:'群魂共鸣',icon:'soulpact',positive:'灵魂、召唤武器与伴星伤害 +45%',negative:'移速 −8%',multiply:{summonMultiplier:1.45,moveSpeed:.92}},
+};
+
 export function compatibleWeapons(key,weapons,passives={},talents={},characterId=null) {
+  if(key==='everseed')return Object.keys(talents).length?Object.keys(weapons):[];
   const families=RELICS[key]?.families||[];
   const tags=Object.keys(weapons).flatMap(id=>WEAPON_FAMILIES[id]||[]);
   const enabled=id=>!!passives[id]&&RELICS[id].families.some(tag=>tags.includes(tag));

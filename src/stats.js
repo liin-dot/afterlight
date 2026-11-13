@@ -1,23 +1,27 @@
 import {WEAPONS} from './data.js';
-import {WEAPON_FAMILIES,relicValues} from './content.js';
+import {WEAPON_FAMILIES,RELICS,SYNERGIES,relicValues,compatibleWeapons,ALTAR_BOONS} from './content.js';
 
 // The simulation and character sheet use the same effective values.
-export function characterStats(character, passives = {}, meta = {}, talents = {}) {
-  return {
+export function characterStats(character, passives = {}, meta = {}, talents = {}, weapons = {}, boons = [], empowerments = {}, metaBuffs = {}, growth = {}) {
+  const stats={
+    boons:[...boons],empowerments:{...empowerments},metaBuffs,growth:{...growth},summonMultiplier:1,damageTakenMultiplier:1,
     talents,
+    passives:{...passives},
+    weapons:{...weapons},
+    resonances:SYNERGIES.filter(link=>link.resonance&&link.items.every(key=>(passives[key]||0)>=2)).map(link=>({...link,rank:Math.min(2,...link.items.map(key=>passives[key]-1))})),
     soulpact:relicValues('soulpact',passives.soulpact||0),
-    maxHp: character.hp + (meta.vitality || 0) * 5 + (passives.vitality || 0) * 12,
-    damageMultiplier: character.damage * (1 + (meta.power || 0) * .03 + (passives.power || 0) * .12 + (passives.curse || 0) * .10),
+    maxHp: character.hp + (meta.vitality || 0) * 4 + (passives.vitality || 0) * 12 + (growth.vitality||0)*2,
+    damageMultiplier: character.damage * (1 + (meta.power || 0) * .03 + (passives.power || 0) * .12 + (passives.curse || 0) * .10)*(1+(growth.damage||0)*.01),
     haste: Math.max(.7, 1 - (passives.haste || 0) * .06),
-    moveSpeed: character.speed * (1 + (passives.speed || 0) * .06),
+    moveSpeed: character.speed * (1 + (passives.speed || 0) * .06 + (meta.pace||0)*.02),
     pickupRadius: 42 * (character.id === 'witch' ? 1.35 : 1) * (1 + (passives.magnet || 0) * .35),
-    xpMultiplier: 1 + (passives.growth || 0) * .10 + (meta.magnet || 0) * .04 + (passives.curse || 0) * .08,
+    xpMultiplier: 1 + (passives.growth || 0) * .10 + (meta.magnet || 0) * .03 + (passives.curse || 0) * .08,
     armor: (passives.armor || 0) * 2,
     regeneration: (passives.regen || 0) * .22,
     recovery: (meta.regen || 0) * .08,
     criticalChance: .05 + (passives.luck || 0) * .05,
     criticalMultiplier: 2 + (passives.focus || 0) * .25,
-    areaMultiplier: 1 + (passives.area || 0) * .10,
+    areaMultiplier: (1 + (passives.area || 0) * .10 + (meta.reach||0)*.03)*(1+(growth.area||0)*.01),
     durationMultiplier: 1 + (passives.duration || 0) * .15,
     amount: passives.amount || 0,
     curse: passives.curse || 0,
@@ -26,11 +30,18 @@ export function characterStats(character, passives = {}, meta = {}, talents = {}
     dashInvincibility: .38,
     dashSpeedMultiplier: 4.7,
   };
+  for(const id of new Set(boons)){
+    const boon=ALTAR_BOONS[id];if(!boon)continue;
+    for(const [key,value] of Object.entries(boon.multiply||{}))stats[key]*=value;
+    for(const [key,value] of Object.entries(boon.add||{}))stats[key]+=value;
+  }
+  stats.maxHp=Math.max(1,Math.round(stats.maxHp));stats.criticalChance=Math.min(1,stats.criticalChance);
+  return stats;
 }
 
 function baseWeaponStats(kind, level, stats, character) {
   const evolved = !WEAPONS[kind].fusion && level === 6;
-  const damage = base => base * stats.damageMultiplier;
+  const damage = base => base * stats.damageMultiplier*(1+(stats.empowerments?.[kind]||0)*.12)*((WEAPON_FAMILIES[kind]||[]).some(tag=>tag==='spirit'||tag==='summon')?stats.summonMultiplier:1);
   const common = {level, evolved, fusion:!!WEAPONS[kind].fusion, cooldown: WEAPONS[kind].cooldown * stats.haste * (1 - Math.min(.35, (level - 1) * (WEAPONS[kind].fusion ? .12 : .055)))};
   switch (kind) {
     case 'hailfire': return {...common,damage:damage(100+level*36),count:1+level,radius:49+level*7,delay:.8,duration:2.6+level*.4,fieldDamage:damage(14+level*7),hitInterval:.6,freeze:.65+level*.15,bossFreeze:.2,slowDuration:1.8};
@@ -75,8 +86,17 @@ function baseWeaponStats(kind, level, stats, character) {
 // One modifier path keeps every weapon, fusion, preview and combat effect in agreement.
 export function weaponStats(kind,level,stats,character){
   const values=baseWeaponStats(kind,level,stats,character);
-  const area=stats.areaMultiplier||1,duration=stats.durationMultiplier||1;
-  for(const key of ['radius','contactRadius','range','width','innerRadius','outerOffset','fieldRadius','splashRadius','blastRadius','shieldRadius'])if(values[key]!==undefined)values[key]=Math.round(values[key]*area);
+  if(values.fusion&&level>=2)for(const link of stats.resonances||[]){
+    const rank=Math.min(level-1,link.rank),weapons={...stats.weapons,[kind]:level};
+    const linked=link.items.filter(key=>RELICS[key]).map(key=>compatibleWeapons(key,weapons,stats.passives,stats.talents,character.id));
+    if(rank>(values.resonance?.rank||0)&&linked.every(ids=>ids.length)&&linked.some(ids=>ids.includes(kind)))values.resonance={...link,rank};
+  }
+  const rank=values.resonance?.rank||0,tempo=(1-rank*.15)*(stats.metaBuffs.haste||1);
+  const area=(stats.areaMultiplier||1)*(1+rank*.2)*(stats.metaBuffs.area||1),duration=stats.durationMultiplier||1;
+  for(const key of ['radius','contactRadius','range','chainRange','width','innerRadius','outerOffset','fieldRadius','splashRadius','blastRadius','shieldRadius'])if(values[key]!==undefined)values[key]=Math.round(values[key]*area);
+  values.cooldown*=tempo;
+  for(const key of ['hitInterval','fieldInterval','fireInterval'])if(values[key]!==undefined)values[key]*=stats.haste*tempo;
+  if(values.flightTime){values.flightSpeed=210*area;values.returnSpeed=290*area}
   for(const key of ['duration','fieldDuration','slowDuration','freeze','poisonDuration','lifetime'])if(values[key]!==undefined)values[key]*=duration;
   if(values.count!==undefined)values.count+=stats.amount||0;
   if(values.fusion){

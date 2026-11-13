@@ -3,17 +3,18 @@ const number=(n,digits=1)=>Number(n.toFixed(digits)).toLocaleString('zh-CN',{max
 const percent=v=>number(v*100)+'%';
 const seconds=v=>number(v,2)+' 秒';
 const damage=v=>String(Math.round(v));
+export const resonanceText=values=>values.resonance?values.resonance.name+' · 共振'+(values.resonance.rank===2?'Ⅱ':'Ⅰ')+'：间隔 −'+values.resonance.rank*15+'% / 范围 +'+values.resonance.rank*20+'%':'共振：融合武器与一套适配联动均达 LV.2，全部 LV.3 后强化。';
 
 export const passiveEffect = (key, level) => ({
   power: `武器伤害加成 +${level * 12}%。`,
   vitality: `最大生命 +${level * 12}。`,
-  haste: `所有武器的施放冷却缩短 ${level * 6}%。`,
+  haste: `武器施放、召唤射击、环绕接触与领域伤害间隔缩短 ${level * 6}%。`,
   speed: `移动速度 +${level * 6}%，冲刺冷却缩短 ${level * 6}%。`,
   magnet: `拾取范围 +${level * 35}%。`,
   armor: `每次受伤减少 ${level * 2} 点；至少承受原始伤害的 30%。`,
   regen: `每秒恢复 ${number(level * .22)} 点生命。`,
   luck: `暴击率增加 ${level * 5} 个百分点；基础暴击伤害为 2 倍。`,
-  area: `武器范围、光束宽度与距离 +${level * 10}%。`,
+  area: `武器范围、光束宽度、连锁与弹跳距离 +${level * 10}%。`,
   duration: `武器领域、减速与普通敌人冻结持续 +${level * 15}%；首领冻结不变。`,
   amount: `武器弹数、环绕物或落雷目标 +${level}；不增加炮台数量。`,
   focus: `暴击伤害倍率 +${number(level * .25,2)}。`,
@@ -35,7 +36,7 @@ export function weaponFacts(kind, values) {
     if (kind === 'flame') facts.push(['每轮火种', v.count + ' 颗'], ['燃烧伤害', `${damage(v.burnDamage)} / ${seconds(v.hitInterval)}`], ['燃烧半径', v.radius + ' 像素'], ['火焰持续', seconds(v.duration)]);
     if (kind === 'frost') facts.push(['冲击半径', v.radius + ' 像素'], ['减速效果', `${percent(1 - v.slowMultiplier)} · ${seconds(v.slowDuration)}`]);
     if (kind === 'frost' && v.evolved) facts.push(['普通敌人冻结', seconds(v.freeze)], ['首领冻结', seconds(v.bossFreeze)]);
-    if (['crescent','eclipse','bloodmoon'].includes(kind)) facts.push(['每轮月镰',v.count+' 柄'],['切割半径',v.radius+' 像素'],['飞出后折返',seconds(v.flightTime)],['返程伤害',damage(v.damage*v.returnMultiplier)],['往返命中','每段各可命中同一敌人一次']);
+    if (['crescent','eclipse','bloodmoon'].includes(kind)) facts.push(['每轮月镰',v.count+' 柄'],['切割半径',v.radius+' 像素'],['飞出距离',number(v.flightTime*v.flightSpeed)+' 像素'],['飞出后折返',seconds(v.flightTime)],['返程伤害',damage(v.damage*v.returnMultiplier)],['往返命中','每段各可命中同一敌人一次']);
     if (kind==='eclipse') facts.push(['附带范围切割',damage(v.splashDamage)],['切割波及半径',v.splashRadius+' 像素']);
     if (kind==='bloodmoon') facts.push(['每次汲取生命',v.heal+' 点'],['汲取冷却',seconds(v.healCooldown)]);
     if (['thorn','plague'].includes(kind)) facts.push(['每轮毒瓶 / 疫种',v.count+' 枚'],['毒池半径',v.radius+' 像素'],['毒池伤害',damage(v.fieldDamage)+' / '+seconds(v.hitInterval)],['毒池持续',seconds(v.duration)],['侵蚀伤害',damage(v.poisonDamage)+' / 秒'],['侵蚀持续',seconds(v.poisonDuration)]);
@@ -67,5 +68,5 @@ export function weaponFacts(kind, values) {
 
 
 export function weaponExtra(key,v,stats,character){
- return key==='bolt'&&v.homing?' 进化后弩矢会追踪敌人。':key==='orbit'&&v.evolved?' 两组游魂沿内外双环反向旋转。':key==='flame'&&v.evolved?' 飞行中每 0.2 秒留下半径 '+number(20*stats.areaMultiplier)+' 像素的火路，持续 '+seconds(1.4*stats.durationMultiplier)+'，每 0.45 秒造成 '+damage(weaponStats('flame',3,stats,character).burnDamage)+' 伤害。':'';
+ return key==='bolt'&&v.homing?' 进化后弩矢会追踪敌人。':key==='orbit'&&v.evolved?' 两组游魂沿内外双环反向旋转。':key==='flame'&&v.evolved?' 飞行中每 0.2 秒留下半径 '+number(20*stats.areaMultiplier)+' 像素的火路，持续 '+seconds(1.4*stats.durationMultiplier)+'，每 '+seconds(weaponStats('flame',3,stats,character).hitInterval)+'造成 '+damage(weaponStats('flame',3,stats,character).burnDamage)+' 伤害。':'';
 }

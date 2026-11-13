@@ -9,6 +9,15 @@ export function readyProc(game,key,cooldown) {
   game.relicProcs[key]=(game.relicProcs[key]||0)+1;
   return true;
 }
+const metaProc=(game,key,chance,cooldown)=>!!game.meta[key]&&(game.relicTimers['meta_'+key]||0)<=game.time&&Math.random()<chance&&readyProc(game,'meta_'+key,cooldown);
+function updateMetaBuffs(game){
+  for(const [key,factor] of [['tempo',.85],['flare',1.25],['wind',1.15]])game.metaBuffs[{tempo:'haste',flare:'area',wind:'move'}[key]]=(game.relicTimers['meta_'+key+'_until']||0)>game.time?factor:1;
+}
+function metaSurge(game,key,duration){
+  game.relicTimers['meta_'+key+'_until']=Math.max(game.relicTimers['meta_'+key+'_until']||0,game.time+duration);updateMetaBuffs(game);
+  const text={tempo:'战意 · 攻速',flare:'扩焰 · 范围',wind:'猎风 · 移速'}[key];
+  game.texts.push({x:game.player.x,y:game.player.y-38,text,t:.9,max:.9,color:'#d9c58b'});
+}
 export function poisonEnemy(game,e,damage,duration) {
   if(e.dead)return;
   e.poison={damage:Math.max(e.poison?.damage||0,damage),until:game.time+duration,next:e.poison?.next||game.time+.6};
@@ -30,6 +39,13 @@ export function onWeaponHit(game,e,kind,critical=false,periodic=false) {
   const tags=WEAPON_FAMILIES[kind]||[],p=game.passives;
   if(tags.includes('fire'))e.burningUntil=Math.max(e.burningUntil||0,game.time+2);
   if(periodic)return;
+  if(tags.length){
+    if(metaProc(game,'tempo',.12,10))metaSurge(game,'tempo',6);
+    if(metaProc(game,'flare',.1,12))metaSurge(game,'flare',8);
+    if(metaProc(game,'wind',.12,10))metaSurge(game,'wind',6);
+    if(e.hp>0&&metaProc(game,'chill',.12,2))e.slow=Math.max(e.slow,1.5);
+    if(e.hp>0&&(e.slow>0||e.freeze>0||e.burningUntil>game.time||e.poison?.until>game.time)&&metaProc(game,'omen',.15,6))game.markEnemy(e,'meta_omen',1.15,6);
+  }
   if(p.forkseed&&critical){
     const v=relicValues('forkseed',p.forkseed,game.stats);
     if(readyProc(game,'forkseed',v.cooldown))for(let i=0;i<v.count;i++){
@@ -96,6 +112,13 @@ export function onWeaponHit(game,e,kind,critical=false,periodic=false) {
 
 export function onPlayerHurt(game,shieldBroke=false){
   const p=game.player;
+  if(p.hp>0){
+    if(p.shield<8&&metaProc(game,'ward',.2,10))p.shield=8;
+    if(game.meta.laststand&&p.hp<=p.maxHp*.25&&readyProc(game,'meta_laststand',Infinity)){
+      p.hp=Math.min(p.maxHp,p.hp+10);p.shield=Math.max(p.shield,20);pulse(game,p.x,p.y,45,'#d9c58b');
+      game.texts.push({x:p.x,y:p.y-38,text:'绝境续灯',t:1.2,max:1.2,color:'#e7cc92'});
+    }
+  }
   if(game.passives.thorns){
     const v=relicValues('thorns',game.passives.thorns,game.stats);
     if(readyProc(game,'thorns',v.cooldown)){pulse(game,p.x,p.y,v.radius,'#d4c1a3');for(const e of near(game,p.x,p.y,v.radius))game.hit(e,v.damage,p.x,p.y,100,false)}
@@ -125,6 +148,10 @@ export function onPlayerDash(game){
 export function onXpPickup(game,amount,starLinked=false){if(game.passives.harvest)game.harvestCharge+=amount;onCharacterXp(game,amount,starLinked)}
 
 export function onEnemyKilled(game,e) {
+  if(game.player.hp>0&&game.player.hp<game.player.maxHp&&metaProc(game,'blood',.1,3)){
+    game.player.hp=Math.min(game.player.maxHp,game.player.hp+2);game.texts.push({x:game.player.x,y:game.player.y-30,text:'拾烬 +2',t:.9,max:.9,color:'#badd9a'});
+  }
+  if(game.meta.conquest&&(e.elite||e.boss)&&readyProc(game,'meta_conquest',18))for(const key of ['tempo','flare','wind'])metaSurge(game,key,10);
   const p=game.passives;
   if(p.spore&&e.poison?.until>game.time) {
     const v=relicValues('spore',p.spore,game.stats);
@@ -146,7 +173,7 @@ export function onEnemyKilled(game,e) {
 }
 
 export function onWeaponCast(game,kind,projectile) {
-  onCharacterCast(game);
+  onCharacterCast(game,kind);
   const p=game.passives;
   if(p.echo) {
     game.echoCasts=(game.echoCasts||0)+1;
@@ -164,6 +191,7 @@ export function onWeaponCast(game,kind,projectile) {
 }
 
 export function updateRelicStates(game) {
+  updateMetaBuffs(game);
   if(game.passives.aegis){
     const v=relicValues('aegis',game.passives.aegis,game.stats);
     if(game.player.shield<v.shield&&game.time-game.lastHurt>=v.cooldown&&readyProc(game,'aegis',v.cooldown)){

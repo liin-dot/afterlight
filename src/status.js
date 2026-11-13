@@ -1,11 +1,11 @@
 import {paintAvatar, paintIcon} from './art.js';
-import {WEAPONS, PASSIVES, META, formatTime,catalogItem} from './data.js';
+import {WEAPONS, PASSIVES, META, META_TREES, startingLoadout, formatTime,catalogItem} from './data.js';
 import {characterStats, weaponStats} from './stats.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData} from './fusions.js';
-import {relicDescription,compatibleWeapons} from './content.js';
-import {passiveEffect,weaponFacts} from './item-info.js';
+import {relicDescription,compatibleWeapons,SYNERGIES,ALTAR_BOONS} from './content.js';
+import {passiveEffect,weaponFacts,resonanceText} from './item-info.js';
 import {ItemCatalog,itemArt,effectText} from './catalog.js';
-import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,characterTalentStatus,characterTalentSummary} from './talents.js';
+import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,characterTalentSummary} from './talents.js';
 
 const $ = id => document.getElementById(id);
 const number = (value, digits = 1) => Number(value.toFixed(digits)).toLocaleString('zh-CN', {maximumFractionDigits: digits});
@@ -41,13 +41,18 @@ export class CharacterSheet {
     this.mobile=matchMedia('(max-width:700px),(max-height:500px)');
     for(const tab of ['items','fusion']){
       const root=$('sheet-'+tab);
-      root.querySelector('.collection-category')?.addEventListener('change',()=>{root.dataset.page=0;root.dataset.selected='';this.renderCollection(tab)});
-      for(const [selector,step] of [['.collection-prev',-1],['.collection-next',1]])root.querySelector(selector).addEventListener('click',()=>{root.dataset.page=Number(root.dataset.page||0)+step;this.renderCollection(tab);root.querySelector('.catalog-item')?.focus({preventScroll:true})});
-      root.querySelector('.catalog-back').addEventListener('click',()=>this.backCollection(tab));
-      root.querySelector('.catalog-detail').addEventListener('keydown',event=>{if(event.code==='Escape'){event.preventDefault();event.stopPropagation();this.backCollection(tab)}});
+      root.querySelector('.collection-category')?.addEventListener('change',()=>{this.hideCollection(tab);root.dataset.page=0;this.renderCollection(tab)});
+      for(const [selector,step] of [['.collection-prev',-1],['.collection-next',1]])root.querySelector(selector).addEventListener('click',()=>{this.hideCollection(tab);root.dataset.page=Number(root.dataset.page||0)+step;this.renderCollection(tab);this.collectionClosing=true;root.querySelector('.catalog-item')?.focus({preventScroll:true});this.collectionClosing=false});
+      root.querySelector('.detail-bubble-close').addEventListener('click',()=>this.hideCollection(tab,true));
+      root.querySelector('.detail-bubble').addEventListener('beforetoggle',event=>{if(event.newState==='closed'){root.dataset.selected='';root.collectionAnchor?.classList.remove('selected');root.collectionAnchor?.setAttribute('aria-expanded','false')}});
     }
     $('sheet-close').addEventListener('click', () => this.close());
     $('sheet-return').addEventListener('click', () => this.close());
+    $('status-screen').addEventListener('keydown',event=>{
+      if(event.code==='Escape'&&document.querySelector('#status-screen .detail-bubble:popover-open')){event.preventDefault();event.stopPropagation();this.hideDetails(true)}
+    });
+    window.addEventListener('resize',()=>this.hideDetails());
+    $('sheet-scroll').addEventListener('scroll',()=>this.hideDetails());
     // The backdrop intentionally does not dismiss the sheet during combat.
     for (const [index, tab] of this.tabs.entries()) {
       const button = $('sheet-tab-' + tab);
@@ -63,9 +68,9 @@ export class CharacterSheet {
   }
 
   open({tab = 'attributes', weapon = null} = {}) {
-    if (this.visible || !['menu', 'running', 'paused', 'level', 'over'].includes(this.game.state)) return false;
+    if (this.visible || !['menu', 'running', 'paused', 'level', 'reward', 'over'].includes(this.game.state)) return false;
     const modal = document.querySelector('.modal-wrap:not(.hidden)');
-    if (modal && !['pause-screen', 'level-screen', 'end-screen'].includes(modal.id)) return false;
+    if (modal && !['pause-screen', 'level-screen', 'reward-screen', 'end-screen'].includes(modal.id)) return false;
     this.origin = this.game.state;
     this.previousFocus = document.activeElement;
     this.previousModal = modal;
@@ -75,7 +80,6 @@ export class CharacterSheet {
     this.game.state = 'status';
     this.game.keys.clear();
     this.game.stick = {x: 0, y: 0};
-    this.catalog.selected=null;
     for(const tab of ['items','fusion'])$('sheet-'+tab).dataset.selected='';
     this.inertStates = [...$('app').children].filter(element => !['status-screen', 'announcer'].includes(element.id)).map(element => [element, element.inert]);
     for (const [element] of this.inertStates) element.inert = true;
@@ -95,6 +99,7 @@ export class CharacterSheet {
 
   close() {
     if (!this.visible) return;
+    this.hideDetails();
     this.visible = false;
     $('status-screen').classList.add('hidden');
     for (const [element, wasInert] of this.inertStates) element.inert = wasInert;
@@ -110,6 +115,7 @@ export class CharacterSheet {
   }
 
   selectTab(tab) {
+    this.hideDetails();
     this.tab = this.tabs.includes(tab) ? tab : 'attributes';
     for (const key of this.tabs) {
       const active = key === this.tab;
@@ -143,41 +149,52 @@ export class CharacterSheet {
   reveal(element) {
     if(!element)return;
     const collection=element.closest('#sheet-items,#sheet-fusion');
-    if(collection){collection.dataset.selected=element.id;collection.dataset.lastSelected=element.id;this.renderCollection(collection.id.slice(6));collection.querySelector('.catalog-back').focus({preventScroll:true});return}
+    if(collection){
+      const tab=collection.id.slice(6),picker=collection.querySelector('.collection-category');
+      this.hideDetails();if(this.tab!==tab)this.selectTab(tab);
+      if(picker&&picker.value!=='all'&&picker.value!==element.dataset.category)picker.value=element.dataset.category;
+      const entries=[...collection.querySelector('.collection-cards').children].filter(card=>!picker||picker.value==='all'||picker.value===card.dataset.category);
+      collection.dataset.page=Math.max(0,Math.floor(entries.indexOf(element)/this.catalog.pageSize));this.renderCollection(tab);this.showCollection(element);
+      collection.querySelector('.detail-bubble-close').focus({preventScroll:true});return;
+    }
     for(let current=element;current;current=current.parentElement)if(current.mobilePage){const {root,id}=current.mobilePage;root.showMobilePage(id)}
     element.scrollIntoView({block:'nearest'});
   }
 
   renderCollection(tab) {
     const root=$('sheet-'+tab),cards=[...root.querySelector('.collection-cards').children];
-    if(!cards.length)return;
+    const restore=root.querySelector('.detail-bubble').matches(':popover-open')?root.dataset.selected:null;this.hideCollection(tab);
     const category=root.querySelector('.collection-category')?.value||'all';
     const entries=cards.filter(card=>tab==='fusion'||category==='all'||card.dataset.category===category);
-    const selected=cards.find(card=>card.id===root.dataset.selected);
-    root.querySelector('.catalog-browser').classList.toggle('hidden',!!selected);root.querySelector('.catalog-detail').classList.toggle('hidden',!selected);
-    for(const card of cards)card.classList.toggle('hidden',card!==selected);
+    for(const card of cards)card.classList.add('hidden');
     const size=this.catalog.pageSize,pages=Math.max(1,Math.ceil(entries.length/size)),page=Math.max(0,Math.min(Number(root.dataset.page||0),pages-1));root.dataset.page=page;
     root.querySelector('.catalog-list').replaceChildren(...entries.slice(page*size,(page+1)*size).map(card=>{
-      const title=card.querySelector('h4').textContent,button=node('button','catalog-item'+(root.dataset.lastSelected===card.id||card.classList.contains('tracked')?' selected':''));
-      button.dataset.itemId=card.id;button.title=title;button.setAttribute('aria-controls',tab+'-detail');
+      const title=card.querySelector('h4').textContent,button=node('button','catalog-item'+(card.classList.contains('tracked')?' tracked':''));
+      button.dataset.itemId=card.id;button.setAttribute('aria-label',title+(card.dataset.badge?' · '+card.dataset.badge:''));button.setAttribute('aria-controls',tab+'-detail');button.setAttribute('aria-expanded','false');button.setAttribute('aria-haspopup','dialog');
       const icon=card.querySelector('.detail-art canvas');
       if(icon){const canvas=node('canvas');canvas.width=canvas.height=24;canvas.setAttribute('aria-hidden','true');canvas.getContext('2d').drawImage(icon,0,0);button.append(canvas)}else button.append(node('span','sealed-icon','?'));
-      button.append(node('strong','',title));
-      if(card.dataset.badge)button.append(node('small','tile-badge',card.dataset.badge));
-      button.addEventListener('click',()=>this.reveal(card));return button;
+      button.addEventListener('click',event=>{this.showCollection(card);if(event.detail===0)root.querySelector('.detail-bubble-close').focus({preventScroll:true})});
+      button.addEventListener('focus',()=>this.showCollection(card));button.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&button.getAttribute('aria-expanded')!=='true')this.showCollection(card)});return button;
     }));
     root.querySelector('.collection-prev').disabled=page===0;root.querySelector('.collection-next').disabled=page===pages-1;
     root.querySelector('.collection-page').textContent=(page+1)+' / '+pages;root.querySelector('.catalog-pagination').classList.toggle('hidden',!entries.length);root.querySelector('.catalog-empty').classList.toggle('hidden',!!entries.length);
     $('sheet-scroll').scrollTop=0;
+    if(restore){const card=cards.find(card=>card.id===restore);if(card)this.showCollection(card)}
   }
 
-  backCollection(tab) {
-    const root=$('sheet-'+tab),id=root.dataset.selected,card=document.getElementById(id),picker=root.querySelector('.collection-category');
-    if(picker&&card&&picker.value!=='all'&&picker.value!==card.dataset.category)picker.value=card.dataset.category;
-    root.dataset.selected='';
-    const entries=[...root.querySelector('.collection-cards').children].filter(card=>!picker||picker.value==='all'||card.dataset.category===picker.value);
-    root.dataset.page=Math.max(0,Math.floor(entries.indexOf(card)/this.catalog.pageSize));this.renderCollection(tab);
-    [...root.querySelector('.catalog-list').children].find(button=>button.dataset.itemId===id)?.focus({preventScroll:true});
+  showCollection(card){
+    const root=card.closest('#sheet-items,#sheet-fusion');if(this.collectionClosing||!this.visible||this.tab!==root.id.slice(6))return;
+    const anchor=[...root.querySelectorAll('.catalog-item')].find(button=>button.dataset.itemId===card.id);if(!anchor)return;
+    root.collectionAnchor?.classList.remove('selected');root.collectionAnchor?.setAttribute('aria-expanded','false');root.collectionAnchor=anchor;root.dataset.selected=card.id;
+    for(const other of root.querySelector('.collection-cards').children)other.classList.toggle('hidden',other!==card);
+    anchor.classList.add('selected');anchor.setAttribute('aria-expanded','true');
+    const bubble=root.querySelector('.detail-bubble'),title=card.querySelector('h4');title.id=card.id+'-title';bubble.setAttribute('aria-labelledby',title.id);
+    if(!bubble.matches(':popover-open'))bubble.showPopover();this.positionBubble(bubble,anchor);
+  }
+
+  hideCollection(tab,focus=false){
+    const root=$('sheet-'+tab),bubble=root.querySelector('.detail-bubble');if(!bubble.matches(':popover-open'))return;
+    this.collectionClosing=true;bubble.hidePopover();if(focus)root.collectionAnchor?.focus({preventScroll:true});this.collectionClosing=false;
   }
 
   build() {
@@ -185,9 +202,10 @@ export class CharacterSheet {
     const game = this.game, character = game.character;
     // Runs retain the altar bonuses they started with; the camp previews the next run.
     const meta = preview ? this.save.meta : game.meta;
-    const passives = preview ? {} : game.passives;
-    const weapons = preview ? {[character.weapon]: 1} : game.weapons;
-    const stats = preview ? characterStats(character, passives, meta) : game.stats;
+    const loadout = preview ? startingLoadout(character,this.save) : game;
+    const passives = loadout.passives;
+    const weapons = loadout.weapons;
+    const stats = preview ? characterStats(character, passives, meta,{},weapons) : game.stats;
     const hp = preview ? stats.maxHp : Math.max(0, game.player.hp);
     const maxHp = preview ? stats.maxHp : game.player.maxHp;
     const xp = preview ? 0 : game.xp, nextXp = preview ? 8 : game.xpNext;
@@ -195,27 +213,30 @@ export class CharacterSheet {
     put('sheet-name', character.name);
     put('sheet-level', 'LV. ' + (preview ? 1 : game.level));
     put('sheet-lore', character.lore);
-    put('sheet-talent', character.description.replace(/<[^>]*>/g, ''));
+    put('sheet-talent', character.description.replace(/<[^>]*>/g, '').replace(WEAPONS[character.weapon].name,WEAPONS[Object.keys(weapons)[0]].name));
     put('sheet-health', number(hp) + ' / ' + maxHp);
     put('sheet-xp', number(xp) + ' / ' + nextXp);
     $('sheet-health-fill').style.width = Math.min(100, hp / maxHp * 100) + '%';
     $('sheet-xp-fill').style.width = Math.min(100, xp / nextXp * 100) + '%';
     put('sheet-context', preview ? '出征预览 · 已计入永久成长' : this.origin === 'over' ? '本局最终状态 · 远征已经结束' : this.origin === 'level' ? '升级选择已保留 · 战斗暂停中' : '战斗暂停中 · 从容查看你的成长');
-    put('sheet-run', preview ? '起始武器 · ' + WEAPONS[character.weapon].name : formatTime(game.time) + ' 守夜 · ' + game.kills.toLocaleString() + ' 击败 · ' + game.gold.toLocaleString() + ' 余烬');
-    put('sheet-return', ({menu: '返回营地 ↗', running: '继续守夜 ↗', paused: '返回暂停界面 ↗', level: '返回升级选择 ↗', over: '返回远征结算 ↗'})[this.origin]);
-    $('sheet-menu-button').classList.toggle('hidden',!['running','paused','level'].includes(this.origin));
+    put('sheet-run', preview ? '起始武器 · ' + WEAPONS[Object.keys(weapons)[0]].name : formatTime(game.time) + ' 守夜 · ' + game.kills.toLocaleString() + ' 击败 · ' + game.gold.toLocaleString() + ' 余烬');
+    put('sheet-return', ({menu: '返回营地 ↗', running: '继续守夜 ↗', paused: '返回暂停界面 ↗', level: '返回升级选择 ↗', reward: '返回祭坛奖励 ↗', over: '返回远征结算 ↗'})[this.origin]);
+    $('sheet-menu-button').classList.toggle('hidden',!['running','paused','level','reward'].includes(this.origin));
     put('sheet-meta-note', preview ? '下次出征生效' : '本次出征时的祭坛加成');
-    put('sheet-item-count', Object.keys(weapons).length + Object.keys(passives).length);
+    put('sheet-item-count', Object.keys(weapons).length + Object.keys(passives).length+(preview?0:game.boons.length));
     put('sheet-items-label',preview?'装备预览':'本局装备');
     this.buildAttributes(character, stats, passives, meta, preview);
     this.buildTalents(character,preview);
     put('sheet-build-summary',`武器 ${Object.keys(weapons).length} / ${WEAPON_SLOTS} · 道具 ${Object.keys(passives).length} / ${PASSIVE_SLOTS}`);
-    $('sheet-items').querySelector('.collection-cards').replaceChildren(...this.buildWeapons(character,stats,weapons),...this.buildPassives(passives,stats,weapons));
+    const boons=(preview?[]:game.boons||[]).map(id=>{
+      const boon=ALTAR_BOONS[id],card=this.itemCard(catalogItem('passive:'+boon.icon),boon.name,'祭坛契约','本局生效');card.id='sheet-boon-'+id;card.dataset.category='boon';card.append(effectText(boon.positive+'；'+boon.negative+'。'));return card;
+    });
+    $('sheet-items').querySelector('.collection-cards').replaceChildren(...this.buildWeapons(character,stats,weapons),...this.buildPassives(passives,stats,weapons),...boons);
     this.renderCollection('items');
-    this.buildMeta(meta);
+    this.buildMeta(meta,preview);
     const attributes=[...$('sheet-stat-grid').children],groups=[];
     for(let i=0;i<attributes.length;i+=4)groups.push(['stats-'+i,'角色属性 · '+(i/4+1)+' / '+Math.ceil(attributes.length/4),attributes.slice(i,i+4)]);
-    groups.push(['meta','永久祭坛',[...$('sheet-meta').children]]);
+    groups.push(...META_TREES.map((tree,index)=>['meta-'+tree.id,'永久成长 · '+tree.name,[$('sheet-meta').children[index]]]));
     this.mobilePages($('sheet-attributes'),'选择属性分类',groups);
     this.buildFusions(weapons,passives,preview);
     this.catalog.build();
@@ -224,55 +245,93 @@ export class CharacterSheet {
   buildTalents(character,preview){
     const game=preview?{character,level:1,talents:{}}:this.game,definition=CHARACTER_TALENTS[character.id];
     const points=talentPoints(game),learned=Object.keys(game.talents||{}).length,readOnly=preview||this.origin==='over';
-    put('sheet-talent-count',preview?'预览':points>0?'+'+points:learned+'/6');
+    this.hideDetails();
+    put('sheet-talent-count',preview?'预览':points>0?'+'+points:learned+'/3');
     const root=$('sheet-talents');root.replaceChildren();root.style.setProperty('--talent-color',definition.color);
-    const intro=node('div','talent-intro'),identity=node('div','talent-identity');
-    identity.append(artwork(definition.icon),node('small','talent-root-label','初始被动 · 开局已拥有'),node('div','',definition.style));intro.append(identity,node('h3','',definition.name),node('p','',definition.description),node('p','talent-flow',definition.loop));
-    if(!preview)intro.append(node('small','talent-live',characterTalentStatus(this.game)),node('p','talent-current','当前效果 · '+characterTalentSummary(this.game)));
-    const budget=node('div','talent-budget');budget.append(node('strong','',preview?'六次成长':points+' 点可用'),node('span','',preview?'出征后赚取天赋点':'已投入 '+learned+' / 6'));intro.append(budget);root.append(intro);
-    const milestones=node('div','talent-milestones');
-    for(const level of TALENT_LEVELS)milestones.append(node('span',game.level>=level?'earned':'','LV.'+level+' · +1'));
-    root.append(milestones,node('p','talent-rules','以下三路均强化「'+definition.name+'」。每节点 1 点，沿同列依次学习；LV.18 开放最终专精，三选一。'+(preview?'最多投入 6 点，可跨分支组合前两层。':'不占装备位或装备升级机会；本局不可撤回，重开重置。')));
-    const tabs=node('div','talent-branch-tabs');tabs.setAttribute('role','group');tabs.setAttribute('aria-label','天赋分支');
-    const branches=node('div','talent-branches');this.talentBranch??=0;
+    const selected=definition.branches.find(branch=>branch.nodes.some(talent=>game.talents[talent.id]));
+    const budget=node('div','talent-budget');budget.append(node('b','',preview?'天赋预览':points+' 点可用'),node('span','',selected?'已锁定 · '+selected.name:'首次学习锁定路线'));
+    root.append(budget,node('p','talent-rules','LV.'+TALENT_LEVELS.join(' / ')+' 各 1 点 · 点选图标查看'));
+    const tree=node('div','talent-tree');tree.setAttribute('aria-label',definition.name+'天赋树');
+    const bubble=node('div','detail-bubble');bubble.id='talent-detail';bubble.popover='auto';bubble.setAttribute('role','dialog');bubble.setAttribute('aria-labelledby','talent-detail-title');
+    bubble.addEventListener('beforetoggle',event=>{if(event.newState==='closed'){this.talentAnchor?.classList.remove('selected');this.talentAnchor?.setAttribute('aria-expanded','false')}});
+    const buttonFor=(talent,branch,tier)=>{
+      const state=branch?talentNodeState(game,talent.id):null;
+      const button=node('button','talent-node'+(!branch?' innate':state.learned?' learned':state.exclusive?' excluded':state.available&&!readOnly?' available':' locked'));
+      button.id='talent-'+(talent.id||'innate');button.append(artwork(talent.icon));
+      button.setAttribute('aria-label',(branch?branch.name+' · '+talent.name+' · '+state.reason:'初始被动 · '+definition.name));button.setAttribute('aria-controls',bubble.id);button.setAttribute('aria-expanded','false');button.setAttribute('aria-haspopup','dialog');
+      const inspect=()=>{
+        if(this.talentClosing)return;
+        this.talentAnchor?.classList.remove('selected');this.talentAnchor?.setAttribute('aria-expanded','false');this.talentAnchor=button;
+        button.classList.add('selected');button.setAttribute('aria-expanded','true');
+        const title=node('h3','',talent.name);title.id='talent-detail-title';
+        const close=node('button','detail-bubble-close','×');close.setAttribute('aria-label','收起天赋详情');close.addEventListener('click',()=>this.hideDetails(true));
+        const copy=node('div','detail-bubble-copy');copy.append(node('small','',branch?branch.name+' · '+['强化','联动','专精'][tier]+' · LV.'+TALENT_LEVELS[tier]:'初始被动 · 开局拥有'),title,node('p','',talent.description));
+        if(!branch&&!preview)copy.append(node('p','talent-current',characterTalentSummary(this.game)));
+        if(branch){
+          const reason=state.learned?'✓ 已学会':preview?'出征后获得天赋点':this.origin==='over'?'远征已结束':state.reason;
+          copy.append(node('p','talent-detail-state',reason));
+          if(state.available&&!readOnly){const learn=node('button','talent-learn',selected?'学习 · 1 点':'学习并锁定此路线 · 1 点');learn.addEventListener('click',()=>this.game.learnTalent(talent.id));copy.append(learn)}
+        }
+        bubble.replaceChildren(close,copy);if(!bubble.matches(':popover-open'))bubble.showPopover();
+        this.positionBubble(bubble,button);
+      };
+      button.addEventListener('click',event=>{inspect();if(event.detail===0)(bubble.querySelector('.talent-learn')||bubble.querySelector('.detail-bubble-close'))?.focus({preventScroll:true})});button.addEventListener('focus',inspect);
+      button.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&button.getAttribute('aria-expanded')!=='true')inspect()});
+      return button;
+    };
+    const innate=buttonFor(definition);innate.addEventListener('keydown',event=>{if(event.code==='ArrowDown'){event.preventDefault();$('talent-'+(selected||definition.branches[0]).nodes[0].id).focus({preventScroll:true})}});tree.append(innate);
+    const branches=node('div','talent-branches');
     definition.branches.forEach((branch,index)=>{
-      const tab=node('button','',branch.name);tab.setAttribute('aria-pressed',String(index===this.talentBranch));
-      tab.addEventListener('click',()=>{this.talentBranch=index;for(const [i,b] of [...tabs.children].entries())b.setAttribute('aria-pressed',String(i===index));for(const [i,b] of [...branches.children].entries())b.classList.toggle('selected',i===index);root.showMobilePage('branch-'+index)});tabs.append(tab);
-      const column=node('section','talent-branch'+(index===this.talentBranch?' selected':'')),heading=node('h4','',branch.name);heading.tabIndex=-1;column.append(heading,node('p','',branch.role));
+      const column=node('div','talent-branch'+(selected===branch?' chosen':''));column.setAttribute('role','group');column.setAttribute('aria-label',branch.name);
       branch.nodes.forEach((talent,tier)=>{
-        const state=talentNodeState(game,talent.id),card=node('button','talent-node'+(state.learned?' learned':state.exclusive?' excluded':state.available&&!readOnly?' available':' locked'));
-        card.id='talent-'+talent.id;card.disabled=readOnly||!state.available;card.setAttribute('aria-label',talent.name+'。'+talent.description+'。'+state.reason);
-        const head=node('span','talent-node-head');head.append(artwork(talent.icon),node('b','',talent.name),node('em','',['强化','联动','专精'][tier]));
-        card.append(head,node('span','talent-node-description',talent.description),node('span','talent-node-state',state.learned?'✓ 已学会':this.origin==='over'?'远征已结束':state.reason));
-        card.addEventListener('click',()=>{this.talentBranch=index;this.game.learnTalent(talent.id)});column.append(card);
+        const button=buttonFor(talent,branch,tier);
+        button.addEventListener('keydown',event=>{
+          const step={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.code];if(!step)return;
+          event.preventDefault();const next=definition.branches[(index+step[0]+3)%3].nodes[tier+step[1]];
+          if(next)$('talent-'+next.id).focus({preventScroll:true});else if(tier===0&&step[1]===-1)$('talent-innate').focus({preventScroll:true});
+        });column.append(button);
       });branches.append(column);
-      this.mobilePages(column,'选择天赋节点',branch.nodes.map((talent,tier)=>[talent.id,(tier+1)+' · '+talent.name+(game.talents[talent.id]?' · 已学会':''),[column.querySelector('#talent-'+talent.id)]]));
-    });root.append(tabs,branches);
-    root.dataset.mobilePage??='branch-'+this.talentBranch;
-    this.mobilePages(root,'选择天赋分支',[
-      ...definition.branches.map((branch,index)=>['branch-'+index,branch.name+' · 天赋分支',[branches.children[index]]]),
-      ['innate','初始被动 · '+definition.name,[intro]],['rules','成长规则',[milestones,root.querySelector('.talent-rules')]],
-    ]);
-    root.querySelector(':scope>.mobile-picker').addEventListener('change',e=>{if(e.target.value.startsWith('branch-'))tabs.children[Number(e.target.value.slice(-1))].click()});
-    const compact=node('div','talent-mobile-summary');compact.append(node('b','',definition.name),node('span','',preview?'天赋预览':points+' 点可用 · 已学 '+learned+'/6'));root.prepend(compact);
+    });tree.append(branches);root.append(tree,bubble);
+  }
+
+  hideDetails(focus=false){
+    for(const tab of ['items','fusion'])this.hideCollection(tab,focus);
+    this.catalog.hideDetail(focus);
+    const bubble=$('talent-detail');if(!bubble?.matches(':popover-open'))return;
+    this.talentClosing=true;bubble.hidePopover();if(focus)this.talentAnchor?.focus({preventScroll:true});this.talentClosing=false;
+  }
+
+  positionBubble(bubble,button){
+    const anchor=button.getBoundingClientRect(),gap=14,pad=12;
+    bubble.style.maxHeight=(innerHeight-pad*2)+'px';bubble.style.left='0px';bubble.style.top='0px';
+    const {width,height}=bubble.getBoundingClientRect();let left,top,side;
+    if(innerWidth-anchor.right>=width+gap+pad){side='right';left=anchor.right+gap;top=Math.max(pad,Math.min(anchor.y+(anchor.height-height)/2,innerHeight-height-pad))}
+    else if(anchor.left>=width+gap+pad){side='left';left=anchor.left-width-gap;top=Math.max(pad,Math.min(anchor.y+(anchor.height-height)/2,innerHeight-height-pad))}
+    else{
+      side=anchor.top>innerHeight-anchor.bottom?'above':'below';left=Math.max(pad,Math.min(anchor.x+(anchor.width-width)/2,innerWidth-width-pad));
+      const space=(side==='above'?anchor.top:innerHeight-anchor.bottom)-gap-pad;bubble.style.maxHeight=Math.max(100,space)+'px';
+      top=side==='above'?anchor.top-gap-bubble.getBoundingClientRect().height:anchor.bottom+gap;
+    }
+    bubble.dataset.side=side;bubble.style.left=left+'px';bubble.style.top=top+'px';
+    bubble.style.setProperty('--tail',Math.max(20,Math.min((side==='left'||side==='right'?anchor.y+anchor.height/2-top:anchor.x+anchor.width/2-left),(side==='left'||side==='right'?bubble.offsetHeight:width)-20))+'px');
   }
 
   buildAttributes(character, stats, p, m, preview) {
     const dashLeft = preview ? 0 : this.game.player.dashCooldown;
     const dashState = !preview && this.game.player.dashTime > 0 ? '正在冲刺' : dashLeft > 0 ? '剩余 ' + seconds(dashLeft) : '已就绪';
     const rows = [
-      ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 5}`, p.vitality && `不灭之心 +${p.vitality * 12}`])],
+      ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 4}`, p.vitality && `不灭之心 +${p.vitality * 12}`])],
       ['power', '武器伤害', percent(stats.damageMultiplier), '倍率', source([`角色基础 ×${number(character.damage, 2)}`, m.power && `祭坛 +${m.power * 3}%`, p.power && `猩红誓约 +${p.power * 12}%`,p.curse&&`禁忌烛冠 +${p.curse*10}%`])],
-      ['haste', '施放冷却缩减', percent(1 - stats.haste), '', p.haste ? `时隙沙漏 ${p.haste} 级；再与武器自身冷却相乘。游魂灯的接触间隔不变。` : '暂无冷却祝福；每种武器仍有独立的等级冷却。'],
-      ['speed', '移动速度', number(stats.moveSpeed), '像素 / 秒', source([`角色基础 ${character.speed}`, p.speed && `夜行之靴 +${p.speed * 6}%`])],
+      ['haste', '武器间隔缩减', percent(1-stats.haste*(stats.metaBuffs.haste||1)), '', p.haste ? `时隙沙漏 ${p.haste} 级；含召唤、环绕与领域，共振另计。` : '暂无间隔祝福；武器等级与共振仍会影响实际频率。'],
+      ['speed', '移动速度', number(stats.moveSpeed*(stats.metaBuffs.move||1)), '像素 / 秒', source([`角色基础 ${character.speed}`,m.pace&&'行旅轻步 +'+m.pace*2+'%', p.speed && `夜行之靴 +${p.speed * 6}%`])],
       ['armor', '伤害减免', stats.armor, '点 / 次', '护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'],
       ['regen', '持续恢复', number(stats.regeneration,2), '点 / 秒', p.regen ? '复苏苔芽在战斗中持续恢复。' : '需要本局选择恢复道具。'],
-      ['regen', '避伤恢复', number(stats.recovery,2), '点 / 秒', '春回之息：连续 6 秒未受攻击后生效；护盾受击也会打断。'],
+      ['regen', '避伤恢复', number(stats.recovery,2), '点 / 秒', '春回之息：连续 4 秒未受攻击后生效；护盾受击也会打断。'],
       ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 42', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .35, 2)}`])],
-      ['growth', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.growth && `记忆冠冕 +${p.growth * 10}%`, m.magnet && `祭坛 +${m.magnet * 4}%`,p.curse&&`禁忌烛冠 +${p.curse*8}%`])],
+      ['growth', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.growth && `记忆冠冕 +${p.growth * 10}%`, m.magnet && `祭坛 +${m.magnet * 3}%`,p.curse&&`禁忌烛冠 +${p.curse*8}%`])],
       ['luck', '暴击率', percent(stats.criticalChance), '', source(['武器直接命中独立判定，基础 5%', p.luck && `命运四叶 +${p.luck * 5} 个百分点`])],
       ['focus', '暴击伤害', percent(stats.criticalMultiplier), '倍率', '持续状态、天赋与遗物的追加伤害不暴击。'],
-      ['area','武器范围',percent(stats.areaMultiplier),'倍率','包括攻击半径、光束宽度与距离；不增加遗物范围。'],
+      ['area','武器范围',percent(stats.areaMultiplier*(stats.metaBuffs.area||1)),'倍率','含半径、光束、连锁及月镰距离；共振加成见装备。'],
       ['duration','持续时间',percent(stats.durationMultiplier),'倍率','增加武器领域、减速与普通敌人冻结时间；首领冻结不变。'],
       ['amount','额外数量',stats.amount,'个','弹数、环绕物与落雷目标；炮台数量上限仍为 2。'],
       ['aegis','当前护盾',preview?(character.id==='warden'?8:0):number(this.game.player.shield),'点','护盾先于生命承受伤害，多个来源取较高值。'],
@@ -302,7 +361,7 @@ export class CharacterSheet {
     const actions=node('div','collection-actions');
     if(Object.values(FUSIONS).some(recipe=>this.game.discoveredFusions.has(recipe.id)&&(recipe.id===key||recipe.ingredients.some(item=>item.id===key)))){
       const link=node('button','sheet-recipe-link','融合图谱 ↗');
-      link.addEventListener('click',()=>{this.selectTab('fusion');const recipe=$('recipe-'+key);if(recipe)this.reveal(recipe);else{$('sheet-fusion').dataset.selected='';this.renderCollection('fusion');$('sheet-fusion').querySelector('.catalog-item')?.focus({preventScroll:true})}});actions.append(link);
+      link.addEventListener('click',()=>{this.selectTab('fusion');const recipe=$('recipe-'+key);if(recipe)this.reveal(recipe);else{this.renderCollection('fusion');this.collectionClosing=true;$('sheet-fusion').querySelector('.catalog-item')?.focus({preventScroll:true});this.collectionClosing=false}});actions.append(link);
     }
     if(actions.children.length)card.append(actions);
   }
@@ -311,11 +370,11 @@ export class CharacterSheet {
     return Object.entries(weapons).map(([key,level])=>{
       const data=WEAPONS[key],values=weaponStats(key,level,stats,character);
       const card=this.itemCard(catalogItem('weapon:'+key),weaponName(key,level),values.fusion?'融合武器':data.category,values.evolved?'已进化':'LV. '+level+' / '+maxWeaponLevel(key));
-      card.dataset.category='weapon';card.dataset.badge=values.evolved?'✦':'LV.'+level;card.id='sheet-weapon-'+key;
+      card.dataset.category='weapon';card.dataset.badge=values.evolved?'✦':values.resonance?'共振'+(values.resonance.rank===2?'Ⅱ':'Ⅰ'):'LV.'+level;card.id='sheet-weapon-'+key;
       card.append(effectText(values.evolved?data.upgrades.at(-1).replace(/^进化：/,''):data.desc));
       const facts=node('dl','sheet-facts');
       for(const [label,value] of weaponFacts(key,values).slice(0,4)){const pair=node('div');pair.append(node('dt','',label),node('dd','',value));facts.append(pair)}
-      card.append(facts);this.addFusionLink(card,key);return card;
+      card.append(facts);if(stats.empowerments?.[key])card.append(effectText('祭坛淬炼 · 伤害 +'+stats.empowerments[key]*12+'%，已计入数值。','collection-note'));if(values.resonance)card.append(effectText(resonanceText(values),'collection-note'));this.addFusionLink(card,key);return card;
     });
   }
 
@@ -336,7 +395,7 @@ export class CharacterSheet {
         words.append(node('strong','',ingredientData(ingredient).name),node('small','',saved?'已融入 · LV. '+level:'LV. '+level+' / '+ingredient.required+(met?' ✓':'')));
         component.append(artwork(ingredient.id),words);formula.append(component);
       }
-      card.append(formula,effectText(history?'铸成于 '+formatTime(history.time)+' · 当前 LV. '+state.level:'成品 LV. '+state.level+' · 消耗两件材料的全部等级及独立效果，材料本局不再出现。','collection-note'));
+      card.append(formula,effectText(history?'铸成于 '+formatTime(history.time)+' · 当前 LV. '+state.level:'成品 LV. '+state.level+' · 消耗材料的全部等级与效果，材料本局不再出现。','collection-note'));
       const action=node('button','fusion-track-button');
       if(state.forged){action.textContent='查看当前武器 ↗';action.addEventListener('click',()=>{this.selectTab('items');this.reveal($('sheet-weapon-'+key))})}
       else if(this.origin==='over'){action.textContent='本次远征已结束';action.disabled=true}
@@ -368,25 +427,29 @@ export class CharacterSheet {
       if(data.relic){
         const linked=compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id);
         const status=linked.length?'联动就绪':'缺少触发来源';
-        card.append(effectText(key==='soulpact'?'持续强化灵魂与召唤武器，已计入当前武器数值。':status+' · 本局触发 '+(this.origin==='menu'?0:(this.game.relicProcs?.[key]||0))+' 次。','collection-note'));
+        card.append(effectText(key==='soulpact'?'持续强化灵魂与召唤武器，已计入当前武器数值。'+(stats.talents?.s_swarm1?'星群伴星同时继承伤害与射速。':''):status+' · 本局触发 '+(this.origin==='menu'?0:(this.game.relicProcs?.[key]||0))+' 次。','collection-note'));
       }
       if(key==='vitality')card.append(effectText('获得时立即恢复 12 点生命。','collection-note'));
-      if(key==='haste')card.append(effectText('环绕接触、持续伤害和遗物触发冷却不变。','collection-note'));
+      if(key==='haste')card.append(effectText('附着燃烧、侵蚀与遗物触发冷却不变。','collection-note'));
+      if(key==='everseed'){
+        const growth=this.origin==='menu'?{}:this.game.growth;
+        card.append(effectText('本局累计：伤害 +'+(growth.damage||0)+'% · 范围 +'+(growth.area||0)+'% · 生命上限 +'+(growth.vitality||0)*2+'。','collection-note'));
+      }
+      const links=SYNERGIES.filter(link=>link.resonance&&link.items.includes(key));
+      if(links.length)card.append(effectText('共振搭配：'+links.map(link=>link.items.filter(id=>id!==key).map(id=>PASSIVES[id].name).join('＋')).join(' / ')+'。融合与整套装备均需 LV.2；LV.3 强化。','collection-note'));
       if(this.origin!=='menu'&&this.game.banished?.has(key))card.append(node('p','collection-note','已放逐 · 保留当前效果，本局不再升级。'));
       this.addFusionLink(card,key);return card;
     });
   }
 
 
-  buildMeta(meta) {
-    $('sheet-meta').replaceChildren(...Object.entries(META).map(([key, info]) => {
-      const level = meta[key] || 0;
-      const effects = {vitality: `初始生命 +${level * 5}`, power: `武器伤害加成 +${level * 3}%`, magnet: `经验获取 +${level * 4}%`, regen: `连续 6 秒未受攻击后，每秒恢复 ${number(level * .08,2)} 点生命`};
-      const card = node('article', 'sheet-meta-card' + (level ? '' : ' inactive')), words = node('div'), title = node('h4', '', info.name);
-      title.append(node('span', '', `LV. ${level} / ${info.max}`));
-      words.append(title, node('p', '', level ? effects[key] : '未获得 · 可在营地的余烬祭坛提升'));
-      card.append(artwork(key), words);
-      return card;
+  buildMeta(meta,preview) {
+    const basics={power:level=>'伤害 +'+level*3+'%',reach:level=>'武器范围 +'+level*3+'%',magnet:level=>'经验 +'+level*3+'%',pace:level=>'移速 +'+level*2+'%',vitality:level=>'初始生命 +'+level*4,regen:level=>'避伤 4 秒后恢复 '+number(level*.08,2)+' / 秒'};
+    $('sheet-meta').replaceChildren(...META_TREES.map(tree=>{
+      const card=node('article','sheet-meta-card'),words=node('div');words.append(node('h4','',tree.name+' · 永久成长'));
+      for(const key of tree.nodes){const level=meta[key]||0;if(!level)continue;const info=META[key],effect=basics[key]?basics[key](level):'已解锁'+(!preview?' · 本局触发 '+(this.game.relicProcs['meta_'+key]||0)+' 次':'');words.append(node('p','',info.name+' · '+effect))}
+      if(words.children.length===1)words.append(node('p','','尚未强化 · 营地余烬祭坛可查看成长树'));
+      card.append(artwork(META[tree.nodes[0]].icon),words);return card;
     }));
   }
 

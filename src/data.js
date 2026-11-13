@@ -1,4 +1,4 @@
-import {NEW_WEAPONS,RELICS} from './content.js';
+import {NEW_WEAPONS,RELICS,itemTags} from './content.js';
 
 export const CHARACTERS = [
  {id:'warden',name:'守灯人',english:'WARDEN',tag:'近战 · 灯火反击',weapon:'blade',hp:90,speed:88,damage:1.10,description:'<b>余烬长刃</b> 起手 · 伤害 +10% · 生命 90',lore:'背着最后一盏灯，走进无人归来的墓园。'},
@@ -21,13 +21,13 @@ export const PASSIVES = {
  ...RELICS,
  power:{name:'猩红誓约',desc:'所有武器伤害 +12%。',color:'#d5957c',max:5},
  vitality:{name:'不灭之心',desc:'最大生命 +12，并立即恢复 12 点生命。',color:'#b7ce92',max:5},
- haste:{name:'时隙沙漏',desc:'所有武器施放冷却缩短 6%。',color:'#d8c997',max:5,rarity:'uncommon'},
+ haste:{name:'时隙沙漏',desc:'武器施放、召唤射击、环绕接触与领域伤害间隔缩短 6%。',color:'#d8c997',max:5,rarity:'uncommon'},
  speed:{name:'夜行之靴',desc:'移动速度 +6%，冲刺冷却缩短 6%。',color:'#b1c696',max:5},
  magnet:{name:'引魂石',desc:'拾取范围 +35%。更安全地回收战场经验。',color:'#92c4c2',max:5},
  armor:{name:'旧王护符',desc:'每次受伤减少 2 点；仍至少承受原伤害的 30%。',color:'#b9c4a1',max:5},
  regen:{name:'复苏苔芽',desc:'每秒恢复 0.22 点生命。',color:'#a9c591',max:5},
  luck:{name:'命运四叶',desc:'暴击几率 +5 个百分点。基础暴击造成双倍伤害。',color:'#bbc58c',max:5},
- area:{name:'星图卷轴',desc:'武器范围、光束宽度与距离 +10%。',color:'#b4bbde',max:3,rarity:'uncommon'},
+ area:{name:'星图卷轴',desc:'武器范围、光束宽度、连锁与弹跳距离 +10%。',color:'#b4bbde',max:3,rarity:'uncommon'},
  duration:{name:'长明烛',desc:'武器领域、减速与普通敌人冻结持续时间 +15%；不延长首领冻结。',color:'#e7ca91',max:3},
  amount:{name:'双生银币',desc:'武器弹数、环绕物或落雷目标 +1；不增加炮台数量。',color:'#d9d7ae',max:2,rarity:'rare'},
  focus:{name:'破军徽记',desc:'暴击伤害倍率 +0.25。与命运四叶、猎魂目配合。',color:'#dca9a1',max:3,rarity:'uncommon'},
@@ -35,15 +35,50 @@ export const PASSIVES = {
  curse:{name:'禁忌烛冠',desc:'伤害 +10%、经验 +8%；敌人生命 +12%、生成频率 +8%、速度 +3%。',color:'#c399cf',max:3,rarity:'rare'},
 };
 export const META = {
- vitality:{name:'长明之躯',desc:'每级 +5 初始生命',max:5,cost:50},
- power:{name:'余烬之力',desc:'每级 +3% 武器伤害',max:5,cost:65},
- magnet:{name:'引路之光',desc:'每级 +4% 经验获取',max:5,cost:55},
- regen:{name:'春回之息',desc:'连续 6 秒未受攻击后，每级恢复 0.08 生命 / 秒',max:5,cost:75},
+ power:{name:'余烬之力',icon:'power',desc:'每级 +3% 武器伤害，最多 +15%。',max:5,cost:160},
+ reach:{name:'星火余照',icon:'area',desc:'每级 +3% 武器范围，最多 +15%。',max:5,cost:100,costs:[4000,4500,5000,5500,6000]},
+ tempo:{name:'战意微燃',icon:'haste',desc:'武器直接命中有 12% 概率使武器攻击间隔缩短 15%，持续 6 秒；冷却 10 秒。',max:1,cost:10000},
+ flare:{name:'扩焰回响',icon:'area',desc:'武器直接命中有 10% 概率使武器范围增加 25%，持续 8 秒；冷却 12 秒。',max:1,cost:18000},
+ conquest:{name:'破阵薪火',icon:'solar',desc:'击败精英或首领后，同时获得间隔 −15%、范围 +25%、移速 +15%，持续 10 秒；冷却 18 秒，不叠加。',max:1,cost:30000},
+ magnet:{name:'引路之光',icon:'growth',desc:'每级 +3% 经验获取，最多 +15%。',max:5,cost:140},
+ pace:{name:'行旅轻步',icon:'speed',desc:'每级 +2% 移速，最多 +10%。',max:5,cost:110,costs:[4000,4500,5000,5500,6000]},
+ wind:{name:'猎风应答',icon:'speed',desc:'武器直接命中有 12% 概率使移速增加 15%，持续 6 秒；冷却 10 秒。',max:1,cost:10000},
+ chill:{name:'寒光留痕',icon:'frostbrand',desc:'武器直接命中有 12% 概率使目标减速 55%，持续 1.5 秒；共享冷却 2 秒。',max:1,cost:18000},
+ omen:{name:'蚀星刻印',icon:'deadeye',desc:'武器直接命中异常状态目标，有 15% 概率施加 15% 易伤，持续 6 秒；共享冷却 6 秒，只取最高易伤。',max:1,cost:30000},
+ vitality:{name:'长明之躯',icon:'vitality',desc:'每级 +4 初始生命，最多 +20。',max:5,cost:120},
+ regen:{name:'春回之息',icon:'regen',desc:'连续 4 秒未受攻击后，每级恢复 0.08 生命 / 秒，最多 0.4。',max:5,cost:180,costs:[4000,4500,5000,5500,6000]},
+ blood:{name:'拾烬回生',icon:'siphon',desc:'击杀有 10% 概率恢复 2 生命；共享冷却 3 秒，不超过最大生命。',max:1,cost:10000},
+ ward:{name:'护灯余光',icon:'aegis',desc:'受击后有 20% 概率将护盾补至 8；冷却 10 秒，不与较高护盾叠加。',max:1,cost:18000},
+ laststand:{name:'绝境续灯',icon:'aegis',desc:'非致命受击后生命降至 25% 以下，恢复 10 生命、护盾补至 20；每局一次，不能抵挡致命伤害。',max:1,cost:30000},
 };
+export const META_TREES=[
+ {id:'ember',name:'星火',hint:'输出 · 范围',nodes:['power','reach','tempo','flare','conquest']},
+ {id:'stars',name:'游星',hint:'移动 · 异常',nodes:['magnet','pace','wind','chill','omen']},
+ {id:'light',name:'长明',hint:'生存 · 恢复',nodes:['vitality','regen','blood','ward','laststand']},
+];
+export const metaCost=(key,level)=>META[key].costs?.[level]??META[key].cost*(level+1)**2;
+export function metaState(meta,key){
+ if(!Object.hasOwn(META,key))return null;
+ const info=META[key],level=meta[key]||0,tree=META_TREES.find(tree=>tree.nodes.includes(key));
+ const prerequisite=tree.nodes.slice(0,tree.nodes.indexOf(key)).find(id=>(meta[id]||0)<META[id].max);
+ return {level,cost:metaCost(key,level),maxed:level>=info.max,prerequisite,available:level<info.max&&!prerequisite};
+}
+export const STARTING_WEAPONS={
+ flame:{cost:600,hint:'投掷火种，用持续火焰控制追兵。'},
+ frost:{cost:600,hint:'释放寒霜脉冲，以减速争取生存空间。'},
+ prism:{cost:600,hint:'发射贯穿光束，从直线敌群中打开缺口。'},
+ thorn:{cost:600,hint:'射出毒刺，以侵蚀持续削弱敌人。'},
+ sentinel:{cost:600,hint:'部署短暂存续的炮台，围绕阵地回收经验。'},
+ crescent:{cost:600,hint:'抛出往返月镰，利用回旋路径击中敌群。'},
+};
+export function startingLoadout(character,preparation={}){
+ const key=preparation.selectedWeapon,weapon=Object.hasOwn(STARTING_WEAPONS,key)&&preparation.weaponUnlocks?.includes(key)?key:character.weapon;
+ return {weapons:{[weapon]:1},passives:{}};
+}
 export const PICKUPS = {
  xp:{name:'灵光结晶',color:'#b3cc89',desc:'拾取后获得经验。不同敌人掉落的结晶包含不同经验，较大的结晶也可能由多颗合并而成。',source:'击败敌人后掉落。'},
  heal:{name:'生命药草',color:'#bfd394',desc:'拾取后立即恢复 12 点生命，不超过最大生命。',source:'击败敌人时有机会掉落；共享 20 秒间隔，地面最多保留一株。'},
- magnet:{name:'引魂之光',color:'#a6d9e2',desc:'让地面上现有的全部经验结晶向你飞来；不会永久改变拾取范围。',source:'击败普通敌人时有机会掉落。'},
+ magnet:{name:'引魂之光',color:'#a6d9e2',desc:'让地面上现有的全部经验结晶向你飞来；不会永久改变拾取范围。',source:'普通敌人有机会掉落；每位首领必定额外掉落一枚。'},
  chest:{name:'古老宝箱',color:'#e0bd78',desc:'精英宝箱强化一次已持有装备并赠 25 余烬；首领宝箱强化两次、恢复 10 生命并赠 60 余烬。包括武器与道具，排除满级或已放逐装备；无可强化装备时每次改为 24 基础经验。不自动融合。',source:'击败精英或首领后掉落。'},
  hourglass:{name:'凝时碎砂',color:'#b5dce7',desc:'立即冻结当前普通敌人 3 秒，首领仅冻结 0.3 秒。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
  nova:{name:'破晓火种',color:'#efb078',desc:'立即对半径 210 内的普通敌人造成 500 伤害，首领受到 250 伤害；伤害不触发遗物。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
@@ -84,7 +119,13 @@ export function mergeItemDiscoveries(...records) {
 export function readSave(fallback={}){
   let d;try{d=JSON.parse(localStorage.getItem('afterlight-save-v1')||'{}')||{}}catch{d=fallback}
   const amount=(value,integer=true)=>{const n=typeof value==='number'||typeof value==='string'?Number(value):0;return Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER,integer?Math.floor(n):n)):0};
-  return {embers:amount(d.embers),best:amount(d.best,false),kills:amount(d.kills),runs:amount(d.runs),wins:amount(d.wins),meta:Object.fromEntries(Object.keys(META).map(k=>[k,Math.min(META[k].max,amount(d.meta?.[k]))])),muted:!!d.muted,discoveredFusions:normalizeDiscoveries(d.discoveredFusions),discoveredItems:normalizeItemDiscoveries(d.discoveredItems)};
+  const meta=Object.fromEntries(Object.keys(META).map(k=>[k,Math.min(META[k].max,amount(d.meta?.[k]))]));
+  for(const tree of META_TREES){let unlocked=true;for(const key of tree.nodes){if(META[key].max===1&&!unlocked)meta[key]=0;unlocked&&=meta[key]===META[key].max}}
+  const oldWeapons={ember:'flame',frost:'frost',storm:'prism',blight:'thorn',stars:'sentinel',blood:'crescent'};
+  const weaponUnlocks=[...new Set([...(Array.isArray(d.weaponUnlocks)?d.weaponUnlocks:[]),...Object.entries(oldWeapons).filter(([id])=>amount(d.legacyRanks?.[id])>=1).map(([,weapon])=>weapon)])].filter(key=>typeof key==='string'&&Object.hasOwn(STARTING_WEAPONS,key));
+  const preferred=d.selectedWeapon??(typeof d.selectedLegacy==='string'&&Object.hasOwn(oldWeapons,d.selectedLegacy)?oldWeapons[d.selectedLegacy]:null),selectedWeapon=weaponUnlocks.includes(preferred)?preferred:null;
+  const refund=Object.keys(oldWeapons).reduce((sum,id)=>sum+(amount(d.legacyRanks?.[id])>=2?2400:0)+(amount(d.legacyRanks?.[id])>=3?7200:0),0);
+  return {embers:Math.min(Number.MAX_SAFE_INTEGER,amount(d.embers)+refund),best:amount(d.best,false),kills:amount(d.kills),runs:amount(d.runs),wins:amount(d.wins),meta,weaponUnlocks,selectedWeapon,muted:!!d.muted,discoveredFusions:normalizeDiscoveries(d.discoveredFusions),discoveredItems:normalizeItemDiscoveries(d.discoveredItems)};
 }
 let saveQueue=Promise.resolve(),lastStored=null,pendingMuted;
 const pending={embers:0,best:0,kills:0,runs:0,wins:0};
@@ -101,13 +142,18 @@ export function writeSave(save,change={}){
   if(change.result){const r=change.result;pending.embers+=r.reward;pending.best=Math.max(pending.best,r.time);pending.kills+=r.kills;pending.runs++;if(r.won)pending.wins++}
   if(Object.hasOwn(change,'muted'))pendingMuted=!!change.muted;
   refreshSave(save);
-  const next=structuredClone(save),info=META[change.purchase],level=next.meta[change.purchase]||0;
-  const purchased=Object.hasOwn(META,change.purchase)&&level<info.max&&next.embers>=info.cost*(level+1);
-  if(purchased){next.embers-=info.cost*(level+1);next.meta[change.purchase]=level+1}
-  if(!persist)return {persisted:false,purchased:false};
-  try{localStorage.setItem('afterlight-save-v1',JSON.stringify(next))}catch{return {persisted:false,purchased:false}}
+  const next=structuredClone(save),level=next.meta[change.purchase]||0;
+  const purchased=!!metaState(next.meta,change.purchase)?.available&&(change.metaLevel===undefined||change.metaLevel===level)&&next.embers>=metaCost(change.purchase,level);
+  if(purchased){next.embers-=metaCost(change.purchase,level);next.meta[change.purchase]=level+1}
+  const weaponInfo=Object.hasOwn(STARTING_WEAPONS,change.unlockWeapon)?STARTING_WEAPONS[change.unlockWeapon]:null;
+  const unlocked=!!weaponInfo&&!next.weaponUnlocks.includes(change.unlockWeapon)&&next.embers>=weaponInfo.cost;
+  if(unlocked){next.embers-=weaponInfo.cost;next.weaponUnlocks.push(change.unlockWeapon)}
+  const selected=Object.hasOwn(change,'selectWeapon')&&(change.selectWeapon===null||next.weaponUnlocks.includes(change.selectWeapon));
+  if(selected)next.selectedWeapon=change.selectWeapon;
+  if(!persist)return {persisted:false,purchased:false,unlocked:false,selected:false};
+  try{localStorage.setItem('afterlight-save-v1',JSON.stringify(next))}catch{return {persisted:false,purchased:false,unlocked:false,selected:false}}
   lastStored=structuredClone(next);for(const key of Object.keys(pending))pending[key]=0;pendingMuted=undefined;Object.assign(save,next);
-  return {persisted:true,purchased};
+  return {persisted:true,purchased,unlocked,selected};
  };
  // ponytail: without Web Locks, writes serialize within one page only; use IndexedDB for cross-tab transactions on those browsers.
  const task=async()=>{if(!globalThis.navigator?.locks)return commit();try{return await navigator.locks.request('afterlight-save-v1',()=>commit())}catch{return commit(false)}};

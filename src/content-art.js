@@ -4,6 +4,7 @@ export function drawContentIcon(g,kind) {
   const gem=(c,x,y,r)=>{for(let row=-r;row<=r;row++){const width=r-Math.abs(row);box(c,x-width,y+row,width*2+1,1)}};
   const ring=(color,cx,cy,r)=>{for(let i=0;i<16;i++){const a=i*Math.PI/8;box(color,cx+Math.cos(a)*r,cy+Math.sin(a)*r,2,2)}};
   const slash=color=>{box('#776963',6,4,2,18);for(let i=0;i<13;i++){const a=-1.7+i*.22;box(color,10+Math.cos(a)*9,11+Math.sin(a)*9,3,3)}box('#f5ead4',15,4,4,2);box('#ac9a82',4,17,7,2)};
+  if(kind==='everseed'){ring('#9e925e',12,12,8);gem('#a6bc75',12,13,5);gem('#eed697',12,11,3);box('#6e9c63',11,15,2,7);box('#a3c481',6,17,5,2);box('#e8ca82',16,3,2,4);box('#e8ca82',15,4,4,2);return true}
   if(kind==='hailfire'){gem('#a8d8df',9,13,8);gem('#e69f6a',15,12,7);gem('#f1e5c1',12,12,3);box('#a8d8df',7,2,2,6);box('#e69f6a',16,2,2,6);return true}
   if(kind==='soulforge'){box('#7a9291',4,19,16,3);box('#a2c2ba',6,5,3,15);box('#a2c2ba',15,5,3,15);box('#b9d8cc',7,3,10,3);gem('#c7e9dd',12,12,5);gem('#f2f0c9',4,7,2);gem('#f2f0c9',21,7,2);return true}
   if(kind==='soulpact'){box('#708783',6,3,13,18);box('#b1d1c9',8,4,3,16);gem('#b7dddd',15,11,5);gem('#eff0d3',15,10,2);return true}

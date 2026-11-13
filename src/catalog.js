@@ -27,18 +27,18 @@ export function effectText(text,className='catalog-description') {
 
 export class ItemCatalog {
   constructor(sheet) {
-    this.sheet=sheet;this.category='all';this.query='';this.selected=null;this.page=0;
-    this.phone=matchMedia('(max-width:700px)');this.landscape=matchMedia('(max-height:500px)');
-    for(const media of [this.phone,this.landscape])media.addEventListener('change',()=>{this.page=0;this.render();for(const tab of ['items','fusion'])this.sheet.renderCollection(tab)});
-    $('catalog-search').addEventListener('input',e=>{this.query=e.target.value.trim().toLocaleLowerCase();this.page=0;this.selected=null;this.render()});
-    $('catalog-clear').addEventListener('click',()=>{this.query='';this.page=0;this.selected=null;$('catalog-search').value='';this.render();$('catalog-search').focus()});
-    $('catalog-category').addEventListener('change',e=>{this.category=e.target.value;this.page=0;this.selected=null;this.render()});
-    for(const [id,step] of [['catalog-prev',-1],['catalog-next',1]])$(id).addEventListener('click',()=>{this.page+=step;this.render();$('catalog-list').querySelector('button')?.focus({preventScroll:true})});
-    $('catalog-back').addEventListener('click',()=>this.back());
-    $('catalog-detail').addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();e.stopPropagation();this.back()}});
+    this.sheet=sheet;this.category='all';this.query='';this.page=0;
+    this.phone=matchMedia('(max-width:700px)');this.landscape=matchMedia('(max-height:500px)');this.short=matchMedia('(max-height:680px)');
+    for(const media of [this.phone,this.landscape,this.short])media.addEventListener('change',()=>{this.page=0;this.render();for(const tab of ['items','fusion'])this.sheet.renderCollection(tab)});
+    $('catalog-search').addEventListener('input',e=>{this.query=e.target.value.trim().toLocaleLowerCase();this.page=0;this.render()});
+    $('catalog-clear').addEventListener('click',()=>{this.query='';this.page=0;$('catalog-search').value='';this.render();$('catalog-search').focus()});
+    $('catalog-category').addEventListener('change',e=>{this.category=e.target.value;this.page=0;this.render()});
+    for(const [id,step] of [['catalog-prev',-1],['catalog-next',1]])$(id).addEventListener('click',()=>{this.page+=step;this.render();this.closing=true;$('catalog-list').querySelector('button')?.focus({preventScroll:true});this.closing=false});
+    $('catalog-detail-close').addEventListener('click',()=>this.hideDetail(true));
+    $('catalog-detail').addEventListener('beforetoggle',event=>{if(event.newState==='closed'){this.anchor?.classList.remove('selected');this.anchor?.setAttribute('aria-expanded','false')}});
   }
 
-  get pageSize(){return this.landscape.matches||this.phone.matches?12:21}
+  get pageSize(){return this.landscape.matches||this.phone.matches?12:this.short.matches?14:21}
 
   build() {
     const {save,game}=this.sheet;
@@ -50,23 +50,25 @@ export class ItemCatalog {
   }
 
   openItem(id) {
-    if(!this.known.some(item=>item.id===id))return;
-    this.selected=id;this.lastSelected=id;this.sheet.selectTab('catalog');this.renderDetail();
-    $('catalog-back').focus({preventScroll:true});
+    if(this.closing||this.sheet.tab!=='catalog')return;
+    const item=this.known.find(item=>item.id===id),anchor=[...$('catalog-list').children].find(button=>button.dataset.itemId===id);
+    if(!item||!anchor)return;
+    this.anchor?.classList.remove('selected');this.anchor?.setAttribute('aria-expanded','false');this.anchor=anchor;
+    anchor.classList.add('selected');anchor.setAttribute('aria-expanded','true');
+    const title=node('h3','',item.data.name),description=effectText(item.data.desc);title.id='catalog-detail-title';description.id='catalog-detail-description';
+    $('catalog-detail-body').replaceChildren(node('small','',categories[item.category]+(item.type==='pickup'?'':' · 基础效果')),title,description);
+    const bubble=$('catalog-detail');if(!bubble.matches(':popover-open'))bubble.showPopover();
+    this.sheet.positionBubble(bubble,anchor);
   }
 
-  back() {
-    const id=this.selected;this.selected=null;
-    let entries=this.entries;
-    if(!entries.some(item=>item.id===id)){
-      this.category='all';this.query='';$('catalog-search').value='';entries=this.known;
-    }
-    this.page=Math.max(0,Math.floor(entries.findIndex(item=>item.id===id)/this.pageSize));this.render();
-    [...$('catalog-list').children].find(button=>button.dataset.itemId===id)?.focus({preventScroll:true});
+  hideDetail(focus=false) {
+    const bubble=$('catalog-detail');if(!bubble.matches(':popover-open'))return;
+    this.closing=true;bubble.hidePopover();if(focus)this.anchor?.focus({preventScroll:true});this.closing=false;
   }
 
   render() {
     if(!this.known)return;
+    this.hideDetail();
     $('catalog-category').replaceChildren(...Object.entries(categories).map(([key,label])=>{const option=node('option','',label);option.value=key;return option}));
     $('catalog-category').value=this.category;
     this.entries=this.known.filter(item=>(this.category==='all'||item.category===this.category)&&(!this.query||[item.data.name,item.data.evolution,item.data.desc,item.data.trigger,categories[item.category],...(item.type==='pickup'?[]:itemTags(item.key).map(tag=>BUILD_TAGS[tag].name))].filter(Boolean).join(' ').toLocaleLowerCase().includes(this.query)));
@@ -74,24 +76,13 @@ export class ItemCatalog {
     this.page=Math.max(0,Math.min(this.page,pages-1));
     const entries=this.entries.slice(this.page*this.pageSize,(this.page+1)*this.pageSize);
     $('catalog-list').replaceChildren(...entries.map(item=>{
-      const button=node('button','catalog-item'+(this.lastSelected===item.id?' selected':''));button.dataset.itemId=item.id;button.setAttribute('aria-controls','catalog-detail');button.title=item.data.name;
-      button.append(itemArt(item),node('strong','',item.data.name));button.addEventListener('click',()=>this.openItem(item.id));return button;
+      const button=node('button','catalog-item');button.dataset.itemId=item.id;button.setAttribute('aria-label',item.data.name);button.setAttribute('aria-controls','catalog-detail');button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-expanded','false');
+      button.append(itemArt(item));button.addEventListener('click',event=>{this.openItem(item.id);if(event.detail===0)$('catalog-detail-close').focus({preventScroll:true})});
+      button.addEventListener('focus',()=>this.openItem(item.id));button.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&button.getAttribute('aria-expanded')!=='true')this.openItem(item.id)});return button;
     }));
     $('catalog-prev').disabled=this.page===0;$('catalog-next').disabled=this.page===pages-1;
     $('catalog-page').textContent=(this.page+1)+' / '+pages;$('catalog-pagination').classList.toggle('hidden',!this.entries.length);
     const empty=$('catalog-empty');empty.classList.toggle('hidden',this.entries.length>0);
     empty.textContent=this.query?'没有找到相关道具。':'尚未发现这类道具，出征后再来看看。';
-    this.renderDetail();
-  }
-
-  renderDetail() {
-    const item=this.known.find(item=>item.id===this.selected),target=$('catalog-detail-body');
-    if(!item)this.selected=null;
-    $('catalog-browser').classList.toggle('hidden',!!item);$('catalog-detail').classList.toggle('hidden',!item);
-    target.replaceChildren();if(!item)return;
-    target.className='collection-card';
-    const header=node('div','catalog-detail-head'),identity=node('div'),art=node('div','detail-art');
-    identity.append(node('small','',categories[item.category]+(item.type==='pickup'?'':' · 基础效果')),node('h4','',item.data.name));header.append(identity);art.append(itemArt(item));
-    target.append(header,art,effectText(item.data.desc));
   }
 }

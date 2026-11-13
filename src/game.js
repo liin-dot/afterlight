@@ -1,13 +1,14 @@
 import {TAU,palette,hash,lerp,clamp,canvas,Landscape,drawSprite,sprite,glow,fire,shadow,diamond,pixelText} from './art.js';
-import {CHARACTERS,WEAPONS,ENEMIES} from './data.js';
+import {CHARACTERS,WEAPONS,ENEMIES,startingLoadout} from './data.js';
 import {characterStats,weaponStats} from './stats.js';
 import {FUSIONS,fusionState} from './fusions.js';
 import {updateFusion,chainArrow,updateFusionZone,drawFusionZone,drawFusionWeapons} from './fusion-combat.js';
 import {updateExpandedWeapon,updateExpandedProjectile,updateExpandedZone,drawExpandedProjectile,drawExpandedZone,drawExpandedEffect} from './expanded-combat.js';
-import {onWeaponHit,onEnemyKilled,onWeaponCast,onPlayerHurt,onPlayerDash,onXpPickup,updateRelicStates} from './relic-combat.js';
+import {onWeaponHit,onEnemyKilled,onWeaponCast,onPlayerHurt,onPlayerDash,onXpPickup,updateRelicStates,readyProc} from './relic-combat.js';
 import {RUN_DURATION,pressureAt,xpForLevel,weightedPick,upgradePool,rollUpgradeChoices,recordUpgradeChoice} from './balance.js';
 import {talentPoints,talentNodeState,resetCharacterTalents,updateCharacterTalents,onCharacterLearn,onCharacterHit,onCharacterProjectileHit,characterHitMultiplier,onCharacterDash,onCharacterHurt,drawCharacterTalents} from './talents.js';
 import {EVENT_TYPES,resetWorldEvents,startWorldEvent,updateWorldEvents,drawWorldEvents,nearestWorldEvent} from './world-events.js';
+import {ALTAR_BOONS,relicValues} from './content.js';
 
 export {RUN_DURATION};
 
@@ -55,19 +56,21 @@ export class Game{
   if(e.repeat)return;
   if(e.code==='Space'&&this.state==='running')this.dash();
   if(e.code==='KeyE'&&this.state==='running'){e.preventDefault();this.interact()}
-  if(e.code==='Escape'||e.code==='KeyP'){if(['running','level'].includes(this.state))this.pause();else if(this.state==='paused')this.resume();else if(this.state==='menu')this.on('closeMenuModal')}
+  if(e.code==='Escape'||e.code==='KeyP'){if(['running','level','reward'].includes(this.state))this.pause();else if(this.state==='paused')this.resume();else if(this.state==='menu')this.on('closeMenuModal')}
   if(e.code==='KeyM')this.on('sound');if(e.code==='KeyF')this.on('fullscreen');
   if(this.state==='level'&&['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(e.code))this.on('choose',Number(e.code.slice(-1))-1);
+  if(this.state==='reward'&&['Digit1','Digit2','Digit3','Numpad1','Numpad2','Numpad3'].includes(e.code))this.chooseAltarReward(Number(e.code.slice(-1))-1);
   if(e.code==='Enter'&&this.state==='menu'&&!document.querySelector('.modal-wrap:not(.hidden)')&&!e.target.closest('button,a')){e.preventDefault();this.on('start')}
  }
- start(character,meta={}){
+ start(character,meta={},preparation={}){
   this.keys.clear();this.stick={x:0,y:0};this.pauseReturn=null;
-  this.character=character;this.state='running';this.time=0;this.kills=0;this.gold=0;this.level=1;this.xp=0;this.xpNext=10;this.rerolls=3;this.pendingLevels=0;this.uid=0;this.meta={...meta};this.ended=false;this.enemies=[];this.projectiles=[];this.drops=[];this.effects=[];this.particles=[];this.texts=[];this.zones=[];this.hazards=[];this.afterimages=[];this.spawnClock=.4;this.waveClock=28;this.waveCount=0;this.bossMilestones=new Set();this.finalSpawned=false;this.finalDefeated=false;this.shake=0;this.hitstop=0;this.flash=0;this.orbitAngle=0;this.timers={};this.weapons={[character.weapon]:1};this.passives={};this.choices=[];this.camera={x:0,y:37};this.bannerUntil=0;this.toastUntil=0;
+  this.character=character;this.state='running';this.time=0;this.kills=0;this.gold=0;this.level=1;this.xp=0;this.xpNext=10;this.rerolls=3;this.pendingLevels=0;this.uid=0;this.meta={...meta};this.ended=false;this.enemies=[];this.projectiles=[];this.drops=[];this.effects=[];this.particles=[];this.texts=[];this.zones=[];this.hazards=[];this.afterimages=[];this.spawnClock=.4;this.waveClock=28;this.waveCount=0;this.bossMilestones=new Set();this.finalSpawned=false;this.finalDefeated=false;this.shake=0;this.hitstop=0;this.flash=0;this.orbitAngle=0;this.timers={};this.choices=[];this.camera={x:0,y:37};this.bannerUntil=0;this.toastUntil=0;
   this.fusions={};this.consumedWeapons=new Set();this.consumedPassives=new Set();this.notifiedFusions=new Set();this.trackedFusion=this.discoveredFusions?.has(this.plannedFusion)?this.plannedFusion:null;
+  const loadout=startingLoadout(character,preparation);this.weapons=loadout.weapons;this.passives=loadout.passives;
   this.relicTimers={};this.relicProcs={};this.echoCasts=0;
   this.choiceHistory=[];this.stormCharge=0;
   this.xpNext=xpForLevel(1);this.waveClock=42;this.banished=new Set();this.banishes=3;this.lastHealDrop=-20;this.lastUtilityDrop=-30;this.lastHurt=-8;this.harvestCharge=0;this.damageByWeapon={};this.damageTaken=0;this.lastPhase=0;this.pressure=pressureAt(0);
-  this.stats=characterStats(character,this.passives,this.meta);
+  this.boons=[];this.weaponEmpowerments={};this.metaBuffs={};this.growth={};this.stats=characterStats(character,this.passives,this.meta,{},this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
   const maxHp=this.stats.maxHp;this.player={x:0,y:37,hp:maxHp,maxHp,r:7,flip:false,walk:0,moving:false,invincible:1,dashTime:0,dashCooldown:0,dashX:0,dashY:1,lastX:0,lastY:1,trailClock:0};
   this.player.shield=0;
   resetCharacterTalents(this);
@@ -82,15 +85,15 @@ export class Game{
  }
  get damageMultiplier(){return this.stats.damageMultiplier}
  get haste(){return this.stats.haste}
- get moveSpeed(){return this.stats.moveSpeed}
+ get moveSpeed(){return this.stats.moveSpeed*(this.metaBuffs.move||1)}
  get pickupRadius(){return this.stats.pickupRadius}
  get xpMultiplier(){return this.stats.xpMultiplier}
  interact(){
   if(this.state!=='running'||!this.player||this.player.hp<=0)return false;
   return startWorldEvent(this);
  }
- pause(){if(!['running','level'].includes(this.state))return;this.pauseReturn=this.state;this.state='paused';this.keys.clear();this.stick={x:0,y:0};this.on('pause')}
- resume(){if(this.state!=='paused')return;this.state=this.pauseReturn==='level'?'level':'running';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};this.on('resume',this.state)}
+ pause(){if(!['running','level','reward'].includes(this.state))return;this.pauseReturn=this.state;this.state='paused';this.keys.clear();this.stick={x:0,y:0};this.on('pause')}
+ resume(){if(this.state!=='paused')return;this.state=['level','reward'].includes(this.pauseReturn)?this.pauseReturn:'running';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};this.on('resume',this.state)}
  returnToMenu(){this.state='menu';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};this.on('menu')}
  dash(){
   const p=this.player;if(this.state!=='running'||p.dashCooldown>0)return;let dx=(this.keys.has('KeyD')||this.keys.has('ArrowRight')?1:0)-(this.keys.has('KeyA')||this.keys.has('ArrowLeft')?1:0)+this.stick.x,dy=(this.keys.has('KeyS')||this.keys.has('ArrowDown')?1:0)-(this.keys.has('KeyW')||this.keys.has('ArrowUp')?1:0)+this.stick.y;let len=Math.hypot(dx,dy);if(len<.1){dx=p.lastX;dy=p.lastY;len=1}p.dashX=dx/len;p.dashY=dy/len;p.dashTime=this.stats.dashDuration;p.invincible=Math.max(p.invincible,this.stats.dashInvincibility);p.dashCooldown=this.stats.dashCooldown;p.trailClock=0;this.sound.play('dash');this.burst(p.x,p.y-6,12,'#b4d9bd',45);
@@ -103,7 +106,7 @@ export class Game{
   const len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}p.moving=len>.1;
   if(p.moving){p.lastX=dx/(Math.hypot(dx,dy)||1);p.lastY=dy/(Math.hypot(dx,dy)||1);if(Math.abs(dx)>.1)p.flip=dx<0;p.walk+=dt*9;}
   if(p.dashTime>0){p.dashTime-=dt;p.x+=p.dashX*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.y+=p.dashY*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.trailClock-=dt;if(p.trailClock<=0){p.trailClock=.028;this.afterimages.push({x:p.x,y:p.y,flip:p.flip,t:.27,max:.27})}}else{p.x+=dx*this.moveSpeed*dt;p.y+=dy*this.moveSpeed*dt}
-  p.hp=Math.min(p.maxHp,p.hp+(this.stats.regeneration+(this.time-this.lastHurt>=6?this.stats.recovery:0))*dt);
+  p.hp=Math.min(p.maxHp,p.hp+(this.stats.regeneration+(this.time-this.lastHurt>=4?this.stats.recovery:0))*dt);
   this.camera.x=lerp(this.camera.x,p.x,1-Math.exp(-dt*7));this.camera.y=lerp(this.camera.y,p.y-8,1-Math.exp(-dt*7));
   this.pressure=pressureAt(this.time,this.stats.curse);
   if(this.pressure.index!==this.lastPhase){this.lastPhase=this.pressure.index;if(![3,6,10].includes(this.lastPhase))this.banner(this.pressure.name,this.pressure.hint,3);this.checkFusionReadiness()}
@@ -222,7 +225,7 @@ export class Game{
   e.markUntil=Math.max(e.markUntil||0,this.time+duration);
  }
  hit(e,damage,fromX,fromY,knock=50,feedback=true,source=null,periodic=false){
-  if(e.dead)return;const critical=!!source&&!periodic&&Math.random()<this.stats.criticalChance;
+  if(e.dead||e.hp<=0)return;const critical=!!source&&!periodic&&Math.random()<this.stats.criticalChance;
   const execute=source&&!periodic&&this.passives.executioner&&e.hp/e.maxHp<=.3?1+this.passives.executioner*(e.boss?.1:.2):1;
   const marked=e.markUntil>this.time?Object.values(e.marks).reduce((best,mark)=>mark.until>this.time?Math.max(best,mark.multiplier):best,1):1;
   const dmg=Math.max(1,Math.round(damage*(critical?this.stats.criticalMultiplier:1)*execute*marked*characterHitMultiplier(this,e,source,periodic)));
@@ -233,13 +236,24 @@ export class Game{
   if(feedback){this.sound.play('hit');this.burst(e.x,e.y-10,critical?6:3,critical?'#efd096':'#a3ab78',40)}
   if(critical&&feedback){this.shake=Math.max(this.shake,1.6);this.hitstop=Math.max(this.hitstop,.022)}
   onWeaponHit(this,e,source,critical,periodic);
-  onCharacterHit(this,e,source,periodic);
+  onCharacterHit(this,e,source,periodic,critical);
+  if(source==='talent')this.growFromTalent();
   if(e.hp<=0&&!e.dead)this.kill(e);
+ }
+ growFromTalent(){
+  if(!this.passives.everseed||!Object.keys(this.talents).length||this.player.hp<=0||(this.relicTimers.everseed||0)>this.time)return;
+  const values=relicValues('everseed',this.passives.everseed);if(Math.random()>=values.chance||!readyProc(this,'everseed',values.cooldown))return;
+  const key=['damage','area','vitality'][Math.floor(Math.random()*3)],hp=this.player.hp;
+  this.growth[key]=(this.growth[key]||0)+1;
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
+  this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(hp,this.player.maxHp);
+  this.texts.push({x:this.player.x,y:this.player.y-42,text:'薪种 · '+{damage:'伤害 +1%',area:'范围 +1%',vitality:'生命上限 +2'}[key],t:1.2,max:1.2,color:'#e4cc82'});this.on('hud');
  }
  kill(e){
   if(e.dead)return;e.dead=true;this.kills++;this.gold+=e.score;this.burst(e.x,e.y-10,8,e.kind==='ghost'?'#8db7a4':'#9e9c72',45);
   const starLinked=!!this.talents.s_scholar1&&e.starMarkedUntil>this.time;
   this.drops.push({type:'xp',x:e.x,y:e.y,r:3,value:e.xp,age:0,vx:0,vy:0,attracted:starLinked,starLinked});
+  if(e.boss)this.drops.push({type:'magnet',x:e.x-12,y:e.y,age:0,r:5,value:0});
   const low=this.player.hp<this.player.maxHp*.45,heals=this.drops.filter(d=>d.type==='heal'&&!d.dead).length;
   if(heals<1&&this.time-this.lastHealDrop>=20&&(Math.random()<(low?.012:.004)||low&&this.time-this.lastHealDrop>=75)){
    this.drops.push({type:'heal',x:e.x+6,y:e.y,age:0,r:5,value:12});this.lastHealDrop=this.time;
@@ -252,7 +266,7 @@ export class Game{
   if(e.final)this.finalDefeated=true;
   onEnemyKilled(this,e);
  }
- hurt(amount,x,y){const p=this.player;if(p.invincible>0||this.state!=='running')return;const dmg=Math.max(1,Math.round(Math.max(amount*.3,amount-this.stats.armor))),absorbed=Math.min(p.shield||0,dmg);p.shield-=absorbed;p.hp-=dmg-absorbed;this.lastHurt=this.time;this.damageTaken+=dmg-absorbed;p.invincible=.6;this.shake=5;this.flash=.23;this.sound.play('hurt');this.burst(p.x,p.y-11,12,absorbed?'#c1d9c1':'#bd7968',60);this.texts.push({x:p.x,y:p.y-30,text:absorbed===dmg?'格挡':'−'+(dmg-absorbed),t:.9,max:.9,critical:true,color:absorbed?'#c4e4d0':'#ef9d85'});const shieldBroke=absorbed>0&&p.shield===0;onCharacterHurt(this);onPlayerHurt(this,shieldBroke);this.on('hud')}
+ hurt(amount,x,y){const p=this.player;if(p.invincible>0||this.state!=='running')return;const dmg=Math.max(1,Math.round(Math.max(amount*.3,amount-this.stats.armor)*this.stats.damageTakenMultiplier)),absorbed=Math.min(p.shield||0,dmg);p.shield-=absorbed;p.hp-=dmg-absorbed;this.lastHurt=this.time;this.damageTaken+=dmg-absorbed;p.invincible=.6;this.shake=5;this.flash=.23;this.sound.play('hurt');this.burst(p.x,p.y-11,12,absorbed?'#c1d9c1':'#bd7968',60);this.texts.push({x:p.x,y:p.y-30,text:absorbed===dmg?'格挡':'−'+(dmg-absorbed),t:.9,max:.9,critical:true,color:absorbed?'#c4e4d0':'#ef9d85'});const shieldBroke=absorbed>0&&p.shield===0;onCharacterHurt(this);onPlayerHurt(this,shieldBroke);this.on('hud')}
  updateDrops(dt){
   const p=this.player,r=this.pickupRadius;
   for(const d of this.drops){
@@ -283,7 +297,7 @@ export class Game{
    if(item){(item.weapon?this.weapons:this.passives)[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12;rewards.push(item.name+' · LV.'+item.current+' → LV.'+item.next)}
    else rewards.push('经验 +'+this.gainXp(24).toLocaleString('zh-CN',{maximumFractionDigits:2})+'（无可强化装备）');
   }
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents);this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   if(this.player.hp>hp)rewards.push('生命 +'+(this.player.hp-hp).toLocaleString('zh-CN',{maximumFractionDigits:2}));
   rewards.push('余烬 +'+value);
   this.toast((boss?'首领遗产 · ':'古老宝箱 · ')+rewards.join(' / '));this.on('weapons');this.checkFusionReadiness();
@@ -321,14 +335,34 @@ export class Game{
   this.toast('成品 LV. '+ready.level+' · '+(consumed.size===2?'释放一个武器位':'融合道具已消耗')+(first?(this.discoveryPersisted?' · 图谱已永久解锁':' · 图谱已解锁，浏览器暂未保存'):''),5);
   this.sound.play('fusion');return true;
  }
+ chooseAltarReward(index){
+  if(this.state!=='reward'||!this.eventChoices.length)return false;
+  const id=this.eventChoices[index];if(index!==-1&&(!Number.isInteger(index)||!ALTAR_BOONS[id]||this.boons.includes(id)))return false;
+  let message;
+  if(index===-1){
+    const available=upgradePool(this).filter(item=>item.weapon&&item.current>0);
+    const item=available[Math.floor(Math.random()*available.length)];
+    if(item){this.weapons[item.key]=item.next;message=item.name+' · LV.'+item.current+' → LV.'+item.next}
+    else{
+      const keys=Object.keys(this.weapons),key=keys[Math.floor(Math.random()*keys.length)];if(!key)return false;
+      this.weaponEmpowerments[key]=(this.weaponEmpowerments[key]||0)+1;message=WEAPONS[key].name+' · 祭坛淬炼，伤害额外 +12%';
+    }
+  }else{this.boons.push(id);message=ALTAR_BOONS[id].name+' · '+ALTAR_BOONS[id].positive+' / '+ALTAR_BOONS[id].negative}
+  const hpRatio=this.player.hp/this.player.maxHp;
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
+  this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.maxHp,this.player.maxHp*hpRatio);
+  this.eventChoices=[];this.state='running';this.keys.clear();this.stick={x:0,y:0};
+  this.eventReward={name:index===-1?'跳过特殊奖励':'已缔结祭坛契约',rewards:[message],expiresAt:this.time+5};
+  this.sound.play('chest');this.on('altarChosen');this.on('weapons');this.on('hud');this.checkFusionReadiness();return true;
+ }
  gainXp(amount){if(!Number.isFinite(amount)||amount<=0)return 0;const points=talentPoints(this),gained=amount*this.xpMultiplier;this.xp+=gained;while(this.xp>=this.xpNext){this.xp-=this.xpNext;this.level++;this.pendingLevels++;this.xpNext=xpForLevel(this.level)}if(talentPoints(this)>points)this.on('talentPoints');return gained}
  rollUpgrades(){
   return rollUpgradeChoices(this);
  }
  learnTalent(id){
-  const active=['running','paused','level'].includes(this.state)||this.state==='status'&&['running','paused','level'].includes(this.statusReturn);
+  const active=['running','paused','level','reward'].includes(this.state)||this.state==='status'&&['running','paused','level','reward'].includes(this.statusReturn);
   const node=talentNodeState(this,id);if(!active||!node.available)return false;
-  this.talents[id]=true;this.stats=characterStats(this.character,this.passives,this.meta,this.talents);
+  this.talents[id]=true;this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
   onCharacterLearn(this);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.sound.play('select');this.on('talentLearned',id);this.on('hud');return true;
@@ -343,7 +377,7 @@ export class Game{
   else if(item.key==='heal'){this.player.hp=Math.min(this.player.maxHp,this.player.hp+12);this.gold+=15}
   else{this.passives[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12}
   recordUpgradeChoice(this,item.key);
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.checkFusionReadiness();
   this.effects.push({type:'pulse',x:this.player.x,y:this.player.y,r:85,t:.7,max:.7,color:item.color});this.burst(this.player.x,this.player.y-10,30,item.color,80);this.player.invincible=Math.max(this.player.invincible,.45);this.sound.play('select');this.keys.clear();this.state='running';this.on('upgrade');this.on('weapons');this.on('hud');
@@ -353,7 +387,7 @@ export class Game{
  toast(text,duration=3){this.toastUntil=this.time+duration;this.on('toast',text)}
  get earnedEmbers(){return this.gold+Math.floor(this.time/10)}
  end(won,abandoned=false,destination='result'){
-  if(this.ended||!this.player||!['running','paused','level'].includes(this.state))return;
+  if(this.ended||!this.player||!['running','paused','level','reward'].includes(this.state))return;
   if(this.activeEvent){this.activeEvent.state='failed';this.activeEvent.used=true;this.activeEvent=null;this.eventsFailed++}
   this.ended=true;this.state='over';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};
   this.reward=this.earnedEmbers+(won?250:0);this.result={won,abandoned,destination,time:this.time,kills:this.kills,level:this.level,reward:this.reward};

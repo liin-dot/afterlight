@@ -86,7 +86,7 @@ export function updateExpandedWeapon(game,kind,v,dt) {
   if(['crescent','eclipse','bloodmoon'].includes(kind)) {
     for(let i=0;i<v.count;i++) {
       const a=angle+(i-(v.count-1)/2)*.36;
-      game.projectiles.push({type:'scythe',source:kind,x:p.x,y:p.y-8,vx:Math.cos(a)*210,vy:Math.sin(a)*210,damage:v.damage,r:v.radius,t:2.5,age:0,flightTime:v.flightTime,returnMultiplier:v.returnMultiplier,returning:false,hit:new Set(),trail:[],splashDamage:v.splashDamage,splashRadius:v.splashRadius});
+      game.projectiles.push({type:'scythe',source:kind,x:p.x,y:p.y-8,vx:Math.cos(a)*v.flightSpeed,vy:Math.sin(a)*v.flightSpeed,returnSpeed:v.returnSpeed,damage:v.damage,r:v.radius,t:2.5,age:0,flightTime:v.flightTime,returnMultiplier:v.returnMultiplier,returning:false,hit:new Set(),trail:[],splashDamage:v.splashDamage,splashRadius:v.splashRadius});
     }
     game.sound.play('slash');
   }
@@ -149,7 +149,7 @@ export function updateExpandedProjectile(game,b,dt) {
     if(b.returning) {
       const dx=game.player.x-b.x,dy=game.player.y-8-b.y,d=Math.hypot(dx,dy);
       if(d<13){b.t=0;return true}
-      b.vx=dx/d*290;b.vy=dy/d*290;
+      const speed=Math.min(b.returnSpeed,d/dt);b.vx=dx/d*speed;b.vy=dy/d*speed;
     }
   }
   b.x+=b.vx*dt;b.y+=b.vy*dt;b.trail.push({x:b.x,y:b.y});if(b.trail.length>7)b.trail.shift();
