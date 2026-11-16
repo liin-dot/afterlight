@@ -159,12 +159,13 @@ body.playing #masthead{opacity:0;pointer-events:none}#hud{position:absolute;inse
  #level-screen .upgrade-affinity .build-tag{font-size:8px;padding:1px 4px}
  #level-screen .upgrade-cards{grid-area:4/1/5/-1;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:auto;gap:6px;min-height:0}
  #level-screen .upgrade-option{position:relative;min-height:0}
- #level-screen .upgrade-card{min-height:0;padding:8px;display:block;box-shadow:none;font-size:0;line-height:1}
+ #level-screen .upgrade-card{min-height:0;padding:8px;display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:6px;align-content:center;box-shadow:none;font-size:0;line-height:1}
+ #level-screen .upgrade-card>*{grid-column:1/-1}
  #level-screen .upgrade-card:hover,#level-screen .upgrade-card:focus-visible{transform:none}
- #level-screen .rarity{display:block;min-height:28px;margin:0 40px 2px 0;font-size:9px;line-height:12px;letter-spacing:0}
+ #level-screen .rarity{grid-area:1/2;display:block;min-height:32px;margin:0 40px 6px 0;font-size:9px;line-height:12px;letter-spacing:0}
  #level-screen .fusion-card .rarity{min-height:0;margin-right:0}
  #level-screen .rarity kbd,#level-screen .upgrade-type,#level-screen .upgrade-reason,#level-screen .affinity-boost{display:none}
- #level-screen .upgrade-card canvas{display:none}
+ #level-screen .upgrade-card canvas{grid-area:1/1;display:block;position:static;width:32px;height:32px;margin:0 0 6px}
  #level-screen .upgrade-card h3{display:block;margin:0 0 5px;font-size:15px;line-height:20px;letter-spacing:.5px}
  #level-screen .upgrade-card p{margin:4px 0;font-size:11px;line-height:1.4;min-height:0}
  #level-screen .blessing-card p{display:none}
@@ -185,6 +186,9 @@ body.playing #masthead{opacity:0;pointer-events:none}#hud{position:absolute;inse
 }
 @media(orientation:landscape) and (max-height:500px){
  #level-screen .level-modal{grid-template-rows:44px auto minmax(min-content,1fr) 44px}
+ #level-screen .upgrade-card{grid-template-columns:24px minmax(0,1fr)}
+ #level-screen .upgrade-card canvas{width:24px;height:24px;margin-bottom:2px}
+ #level-screen .rarity{min-height:24px;margin-bottom:2px}
  #level-screen .upgrade-context{grid-area:2/1}
  #level-screen .upgrade-affinity{grid-area:2/2}
  #level-screen .upgrade-cards{grid-area:3/1/4/-1;grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -193,7 +197,9 @@ body.playing #masthead{opacity:0;pointer-events:none}#hud{position:absolute;inse
 @media(orientation:portrait) and (max-height:620px),(orientation:landscape) and (max-height:350px){
  #level-screen .level-modal{gap:4px}
  #level-screen .upgrade-context{padding-block:2px}
- #level-screen .upgrade-card{padding:6px}
+ #level-screen .upgrade-card{padding:6px;grid-template-columns:24px minmax(0,1fr)}
+ #level-screen .upgrade-card canvas{width:24px;height:24px;margin-bottom:2px}
+ #level-screen .rarity{min-height:24px;margin-bottom:2px}
  #level-screen .upgrade-card p{font-size:10px;line-height:1.4;margin:3px 0}
  #level-screen .fusion-card .item-tags{display:none}
  #level-screen .item-tags{display:none}
