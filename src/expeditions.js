@@ -1,22 +1,12 @@
 import {TAU,hash,diamond} from './art.js';
 
 export const STAGES={
-  graveyard:{name:'遗忘墓园',subtitle:'第一章 · 最后一盏灯',color:'#bdd397',hint:'熟悉的十分钟守夜，躲避冲锋与落点。',reward:250,bosses:['墓园看守','无名葬钟','蚀月君王'],bossKinds:['knight','knight','reaper']},
-  foundry:{name:'焚星熔炉',subtitle:'第二章 · 熄灭天火',color:'#eda376',hint:'熔口提前 1.6 秒标记；离开橙色圆圈，绕过铁卫的正面。',reward:350,hp:1.08,wave:'cinderling',bosses:['炉心监工','熔铁巨像','焚城铸王'],bossKinds:['bomber','bulwark','oracle'],
+  graveyard:{name:'遗忘墓园',subtitle:'第一章 · 最后一盏灯',color:'#bdd397',hint:'十五分钟守夜，躲避首领冲锋与落点。',reward:250,bosses:['墓园看守','无名葬钟','蚀月君王'],bossKinds:['knight','knight','reaper']},
+  foundry:{name:'焚星熔炉',subtitle:'第二章 · 熄灭天火',color:'#eda376',hint:'绕过铁卫正面，避开自爆；首领落点以橙色圆圈预警。',reward:350,hp:1.08,wave:'cinderling',bosses:['炉心监工','熔铁巨像','焚城铸王'],bossKinds:['bomber','bulwark','oracle'],
     rosters:[{cinderling:60,skeleton:30,bat:10},{cinderling:45,bomber:25,ghoul:30},{bulwark:25,cinderling:35,bomber:25,ghost:15},{bulwark:30,oracle:15,bomber:30,cinderling:25},{oracle:20,bulwark:35,bomber:20,reaper:25},{bulwark:30,oracle:25,reaper:25,cinderling:20}]},
-  coast:{name:'沉钟海岸',subtitle:'第三章 · 逆潮归航',color:'#91d7e0',hint:'潮汐在青色条带中留下缺口；歌妖远射，裂潮兽蓄力突进。',reward:400,hp:1.12,wave:'leech',bosses:['沉钟歌者','裂潮之牙','无潮女王'],bossKinds:['siren','leech','siren'],
+  coast:{name:'沉钟海岸',subtitle:'第三章 · 逆潮归航',color:'#91d7e0',hint:'避开歌妖远射与裂潮兽突进；首领潮汐留有青色缺口。',reward:400,hp:1.12,wave:'leech',bosses:['沉钟歌者','裂潮之牙','无潮女王'],bossKinds:['siren','leech','siren'],
     rosters:[{leech:35,skeleton:50,bat:15},{leech:35,siren:20,ghoul:30,ghost:15},{siren:25,leech:35,bulwark:15,ghost:25},{siren:25,oracle:15,leech:35,knight:25},{oracle:20,siren:25,leech:35,reaper:20},{oracle:20,siren:30,reaper:25,leech:25}]},
 };
-
-export function updateExpedition(game){
-  if(game.stage==='graveyard'||game.time<30||game.time<game.nextStageHazard)return;
-  game.nextStageHazard=game.time+Math.max(12,24-game.time/60);
-  if(game.activeEvent||game.enemies.some(e=>e.boss&&!e.dead))return;
-  const p=game.player,damage=10+game.time*.025;
-  if(game.stage==='foundry')for(let i=0;i<3;i++)game.hazards.push({type:'blast',x:p.x+(i-1)*65,y:p.y+(i%2)*45,r:25,t:1.6+i*.2,max:1.6+i*.2,damage,color:'#edaa6d'});
-  else game.hazards.push({type:'tide',x:p.x,y:p.y,r:260,gap:p.x+(Math.random()-.5)*130,t:1.8,max:1.8,damage,color:'#9bd9e3'});
-  game.toast(game.stage==='foundry'?'熔口喷发 · 离开橙色标记':'涨潮预警 · 进入青色条带的缺口',2);
-}
 
 // Returns a movement multiplier; attack clocks use simulation time and freeze with the game.
 export function expeditionEnemy(game,e,dt,d,dx,dy){

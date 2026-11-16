@@ -17,14 +17,14 @@ export const CHARACTER_TALENTS={
         {id:'f_guard2',name:'淬火',icon:'emberheart',description:'蓄满放电时恢复 3 点生命。'},
         {id:'f_guard3',name:'不熄炉',icon:'bulwark',description:'放电增加护甲 ×12 伤害；补充的护盾再增加 12。'},
       ]},
-      {name:'行雷',role:'冲刺充能 → 移动放电 → 重置雷炉',nodes:[
-        {id:'f_dash1',name:'踏电',icon:'speed',description:'冲刺增加 4 层电荷，蓄满可正常放电。'},
-        {id:'f_dash2',name:'雷步',icon:'conductor',description:'冲刺额外释放一次 60% 伤害放电，不消耗电荷。'},
-        {id:'f_dash3',name:'疾铸',icon:'sundial',description:'冲刺使蓄满放电立即就绪，并推进雷电、投射物武器剩余施放冷却 1 秒。'},
+      {name:'行雷',role:'移动充能 → 行进放电 → 重置雷炉',nodes:[
+        {id:'f_dash1',name:'踏电',icon:'speed',description:'每累计移动 240 像素增加 4 层电荷，蓄满可正常放电。'},
+        {id:'f_dash2',name:'雷步',icon:'conductor',description:'每累计移动 240 像素额外释放一次 60% 伤害放电，不消耗电荷。'},
+        {id:'f_dash3',name:'疾铸',icon:'sundial',description:'每累计移动 240 像素，使蓄满放电立即就绪，并推进雷电、投射物武器剩余施放冷却 1 秒。'},
       ]},
     ]},
   mariner:{name:'归潮步履',color:'#94d9df',icon:'tide',style:'移动潮环 · 控场与续航',
-    description:'每移动 90 距离释放一次潮环，伤害随等级成长，并减速 55% 持续 1.5 秒。潮环最短间隔 2 秒，可在冷却期间蓄满。自带冲刺冷却 −15%。',
+    description:'每移动 90 距离释放一次潮环，伤害随等级成长，并减速 55% 持续 1.5 秒。潮环最短间隔 2 秒，可在冷却期间蓄满。自带移动速度 +10%。',
     loop:'移动蓄潮 → 潮环减速 → 穿越缺口继续移动',hint:'用走位蓄起潮环，减速追兵后寻找下一处缺口。',families:['cold','area','spirit'],items:['brine','wake','speed','duration'],
     branches:[
       {name:'寒潮',role:'扩散潮环 → 强化浪涌 → 深寒冻结',nodes:[
@@ -37,10 +37,10 @@ export const CHARACTER_TALENTS={
         {id:'m_guard2',name:'回流',icon:'regen',description:'蓄满潮环恢复 2 点生命，最短每 4 秒一次。'},
         {id:'m_guard3',name:'避风港',icon:'beacon',description:'潮环护盾提高至 18；潮环命中附加 15% 易伤，持续 3 秒。'},
       ]},
-      {name:'远航',role:'缩短蓄潮 → 冲刺掀浪 → 加速返航',nodes:[
+      {name:'远航',role:'缩短蓄潮 → 行进掀浪 → 加速返航',nodes:[
         {id:'m_dash1',name:'顺流',icon:'speed',description:'蓄潮需求由 90 距离降至 65。'},
-        {id:'m_dash2',name:'破浪',icon:'wake',description:'冲刺起点立即释放 70% 伤害潮环，不消耗蓄潮、不补盾或回血。'},
-        {id:'m_dash3',name:'千帆',icon:'tide',description:'冲刺充满蓄潮并结束潮环冷却；推进寒霜、灵魂武器剩余施放冷却 0.8 秒。'},
+        {id:'m_dash2',name:'破浪',icon:'wake',description:'每累计移动 240 像素，在脚下释放 70% 伤害潮环，不消耗蓄潮、不补盾或回血。'},
+        {id:'m_dash3',name:'千帆',icon:'tide',description:'每累计移动 240 像素，充满蓄潮并结束潮环冷却；推进寒霜、灵魂武器剩余施放冷却 0.8 秒。'},
       ]},
     ]},
   warden:{name:'守灯誓约',color:'#e8b578',icon:'aegis',style:'近身作战 · 灯火与护盾',
@@ -58,10 +58,10 @@ export const CHARACTER_TALENTS={
         {id:'w_guard2',name:'余温',icon:'regen',description:'蓄满恢复 3 生命，持续恢复属性每秒 1 点再增加 3 点，上限 6。持盾时，近战与灵魂武器直接伤害 +20%。'},
         {id:'w_guard3',name:'灯火不灭',icon:'vitality',description:'震荡增加护甲×8伤害。蓄满储存灯芯；致命受击消耗它，恢复 35% 生命、补至 24 护盾并震荡，3 秒无敌。每局一次。'},
       ]},
-      {name:'征途',role:'冲刺添火 → 破围震荡 → 加速蓄放',nodes:[
-        {id:'w_dash1',name:'携灯',icon:'speed',description:'冲刺积蓄 3 层灯火，蓄满可正常补盾。震荡继承范围与攻速道具；夜行之靴让冲刺添火更频繁。'},
-        {id:'w_dash2',name:'破围',icon:'bell',description:'冲刺起点释放 80% 伤害震荡，与踏火灰、霜行石一起封锁追兵；这次震荡不补盾、不恢复生命。'},
-        {id:'w_dash3',name:'逐日',icon:'lance',description:'冲刺后 4 秒内近身命中蓄火翻倍，蓄满间隔降至 2.5 秒。每次冲刺推进近战、火焰武器剩余施放冷却 0.75 秒。'},
+      {name:'征途',role:'移动添火 → 破围震荡 → 加速蓄放',nodes:[
+        {id:'w_dash1',name:'携灯',icon:'speed',description:'每累计移动 240 像素积蓄 3 层灯火，蓄满可正常补盾。震荡继承范围与攻速道具；移速让添火更频繁。'},
+        {id:'w_dash2',name:'破围',icon:'bell',description:'每累计移动 240 像素，在脚下释放 80% 伤害震荡，与踏火灰、霜行石一起封锁追兵；这次震荡不补盾、不恢复生命。'},
+        {id:'w_dash3',name:'逐日',icon:'lance',description:'每累计移动 240 像素，获得 4 秒逐日余势：近身命中蓄火翻倍，蓄满间隔降至 2.5 秒；推进近战、火焰武器剩余施放冷却 0.75 秒。'},
       ]},
     ]},
   witch:{name:'伴星契约',color:'#b7d9e8',icon:'orbit',style:'伴星召唤 · 控制与灵光',
@@ -95,10 +95,10 @@ export const CHARACTER_TALENTS={
         {id:'r_shot2',name:'穿林',icon:'shard',description:'风矢穿透 3 个目标。投射物、光束武器直接命中补充 6 距离猎风蓄势，共享间隔 0.2 秒。'},
         {id:'r_shot3',name:'贯星',icon:'thunderbolt',description:'每轮发射 3 支追踪风矢；双生银币每级额外增加 1 支。武器齐射补充蓄势，再由下一次施放释放猎风。'},
       ]},
-      {name:'游猎',role:'缩短蓄势 → 冲刺充满 → 移动连射',nodes:[
+      {name:'游猎',role:'缩短蓄势 → 行进充满 → 移动连射',nodes:[
         {id:'r_roam1',name:'轻风',icon:'speed',description:'猎风需求降至 60 距离、间隔降至 1 秒并继承攻速。夜行之靴每级再减 4 距离，最低 40。'},
-        {id:'r_roam2',name:'借风',icon:'aegis',description:'冲刺充满猎风并结束疾射冷却，下一次武器施放追加风矢；冲刺遗物与移速装备可同步发挥。'},
-        {id:'r_roam3',name:'无踪',icon:'crescent',description:'冲刺后 3 秒内，移动时每 0.8 秒追加风矢并继承攻速。冲刺还推进投射物、光束武器剩余施放冷却 0.5 秒。'},
+        {id:'r_roam2',name:'借风',icon:'aegis',description:'每累计移动 240 像素，充满猎风并结束疾射冷却，下一次武器施放追加风矢；移动遗物与移速装备可同步发挥。'},
+        {id:'r_roam3',name:'无踪',icon:'crescent',description:'每累计移动 240 像素，获得 3 秒无踪：移动时每 0.8 秒追加风矢并继承攻速；推进投射物、光束武器剩余施放冷却 0.5 秒。'},
       ]},
       {name:'追猎',role:'风矢留痕 → 武器追击 → 风矢接力',nodes:[
         {id:'r_sight1',name:'风痕',icon:'deadeye',description:'风矢留下 4 秒风痕，武器直击与领域对其伤害 +18%。风矢发射间隔继承时隙沙漏攻速。'},
@@ -207,9 +207,10 @@ function chargeTide(game,moved){
 
 export function updateCharacterTalents(game,dt,moved){
   const s=game.characterState,t=game.talents,p=game.player;
-  if(game.character.id==='warden'&&p.hp>0)chargeEmber(game,0);
-  if(game.character.id==='smith'&&p.hp>0)chargeForge(game,0);
-  if(game.character.id==='mariner'&&p.hp>0)chargeTide(game,moved);
+  if(p.hp<=0)return;
+  if(game.character.id==='warden')chargeEmber(game,0);
+  if(game.character.id==='smith')chargeForge(game,0);
+  if(game.character.id==='mariner')chargeTide(game,moved);
   if(game.character.id==='witch'){
     if(t.s_scholar2)onCharacterXp(game,0);
     s.starClock-=dt;
@@ -271,7 +272,7 @@ export function onCharacterProjectileHit(game,b,e){
   }
   return 1;
 }
-export function onCharacterDash(game){
+export function onCharacterTravel(game){
   const t=game.talents,s=game.characterState,p=game.player;
   if(t.f_dash3)s.nextPulse=game.time;
   if(t.f_dash1)chargeForge(game,4);

@@ -5,7 +5,7 @@ export const CHARACTERS = [
  {id:'witch',name:'逐星者',english:'SEER',tag:'召唤 · 星轨法术',weapon:'orbit',hp:70,speed:91,damage:1,description:'<b>游魂灯</b> 起手 · 拾取范围 +35% · 生命 70',lore:'群星熄灭以后，她仍听得见灵魂的回声。'},
  {id:'ranger',name:'荒野客',english:'RANGER',tag:'游击 · 动量疾射',weapon:'bolt',hp:80,speed:102,damage:1,description:'<b>荆棘连弩</b> 起手 · 弩矢数量 +1 · 生命 80',lore:'比黑暗更安静，比死亡快一步。'},
  {id:'smith',name:'铸雷师',english:'SMITH',tag:'蓄能 · 连锁放电',weapon:'capacitor',hp:100,speed:84,damage:1,description:'<b>鸣雷线圈</b> 起手 · 护甲 +1 · 生命 100',lore:'他把最后一道雷，锻进了不会熄灭的心脏。'},
- {id:'mariner',name:'渡潮人',english:'MARINER',tag:'游走 · 潮汐控制',weapon:'tide',hp:78,speed:98,damage:1,description:'<b>回潮法印</b> 起手 · 冲刺冷却 −15% · 生命 78',lore:'海吞没了归途，她便把潮汐带上岸。'},
+ {id:'mariner',name:'渡潮人',english:'MARINER',tag:'游走 · 潮汐控制',weapon:'tide',hp:78,speed:98,damage:1,description:'<b>回潮法印</b> 起手 · 移速 +10% · 生命 78',lore:'海吞没了归途，她便把潮汐带上岸。'},
 ];
 export const WEAPONS = {
  ...NEW_WEAPONS,
@@ -24,7 +24,7 @@ export const PASSIVES = {
  power:{name:'猩红誓约',desc:'所有武器伤害 +12%。',color:'#d5957c',max:5},
  vitality:{name:'不灭之心',desc:'最大生命 +12，并立即恢复 12 点生命。',color:'#b7ce92',max:5},
  haste:{name:'时隙沙漏',desc:'武器施放、召唤射击、环绕接触与领域伤害间隔缩短 6%。',color:'#d8c997',max:5,rarity:'uncommon'},
- speed:{name:'夜行之靴',desc:'移动速度 +6%，冲刺冷却缩短 6%。',color:'#b1c696',max:5},
+ speed:{name:'夜行之靴',desc:'移动速度 +6%，拾取范围 +6%。',color:'#b1c696',max:5},
  magnet:{name:'引魂石',desc:'拾取范围 +35%。更安全地回收战场经验。',color:'#92c4c2',max:5},
  armor:{name:'旧王护符',desc:'每次受伤减少 2 点；仍至少承受原伤害的 30%。',color:'#b9c4a1',max:5},
  regen:{name:'复苏苔芽',desc:'每秒恢复 0.22 点生命。',color:'#a9c591',max:5},

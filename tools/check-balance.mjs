@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {Game} from '../src/game.js';
-import {STAGES,updateExpedition} from '../src/expeditions.js';
+import {STAGES} from '../src/expeditions.js';
 import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,ENEMIES,META,META_TREES,metaState,metaCost,STARTING_WEAPONS,startingLoadout,normalizeItemDiscoveries,readSave,writeSave,refreshSave} from '../src/data.js';
 import {FUSIONS,fusionState,maxWeaponLevel} from '../src/fusions.js';
 import {characterStats,weaponStats,refinementValue} from '../src/stats.js';
-import {PHASES,pressureAt,xpForLevel,upgradePool,rollUpgradeChoices,buildProfile,tagAffinity,recordUpgradeChoice} from '../src/balance.js';
+import {RUN_DURATION,PHASES,pressureAt,xpForLevel,upgradePool,rollUpgradeChoices,buildProfile,tagAffinity,recordUpgradeChoice} from '../src/balance.js';
 import {relicDescription,relicValues,compatibleWeapons,BUILD_TAGS,itemTags,ALTAR_BOONS,WEAPON_REFINEMENTS,REFINEMENT_RARITIES} from '../src/content.js';
 import {weaponFacts,passiveEffect} from '../src/item-info.js';
-import {onXpPickup,updateRelicStates,onWeaponHit,onWeaponCast} from '../src/relic-combat.js';
+import {onXpPickup,updateRelicStates,onWeaponHit,onWeaponCast,onPlayerTravel} from '../src/relic-combat.js';
 import {updateExpandedWeapon,updateExpandedZone} from '../src/expanded-combat.js';
 import {updateFusion,updateFusionZone,chainArrow} from '../src/fusion-combat.js';
-import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,updateCharacterTalents,onCharacterCast,onCharacterProjectileHit,characterHitMultiplier,onCharacterHit,characterTalentProgress,characterTalentSummary} from '../src/talents.js';
+import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,updateCharacterTalents,onCharacterCast,onCharacterProjectileHit,characterHitMultiplier,onCharacterHit,characterTalentProgress,characterTalentSummary,onCharacterTravel} from '../src/talents.js';
 import {EVENT_TYPES,ALTAR_TIMES,ALTAR_ORDER,ALTAR_REWARDS,startWorldEvent,updateWorldEvents,worldEventStatus,worldEventTarget,nearestWorldEvent,drawWorldEvents} from '../src/world-events.js';
 
 // Canvas and audio stay outside this check: the actual Game simulation runs unchanged.
@@ -305,9 +305,11 @@ try{
   assert(!scytheReach(false));assert(scytheReach(true),'scythe range extends the real outward and return path');
   const returning=start();returning.enemies=[];equip(returning,{bloodmoon:3},{area:3,luck:3,deadeye:3});target(returning);returning.grid.rebuild(returning.enemies);returning.updateWeapons(.01);const scythe=returning.projectiles[0];Object.assign(scythe,{returning:true,x:returning.player.x+13.2,y:returning.player.y-8});returning.updateProjectiles(.05);assert(Math.hypot(scythe.x-returning.player.x,scythe.y-returning.player.y+8)<13,'fast returning scythes must arrive even at a 50 ms frame, without oscillating past the player');
   for(let level=1;level<100;level++)assert(xpForLevel(level+1)>xpForLevel(level));
-  for(let time=0;time<600;time++)assert(pressureAt(time+1).hp>=pressureAt(time).hp);
+  for(let time=0;time<RUN_DURATION;time++)assert(pressureAt(time+1).hp>=pressureAt(time).hp);
   assert.equal(pressureAt(0).hp,1.1);assert(pressureAt(540).hp>8);assert(pressureAt(120,3).hp>pressureAt(120).hp);
-  assert.equal(PHASES.at(-1).at,600);
+  assert.equal(RUN_DURATION,900);assert.equal(PHASES.at(-1).at,RUN_DURATION);
+  for(const time of [600,660,720,780,840]){const late=pressureAt(time);assert(late.hp>=15.2&&late.hp<=18.4);assert.equal(late.damage,2.7);assert.equal(late.speed,1.5);assert.equal(late.cap,275);assert.equal(late.count,6)}
+  assert.equal(pressureAt(RUN_DURATION).cap,150,'final boss arrival eases ordinary horde density');
   for(const [time,level,power] of [[60,3,1],[150,5,2],[270,6,2],[450,6,3]]){
     const normal=characterStats(CHARACTERS[0],{power}),strike=weaponStats('blade',level,normal,CHARACTERS[0]).damage;
     const ratio=strike/(ENEMIES.skeleton.hp*pressureAt(time).hp);
@@ -397,7 +399,7 @@ try{
   assert(compatibleWeapons('volatile',{blade:1},{embercore:1,venomfang:1}).length);
   assert.equal(compatibleWeapons('volatile',{orbit:1},{embercore:1,venomfang:1}).length,0,'catalysts need a weapon that actually triggers them');
   assert.equal(compatibleWeapons('stormseal',{storm:1},{frostbrand:1}).length,0,'ice needles cannot slow enemies without a projectile or beam');
-  assert(compatibleWeapons('cinder',{orbit:1},{dashfire:1}).length,'dash fire can enable burning kills');
+  assert(compatibleWeapons('cinder',{orbit:1},{dashfire:1}).length,'travel fire can enable burning kills');
   assert(compatibleWeapons('rime',{bolt:1},{hoarfrost:1}).length);
   assert.equal(compatibleWeapons('rotclock',{flame:1},{}).length,0,'ground fire is not an attached damage-over-time status');
   assert(compatibleWeapons('rotclock',{bolt:1},{embercore:1}).length);
@@ -411,7 +413,7 @@ try{
 
   // Every weapon must cause real damage at both ends of its progression, including delayed attacks.
   for(const key of Object.keys(WEAPONS))for(const level of [1,maxWeaponLevel(key)]){
-    const game=start();game.time=240;game.bossMilestones=new Set([180,360,600]);game.spawnClock=game.waveClock=Infinity;game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.enemies=[];
+    const game=start();game.time=240;game.bossMilestones=new Set([180,360,RUN_DURATION]);game.spawnClock=game.waveClock=Infinity;game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.enemies=[];
     if(level===maxWeaponLevel(key))game.weaponUpgrades={[key]:{damage:.16,haste:.12}};
     equip(game,{[key]:level});game.player.invincible=100;
     for(let i=0;i<12;i++){const a=i*Math.PI/6,r=35+i*7;target(game,Math.cos(a)*r,37+Math.sin(a)*r)}
@@ -436,6 +438,35 @@ try{
   frozenContact.freeze=0;contact.updateEnemy(frozenContact,.05);assert.equal(contact.player.hp,contactHp-15);
   contact.hurt(15,0,0);assert.equal(contact.player.hp,contactHp-15,'one attack cannot bypass the hit protection window');
   contact.player.invincible-=.61;contact.hurt(15,0,0);assert.equal(contact.player.hp,contactHp-30,'remaining in contact is punished after a short recovery window');
+  for(const recovery of ['pickup','chest','lamp','forge','well','bloodmoon']){
+    const game=start(CHARACTERS.find(c=>c.id===({forge:'smith',well:'witch'}[recovery]||'warden')));game.enemies=[];game.spawnClock=game.waveClock=game.xpNext=Infinity;
+    equip(game,recovery==='lamp'?{blade:1}:recovery==='forge'?{capacitor:1}:recovery==='bloodmoon'?{bloodmoon:3}:{});
+    game.talents=recovery==='lamp'?{w_guard1:true,w_guard2:true}:recovery==='forge'?{f_guard1:true,f_guard2:true}:recovery==='well'?{s_scholar1:true,s_scholar2:true}:{};
+    game.characterState.charge=recovery==='forge'?7:5;game.characterState.xp=30;game.characterState.starClock=Infinity;
+    game.player.hp=1;game.player.shield=game.player.invincible=0;
+    const victim=target(game,recovery==='bloodmoon'?50:0);victim.damage=2;game.grid.rebuild(game.enemies);
+    if(recovery==='pickup'||recovery==='chest')game.drops.push({type:recovery==='pickup'?'heal':'chest',x:0,y:37,age:0,r:5,value:recovery==='pickup'?12:60});
+    if(recovery==='chest'){victim.damage=0;game.hazards.push({type:'blast',x:0,y:37,r:20,t:.01,max:.01,damage:2})}
+    if(recovery==='bloodmoon'){
+      game.timers.bloodmoon=Infinity;
+      game.projectiles=[{type:'enemy',enemy:true,x:0,y:28,vx:0,vy:0,t:1,damage:2},{type:'scythe',source:'bloodmoon',x:50,y:29,vx:0,vy:0,r:14,t:1,age:0,flightTime:2,damage:1,hit:new Set(),trail:[]}];
+    }
+    let settlements=0;game.on=event=>{if(event==='end')settlements++};game.update(.05);
+    assert(game.ended&&game.player.hp<=0,'lethal damage cannot be undone by same-frame '+recovery);assert.equal(game.result.won,false);assert.equal(settlements,1);
+    assert.equal(game.characterState.procs,0);assert.equal(game.characterState.wells,0);assert.equal(game.gold,0);assert.equal(game.xp,0);
+  }
+  for(const boss of [false,true]){
+    const game=start();game.enemies=[];equip(game,{frost:6});const e=target(game);e.boss=boss;e.freeze=3;e.slow=6;game.grid.rebuild(game.enemies);game.updateWeapons(.01);
+    assert.equal(e.freeze,3,'frost cannot shorten an existing freeze');assert.equal(e.slow,6,'frost cannot shorten an existing slow');
+    e.freeze=e.slow=0;game.timers.frost=0;game.updateWeapons(.01);const values=weaponStats('frost',6,game.stats,game.character);
+    assert.equal(e.freeze,boss?values.bossFreeze:values.freeze);assert.equal(e.slow,values.slowDuration);
+  }
+  {
+    const game=start();game.enemies=[];equip(game,{frost:5});const values=weaponStats('frost',5,game.stats,game.character);
+    const edge=target(game,values.radius+5),outside=target(game,values.radius+20);game.grid.rebuild(game.enemies);game.updateWeapons(.01);
+    assert(edge.hp<edge.maxHp&&edge.slow>0,'frost hits an overlapping enemy across a spatial-grid boundary');assert.equal(outside.hp,outside.maxHp);
+  }
+  console.log('PASS: lethal contact, projectile and hazard damage cannot be undone by ordinary same-frame healing; cold hits retain stronger control.');
   // Enemy fire stays sparse even after minute seven, while shots still reach and damage the player.
   for(const at of [60,419.95,420,540,600]){
     const fire=start();fire.time=at;fire.enemies=[];fire.player.invincible=0;
@@ -446,7 +477,7 @@ try{
     assert(fire.player.hp<before,'shorter-lived shots must still hit from the edge of ghost firing range');assert.equal(fire.projectiles.length,0);
   }
   const crossfire=start();crossfire.time=540;crossfire.enemies=[];crossfire.weapons={};crossfire.player.invincible=1000;
-  crossfire.spawnClock=crossfire.waveClock=crossfire.xpNext=Infinity;crossfire.bossMilestones=new Set([180,360,600]);
+  crossfire.spawnClock=crossfire.waveClock=crossfire.xpNext=Infinity;crossfire.bossMilestones=new Set([180,360,RUN_DURATION]);
   for(let i=0;i<40;i++){const ghost=crossfire.spawnEnemy('ghost'),angle=i*Math.PI/20;Object.assign(ghost,{x:Math.cos(angle)*170,y:37+Math.sin(angle)*170,speed:0})}
   let crossfirePeak=0;
   for(let i=0;i<400;i++){
@@ -454,11 +485,11 @@ try{
     assert(count<=6,'forty late ghosts must not fill the screen with projectiles');
   }
   assert(crossfirePeak>0,'the crowd still makes occasional ranged attacks');
-  for(const milestone of [180,360,600]){
+  for(const milestone of [180,360,RUN_DURATION]){
     const fight=start();fight.time=milestone;fight.enemies=[];fight.player.invincible=1000;fight.spawnBoss(milestone);
     const boss=fight.enemies[0];Object.assign(boss,{x:180,y:37,speed:0,attack:0});
     const random=Math.random;try{Math.random=()=>.95;fight.updateEnemy(boss,.05)}finally{Math.random=random}
-    assert.equal(fight.projectiles.length,milestone===600?8:6);
+    assert.equal(fight.projectiles.length,milestone===RUN_DURATION?8:6);
     const angles=fight.projectiles.map(b=>(Math.atan2(b.vy,b.vx)+Math.PI*2)%(Math.PI*2)).sort((a,b)=>a-b);
     assert(Math.max(...angles.map((angle,i)=>(angles[(i+1)%angles.length]-angle+Math.PI*2)%(Math.PI*2)))>=Math.PI*.59,'a contiguous escape gap remains in each ring');
     const ghost=fight.spawnEnemy('ghost');Object.assign(ghost,{x:-170,y:37,speed:0,attack:0});fight.updateEnemy(ghost,.05);
@@ -480,7 +511,31 @@ try{
   drops.time=174;drops.kill(target(drops));assert(!drops.drops.some(d=>d.type==='heal'),'low health does not give an early guaranteed heal');
   drops.time=175;drops.kill(target(drops));assert(drops.drops.some(d=>d.type==='heal'),'a long drought still has a bounded rescue');Math.random=savedRandom;
   const trail=start();equip(trail,{flame:6},{area:2,duration:2});trail.addFire({x:0,y:0,lvl:3},true);assert.equal(trail.zones[0].r,24);assert.equal(trail.zones[0].t,1.4*1.3);
-  const ice=start();ice.enemies=[];equip(ice,{bolt:1},{hoarfrost:2});const frozen=target(ice),iceBoss=target(ice,60,37);iceBoss.boss=true;ice.grid.rebuild(ice.enemies);ice.dash();assert.equal(frozen.freeze,.8);assert.equal(iceBoss.freeze,.15);assert.equal(ice.relicProcs.hoarfrost,1);assert(frozen.hp<frozen.maxHp);
+  const ice=start();ice.enemies=[];equip(ice,{bolt:1},{hoarfrost:2});const frozen=target(ice),iceBoss=target(ice,60,37);iceBoss.boss=true;ice.grid.rebuild(ice.enemies);onPlayerTravel(ice);assert.equal(frozen.freeze,.8);assert.equal(iceBoss.freeze,.15);assert.equal(ice.relicProcs.hoarfrost,1);assert(frozen.hp<frozen.maxHp);
+  // Keyboard and touch movement charge the same automatic effects; no action or invulnerability is added.
+  for(const character of CHARACTERS.filter(c=>c.id!=='witch')){
+    const travel=start(character);travel.enemies=[];travel.spawnClock=travel.waveClock=1e9;travel.nextShrine=ALTAR_TIMES.length;travel.level=30;
+    equip(travel,{}, {wake:2,hoarfrost:2,dashfire:2});for(const node of CHARACTER_TALENTS[character.id].branches[character.id==='ranger'?1:2].nodes)assert(travel.learnTalent(node.id));
+    target(travel,200,175,1e8);travel.player.invincible=0;
+    assert.equal(typeof travel.dash,'undefined');assert(!Object.keys(travel.stats).some(key=>key.startsWith('dash')));
+    travel.keydown({code:'Space',preventDefault(){throw Error('Space is no longer a game action')}});travel.update(.05);
+    assert.equal(travel.player.travelCharge,0);assert.equal(travel.player.invincible,0);
+    travel.keydown({code:'KeyD'});for(let i=0;i<10;i++)travel.update(.05);travel.keys.clear();
+    const charge=travel.player.travelCharge;assert(Math.abs(charge-travel.moveSpeed*.5)<1e-8);assert.equal(travel.relicProcs.wake,undefined);
+    for(let i=0;i<20;i++)travel.update(.05);assert.equal(travel.player.travelCharge,charge,'stopping neither charges nor discards distance');
+    travel.stick={x:1,y:1};for(let i=0;i<120;i++)travel.update(.05);
+    const distance=travel.moveSpeed*6.5,triggers=Math.floor(distance/240);
+    for(const key of ['wake','hoarfrost','dashfire'])assert.equal(travel.relicProcs[key],triggers,key+' follows actual walking distance');
+    assert(Math.abs(travel.player.travelCharge-distance%240)<1e-7,'diagonal input is normalized and excess distance carries forward');
+    assert(travel.damageByWeapon.talent>0,character.id+' travel specialization works in the live loop');assert.equal(travel.player.invincible,0);
+    travel.pause();travel.resume();const pausedCharge=travel.player.travelCharge;travel.update(.05);assert.equal(travel.player.travelCharge,pausedCharge,'pause/resume clears held movement');
+    travel.start(character);assert.equal(travel.player.travelCharge,0);assert.deepEqual(travel.relicProcs,{});
+  }
+  const boots=characterStats(CHARACTERS[0],{speed:5,magnet:2});assert.equal(boots.moveSpeed,CHARACTERS[0].speed*1.3);assert.equal(boots.pickupRadius,48*(1+.7+.3));
+  const mariner=CHARACTERS.find(c=>c.id==='mariner');assert.equal(characterStats(mariner).moveSpeed,mariner.speed*1.1);
+  const walking=characterStats(CHARACTERS[0],{}, {},{}, {},['stride']);assert.equal(walking.moveSpeed,CHARACTERS[0].speed*1.25);assert.equal(walking.pickupRadius,48*1.25);
+  const pilgrim=start();pilgrim.boons=['pilgrim'];equip(pilgrim,{});pilgrim.player.shield=pilgrim.player.invincible=0;pilgrim.hurt(30,0,0);assert.equal(pilgrim.stats.armor,3);assert.equal(pilgrim.damageTaken,Math.round((30-3)*.85));
+  console.log('PASS: automatic travel effects, keyboard/touch movement, idle/pause/reset behavior and replacement boots, innate and contracts.');
   const glass=start();glass.enemies=[];equip(glass,{bolt:1},{bulwark:2});glass.player.shield=20;glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,0);glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,5);assert(glass.projectiles.every(b=>b.refracted));glass.player.shield=10;glass.player.invincible=0;glass.hurt(10,0,0);assert.equal(glass.projectiles.length,10,'every separate shield break triggers without a relic cooldown');
   const fork=start();fork.enemies=[];equip(fork,{bolt:1},{forkseed:2});const forkTarget=target(fork);fork.grid.rebuild(fork.enemies);fork.stats.criticalChance=1;fork.hit(forkTarget,1,0,37,0,false,'bolt');assert.equal(fork.projectiles.length,2);assert(fork.projectiles.every(b=>b.hit.has(forkTarget.id)));fork.hit(forkTarget,1,0,37,0,false,'bolt');assert.equal(fork.projectiles.length,4);
   onWeaponHit(fork,forkTarget,'bolt',true,true);assert.equal(fork.projectiles.length,4,'periodic hits cannot split again');
@@ -584,10 +639,10 @@ try{
   wind.level=30;for(const id of ['r_shot1','r_shot2','r_shot3'])assert(wind.learnTalent(id));wind.time=2;wind.characterState.charge=80;onCharacterCast(wind);assert.equal(wind.projectiles.length,4);assert.equal(wind.projectiles.at(-1).pierce,3);assert(wind.projectiles.at(-1).homing);
   const stride=start(CHARACTERS[2]);stride.level=30;stride.enemies=[];target(stride);for(const id of ['r_roam1','r_roam2','r_roam3'])assert(stride.learnTalent(id));
   updateCharacterTalents(stride,.5,60);onCharacterCast(stride);assert.equal(stride.projectiles.length,1);assert.equal(stride.characterState.nextWind,1);
-  stride.dash();assert.equal(stride.characterState.charge,60);assert.equal(stride.characterState.nextWind,0);assert.equal(stride.characterState.ghostUntil,3);
+  onCharacterTravel(stride);assert.equal(stride.characterState.charge,60);assert.equal(stride.characterState.nextWind,0);assert.equal(stride.characterState.ghostUntil,3);
   onCharacterCast(stride);assert.equal(stride.projectiles.length,2);updateCharacterTalents(stride,.1,0);assert.equal(stride.projectiles.length,2,'stationary movement branch cannot auto-fire');
   updateCharacterTalents(stride,.1,1);assert.equal(stride.projectiles.length,3);assert.equal(stride.characterState.charge,1,'automatic wind does not consume movement charge');
-  stride.time=.5;updateCharacterTalents(stride,.1,1);assert.equal(stride.projectiles.length,3);stride.time=1;updateCharacterTalents(stride,.1,1);assert.equal(stride.projectiles.length,4);stride.time=3;updateCharacterTalents(stride,.1,1);assert.equal(stride.projectiles.length,4,'dash window expires');
+  stride.time=.5;updateCharacterTalents(stride,.1,1);assert.equal(stride.projectiles.length,3);stride.time=1;updateCharacterTalents(stride,.1,1);assert.equal(stride.projectiles.length,4);stride.time=3;updateCharacterTalents(stride,.1,1);assert.equal(stride.projectiles.length,4,'travel window expires');
   const embers=start();embers.level=30;embers.enemies=[];const burned=target(embers);embers.grid.rebuild(embers.enemies);
   for(const id of ['w_flame1','w_flame2','w_flame3'])assert(embers.learnTalent(id));
   assert.equal(talentPoints(embers),0);assert(!embers.learnTalent('w_guard2'));assert.equal(embers.stats.armor,0);
@@ -595,11 +650,11 @@ try{
   const burn={...burned.burn};embers.passives.embercore=1;embers.hit(burned,1,0,37,0,false,'blade');assert.deepEqual(burned.burn,burn,'weaker burning must not overwrite a talent or delay its next tick');
   for(let i=0;i<2;i++){embers.time+=.4;embers.hit(burned,1,0,37,0,false,'blade')}assert.equal(embers.characterState.procs,1);assert.equal(embers.player.shield,8,'echo does not grant additional shielding');
   const assault=start();assault.level=30;assault.enemies=[];const assaultTarget=target(assault);assault.grid.rebuild(assault.enemies);
-  for(const id of ['w_dash1','w_dash2','w_dash3'])assert(assault.learnTalent(id));assault.characterState.nextPulse=10;assault.player.hp=10;assault.player.shield=0;assault.dash();
-  assert.equal(assault.characterState.nextPulse,2.5);assert.equal(assault.player.hp,10,'dash pulse does not heal');
+  for(const id of ['w_dash1','w_dash2','w_dash3'])assert(assault.learnTalent(id));assault.characterState.nextPulse=10;assault.player.hp=10;assault.player.shield=0;onCharacterTravel(assault);
+  assert.equal(assault.characterState.nextPulse,2.5);assert.equal(assault.player.hp,10,'travel pulse does not heal');
   for(let i=0;i<2;i++){assault.time+=.4;assault.hit(assaultTarget,1,0,37,0,false,'blade')}assert.equal(assault.characterState.charge,6);assert.equal(assault.characterState.procs,0);
   assault.time=2.5;assault.hit(assaultTarget,1,0,37,0,false,'blade');assert.equal(assault.characterState.procs,1);assert.equal(assault.characterState.nextPulse,5);assert.equal(assault.player.hp,10);
-  assault.time=4.1;assault.hit(assaultTarget,1,0,37,0,false,'blade');assert.equal(assault.characterState.charge,1,'dash amplification expires');
+  assault.time=4.1;assault.hit(assaultTarget,1,0,37,0,false,'blade');assert.equal(assault.characterState.charge,1,'travel amplification expires');
   const levels=start();let awards=0;levels.on=event=>{if(event==='talentPoints')awards++};
   while(levels.level<30){levels.gainXp(levels.xpNext-levels.xp);assert.equal(talentPoints(levels),TALENT_LEVELS.filter(level=>levels.level>=level).length)}assert.equal(awards,3);
   assert.deepEqual(TALENT_LEVELS,[10,20,30]);
@@ -658,7 +713,7 @@ try{
   assert.equal(characterHitMultiplier(embers,outer,'flame',true),1.2);assert.equal(characterHitMultiplier(embers,outer,'bolt',false),1);
   equip(delayedLamp,{blade:3,orbit:3},{armor:5,regen:5,haste:3});delayedLamp.learnTalent('w_guard3');delayedLamp.player.hp=10;delayedLamp.player.shield=0;delayedLamp.time=20;delayedLamp.characterState.charge=6;const guardHp=waitingEnemy.hp;
   updateCharacterTalents(delayedLamp,.05,0);assert.equal(delayedLamp.player.shield,26);assert.equal(delayedLamp.player.hp,16);assert.equal(guardHp-waitingEnemy.hp,180);assert.equal(characterHitMultiplier(delayedLamp,waitingEnemy,'orbit',false),1.2);assert.equal(characterHitMultiplier(delayedLamp,waitingEnemy,'orbit',true),1);
-  equip(assault,{blade:4,flame:4,bolt:4},{speed:5,haste:5});assault.player.dashCooldown=0;assault.timers={blade:1,flame:.2,bolt:1};assault.dash();assert.equal(assault.timers.blade,.25);assert.equal(assault.timers.flame,0);assert.equal(assault.timers.bolt,1);assert(Math.abs(assault.player.dashCooldown-2.1)<1e-9);
+  equip(assault,{blade:4,flame:4,bolt:4},{speed:5,haste:5});assault.timers={blade:1,flame:.2,bolt:1};onCharacterTravel(assault);assert.equal(assault.timers.blade,.25);assert.equal(assault.timers.flame,0);assert.equal(assault.timers.bolt,1);assert.equal(assault.stats.moveSpeed,assault.character.speed*1.3);
   equip(stars,{sentinel:4},{soulpact:3,haste:5,area:4,amount:2});stars.projectiles=[];stars.characterState.starClock=0;updateCharacterTalents(stars,.05,0);
   assert.equal(stars.projectiles.length,6);assert.equal(stars.projectiles[0].r,5.6);assert(Math.abs(stars.projectiles[0].damage-34*1.35*1.54)<1e-9);assert(Math.abs(stars.characterState.starClock-.9*.7*.82)<1e-9);
   stars.timers={};stars.updateWeapons(.05);updateExpandedZone(stars,stars.zones.at(-1),.05);const extraStars=stars.projectiles.filter(p=>p.talent==='star').length;assert.equal(extraStars,7,'real summon cast emits an extra companion star');onCharacterCast(stars,'sentinel');assert.equal(stars.projectiles.filter(p=>p.talent==='star').length,7,'extra star shares its own cooldown');
@@ -668,7 +723,7 @@ try{
   equip(wind,{bolt:4},{amount:2,area:4,haste:5});wind.time=20;wind.projectiles=[];wind.characterState.charge=0;wind.characterState.nextQuiver=0;const quiverTarget=target(wind);
   onCharacterHit(wind,quiverTarget,'bolt',false);onCharacterHit(wind,quiverTarget,'bolt',false);assert.equal(wind.characterState.charge,6);wind.time+=.21;onCharacterHit(wind,quiverTarget,'flame',true);assert.equal(wind.characterState.charge,6);onCharacterHit(wind,quiverTarget,'prism',false);assert.equal(wind.characterState.charge,12);
   updateCharacterTalents(wind,.05,80);onCharacterCast(wind,'bolt');assert.equal(wind.projectiles.length,5);assert.equal(wind.projectiles[0].r,5.6);assert(Math.abs(wind.projectiles[0].vx**2+wind.projectiles[0].vy**2-(340*1.4)**2)<1e-6);assert(Math.abs(wind.characterState.nextWind-wind.time-1.05)<1e-9);
-  equip(stride,{bolt:4,prism:4,blade:4},{speed:5,haste:5});stride.player.dashCooldown=0;stride.timers={bolt:.2,prism:1,blade:1};stride.dash();assert.equal(stride.characterState.charge,40);assert.equal(stride.timers.bolt,0);assert.equal(stride.timers.prism,.5);assert.equal(stride.timers.blade,1);updateCharacterTalents(stride,.05,1);assert.equal(stride.characterState.nextGhost,stride.time+.56);
+  equip(stride,{bolt:4,prism:4,blade:4},{speed:5,haste:5});stride.timers={bolt:.2,prism:1,blade:1};onCharacterTravel(stride);assert.equal(stride.characterState.charge,40);assert.equal(stride.timers.bolt,0);assert.equal(stride.timers.prism,.5);assert.equal(stride.timers.blade,1);updateCharacterTalents(stride,.05,1);assert.equal(stride.characterState.nextGhost,stride.time+.56);
   sight.time=20;sight.projectiles=[];equip(sight,{bolt:4},{luck:5,haste:5});sight.stats.criticalChance=1;onCharacterProjectileHit(sight,{talent:'wind'},markedWind);sight.hit(markedWind,1,0,37,0,false,'bolt');assert.equal(sight.projectiles.length,1,'one critical weapon hit counts twice for final pursuit');assert.equal(sight.characterState.nextHunt,20.7);
   for(const character of CHARACTERS)for(const branch of CHARACTER_TALENTS[character.id].branches){
     const meter=start(character);meter.level=30;meter.characterState.charge=character.id==='warden'?6:80;meter.characterState.xp=60;
@@ -681,7 +736,7 @@ try{
   }
   {
   // Three timed, randomly placed tasks share the actual choice transaction.
-  const trialGame=kind=>{const game=start();game.time=60;game.enemies=[];updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind,index:ALTAR_ORDER.indexOf(kind),goal:kind==='vigil'?12:kind==='hunt'?1:6});assert.equal(game.shrines.length,1);Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y,hp:40,shield:0});game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,600]);return game};
+  const trialGame=kind=>{const game=start();game.time=60;game.enemies=[];updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind,index:ALTAR_ORDER.indexOf(kind),goal:kind==='vigil'?12:kind==='hunt'?1:6});assert.equal(game.shrines.length,1);Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y,hp:40,shield:0});game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,RUN_DURATION]);return game};
   const completeTask=game=>{const s=game.activeEvent;if(s.kind==='hunt')game.kill(s.guardian);else if(s.kind==='vigil')s.progress=s.goal;else for(const mote of s.motes)Object.assign(mote,{x:game.player.x,y:game.player.y});updateWorldEvents(game,.05)};
   const scheduled=start(),spawned=[];assert.equal(scheduled.shrines.length,0);
   for(const time of [59.99,60,239.99,240,419.99,420,600,900]){scheduled.time=time;Object.assign(scheduled.player,{x:time*2,y:-time});updateWorldEvents(scheduled,0);assert.equal(scheduled.shrines.length,ALTAR_TIMES.filter(t=>time>=t).length);const fresh=scheduled.shrines.at(-1);if(fresh&&!spawned.includes(fresh)){spawned.push(fresh);const d=Math.hypot(fresh.x-scheduled.player.x,fresh.y-scheduled.player.y);assert(d>=179&&d<=261)}}
@@ -752,19 +807,19 @@ try{
   const fullTrial=trialGame('hunt');fullTrial.pressure.cap=0;assert(!fullTrial.interact());fullTrial.pressure.cap=2;assert(fullTrial.interact());fullTrial.time=65;updateWorldEvents(fullTrial,.05);assert.equal(fullTrial.enemies.length,2);
   const soulBoon=characterStats(CHARACTERS[1],{}, {},{}, {orbit:1},['souls']);assert.equal(weaponStats('orbit',1,soulBoon,CHARACTERS[1]).damage/weaponStats('orbit',1,characterStats(CHARACTERS[1]),CHARACTERS[1]).damage,1.45);assert.equal(weaponStats('blade',1,soulBoon,CHARACTERS[1]).damage,weaponStats('blade',1,characterStats(CHARACTERS[1]),CHARACTERS[1]).damage);
   const fragile=start();fragile.boons=['stride'];fragile.stats=characterStats(fragile.character,{}, {},{},fragile.weapons,fragile.boons);fragile.player.shield=0;fragile.player.invincible=0;fragile.hurt(25,0,0);assert.equal(fragile.damageTaken,25,'stride no longer penalizes the hero; enemies carry its cost');
-  for(const milestone of [180,360,600]){const bossGame=start();bossGame.enemies=[];bossGame.spawnBoss(milestone);const boss=bossGame.enemies.find(e=>e.boss);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1,'no duplicate boss drop');bossGame.drops.push({type:'xp',x:2000,y:2000,value:10,r:3,age:0});const magnet=bossGame.drops.find(d=>d.type==='magnet');Object.assign(magnet,{x:bossGame.player.x,y:bossGame.player.y});bossGame.updateDrops(.01);assert(bossGame.drops.filter(d=>d.type==='xp').every(d=>d.attracted),'boss magnet attracts even off-screen XP');}
+  for(const milestone of [180,360,RUN_DURATION]){const bossGame=start();bossGame.enemies=[];bossGame.spawnBoss(milestone);const boss=bossGame.enemies.find(e=>e.boss);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1,'no duplicate boss drop');bossGame.drops.push({type:'xp',x:2000,y:2000,value:10,r:3,age:0});const magnet=bossGame.drops.find(d=>d.type==='magnet');Object.assign(magnet,{x:bossGame.player.x,y:bossGame.player.y});bossGame.updateDrops(.01);assert(bossGame.drops.filter(d=>d.type==='xp').every(d=>d.attracted),'boss magnet attracts even off-screen XP');}
   const chestTrial=start();equip(chestTrial,{blade:6},{growth:5});chestTrial.player.hp=chestTrial.player.maxHp-5;const chestRewards=chestTrial.openChest(60);assert.equal(chestRewards.length,4);assert(chestRewards.slice(0,2).every(text=>text.includes('+')&&!text.includes('LV.')));assert.deepEqual(chestRewards.slice(2),['生命 +5','余烬 +60']);assert(Object.keys(chestTrial.weaponUpgrades.blade).length>0);assert.equal(chestTrial.weapons.blade,6);assert.equal(chestTrial.xp,0);
   chestTrial.banished.add('blade');assert.deepEqual(chestTrial.openChest(60),['经验 +36（无可强化装备）','经验 +36（无可强化装备）','余烬 +60']);
   const pausedTrial=trialGame('vigil');pausedTrial.pause();assert(!worldEventStatus(pausedTrial).canStart);assert(!pausedTrial.interact());
   for(const id of Object.keys(ALTAR_BOONS)){
     const boon=actual(id),plain=characterStats(boon.character);
     for(const key of ['damageMultiplier','maxHp','moveSpeed','xpMultiplier','pickupRadius','areaMultiplier'])assert(boon.stats[key]>=plain[key],id+' has no hero-stat penalty');
-    assert(boon.stats.haste<=plain.haste&&boon.stats.dashCooldown<=plain.dashCooldown);
+    assert(boon.stats.haste<=plain.haste&&boon.stats.damageTakenMultiplier<=plain.damageTakenMultiplier);
     const baseline=pressureAt(240),modified=pressureAt(240,0,boon.stats.difficulty);boon.time=240;
     const enemy=boon.spawnEnemy('knight');assert.equal(enemy.maxHp,ENEMIES.knight.hp*modified.hp);assert.equal(enemy.damage,ENEMIES.knight.damage*modified.damage);assert.equal(enemy.speed,ENEMIES.knight.speed*modified.speed);
     assert.equal(modified.hp/baseline.hp,boon.stats.difficulty.hp);assert.equal(modified.damage/baseline.damage,boon.stats.difficulty.damage);
     assert(Object.values(boon.stats.difficulty).some((value,index)=>value!==Object.values(plain.difficulty)[index]),id+' changes actual enemy pressure');
-    boon.enemies=[];boon.spawnBoss(600);const bosses=boon.enemies.filter(e=>e.final);assert.equal(bosses.length,1+boon.stats.difficulty.bosses);assert.equal(bosses[0].maxHp,42000*boon.stats.difficulty.hp);assert.equal(bosses[0].damage,52*boon.stats.difficulty.damage);assert.equal(bosses[0].speed,45*boon.stats.difficulty.speed);
+    boon.enemies=[];boon.spawnBoss(RUN_DURATION);const bosses=boon.enemies.filter(e=>e.final);assert.equal(bosses.length,1+boon.stats.difficulty.bosses);assert.equal(bosses[0].maxHp,42000*boon.stats.difficulty.hp);assert.equal(bosses[0].damage,52*boon.stats.difficulty.damage);assert.equal(bosses[0].speed,45*boon.stats.difficulty.speed);
   }
   const stacked=characterStats(CHARACTERS[0],{}, {},{}, {},['horizon','harvest','horizon','frenzy','precision','glass','twins']);assert.deepEqual(stacked.difficulty,{hp:1,damage:1,speed:1,population:2,elite:2,bosses:2});
   const population=boons=>{
@@ -773,7 +828,7 @@ try{
   };
   const normalPopulation=population([]),densePopulation=population(['horizon']);assert.equal(densePopulation.count,normalPopulation.count*1.5,'the actual wave contains 50% more enemies');assert.equal(densePopulation.interval,normalPopulation.interval/1.5);assert.equal(densePopulation.cap,Math.round(normalPopulation.cap*1.5));
   const arrivals=(boons,dt)=>{
-    const g=start();g.time=240;g.enemies=[];g.nextShrine=3;g.bossMilestones=new Set([180,360,600]);g.waveClock=1e9;g.spawnClock=0;g.xpNext=1e9;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);let count=0;const spawn=g.spawnEnemy;
+    const g=start();g.time=240;g.enemies=[];g.nextShrine=3;g.bossMilestones=new Set([180,360,RUN_DURATION]);g.waveClock=1e9;g.spawnClock=0;g.xpNext=1e9;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);let count=0;const spawn=g.spawnEnemy;
     g.spawnEnemy=function(...args){count++;return spawn.apply(this,args)};
     for(let i=0;i<Math.round(60/dt);i++){g.update(dt);g.enemies=[]}return count;
   };
@@ -781,11 +836,11 @@ try{
   assert.equal(pressureAt(179.99).eliteChance,0);assert.equal(pressureAt(180).eliteChance,.02);
   const eliteRoll=Math.random;Math.random=()=>.025;
   try{for(const boons of [[],['frenzy']]){
-    const g=start();g.time=240;g.enemies=[];g.boons=boons;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);g.spawnClock=0;g.waveClock=1e9;g.bossMilestones=new Set([180,360,600]);g.update(.01);
+    const g=start();g.time=240;g.enemies=[];g.boons=boons;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);g.spawnClock=0;g.waveClock=1e9;g.bossMilestones=new Set([180,360,RUN_DURATION]);g.update(.01);
     assert.equal(g.enemies.length,4);assert(g.enemies.every(e=>e.elite===!!boons.length),'a 2.5% roll lies between the actual 2% and 3% elite chances');
   }}finally{Math.random=eliteRoll}
   const multiboss=start();multiboss.time=179.99;multiboss.enemies=[];multiboss.spawnClock=multiboss.waveClock=1e9;multiboss.xpNext=1e9;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,1);
-  for(const id of ['glass','twins']){multiboss.enemies=[];multiboss.state='reward';multiboss.eventChoices=[id];assert(multiboss.chooseAltarReward(0));multiboss.time=id==='glass'?359.99:599.99;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,id==='glass'?2:3,'extra bosses apply only to future milestone waves')}
+  for(const id of ['glass','twins']){multiboss.enemies=[];multiboss.state='reward';multiboss.eventChoices=[id];assert(multiboss.chooseAltarReward(0));multiboss.time=id==='glass'?359.99:RUN_DURATION-.01;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,id==='glass'?2:3,'extra bosses apply only to future milestone waves')}
   const finals=multiboss.enemies.filter(e=>e.final);multiboss.kill(finals[0]);assert(!multiboss.finalDefeated);multiboss.update(.01);assert(!multiboss.ended,'one defeated final boss cannot end a multi-boss fight');
   multiboss.kill(finals[1]);assert(!multiboss.finalDefeated);multiboss.kill(finals[2]);assert(multiboss.finalDefeated);assert.equal(multiboss.drops.filter(d=>d.type==='magnet').length,3);let settlements=0;multiboss.on=event=>{if(event==='end')settlements++};multiboss.update(.01);multiboss.end(true);assert.equal(settlements,1,'victory settles exactly once after all final bosses die');
   multiboss.start(multiboss.character);assert.deepEqual(multiboss.stats.difficulty,{hp:1,damage:1,speed:1,population:1,elite:1,bosses:0});
@@ -796,9 +851,9 @@ try{
       const g=start();g.boons=boons;equip(g,{blade:1});g.enemies=[];g.time=300;
       for(let i=0;i<30;i++){const elite=g.spawnEnemy('skeleton',true);g.kill(elite);g.kill(elite)}
       assert.equal(g.drops.filter(d=>d.type==='chest').length,0);assert.equal(g.drops.filter(d=>d.type==='xp').length,30);assert(g.drops.filter(d=>d.type==='xp').every(d=>d.elite&&d.value===ENEMIES.skeleton.xp*8));
-      for(const milestone of [180,360,600])g.spawnBoss(milestone);
+      for(const milestone of [180,360,RUN_DURATION])g.spawnBoss(milestone);
       const bosses=g.enemies.filter(e=>e.boss),count=1+g.stats.difficulty.bosses;
-      for(const milestone of [360,180,600]){
+      for(const milestone of [360,180,RUN_DURATION]){
         const wave=bosses.filter(e=>e.bossWave===milestone);assert.equal(wave.length,count);const before=g.drops.filter(d=>d.type==='chest').length;
         for(const [index,boss] of wave.reverse().entries()){g.kill(boss);g.kill(boss);assert.equal(g.drops.filter(d=>d.type==='chest').length,before+(index===count-1?1:0),'each overlapping boss wave pays once on its last death')}
       }
@@ -810,12 +865,15 @@ try{
     const expedition=(stage='foundry',character=CHARACTERS[3])=>{const g=start(character);g.start(character,{}, {stage});g.enemies=[];g.stats.criticalChance=0;g.player.invincible=0;return g};
     assert.equal(expedition('__proto__').stage,'graveyard');
     for(const stage of Object.keys(STAGES)){
-      const g=expedition(stage);for(let time=0;time<=720;time+=60){const p=pressureAt(time,0,{},stage);assert(Object.entries(p.roster).every(([key,weight])=>ENEMIES[key]&&weight>0));assert(Number.isFinite(p.hp))}
-      g.time=30;updateExpedition(g);assert.equal(g.hazards.length,stage==='graveyard'?0:stage==='foundry'?3:1);
-      const first=g.hazards.length;updateExpedition(g);assert.equal(g.hazards.length,first,'hazards obey their schedule');
-      g.hazards=[];g.time=100;g.activeEvent={};updateExpedition(g);assert.equal(g.hazards.length,0,'no environment hazard during an altar challenge');g.activeEvent=null;
+      const g=expedition(stage);for(let time=0;time<=RUN_DURATION+120;time+=60){const p=pressureAt(time,0,{},stage);assert(Object.entries(p.roster).every(([key,weight])=>ENEMIES[key]&&weight>0));assert(Number.isFinite(p.hp))}
+      g.spawnClock=g.waveClock=g.xpNext=Infinity;g.nextShrine=ALTAR_TIMES.length;g.bossMilestones=new Set([180,360]);const hp=g.player.hp;
+      for(const time of [29.99,60,120,599.99,600,660,720,780,840,RUN_DURATION-.1]){
+        g.time=time;g.update(.05);assert.equal(g.hazards.length,0,'no automatic terrain hazards in '+stage);assert.equal(g.player.hp,hp);assert(!g.finalSpawned&&!g.ended,'minute ten leaves five minutes for the build');
+      }
+      g.time=600;g.waveClock=0;g.update(.05);assert(g.enemies.length>0&&g.waveCount===1,'horde waves continue after minute ten');g.enemies=[];g.grid.rebuild([]);
+      g.time=RUN_DURATION-.01;g.update(.02);assert.equal(g.enemies.filter(e=>e.final).length,1,'the real loop spawns the final boss at 15:00');assert(!g.ended,'surviving the clock still requires defeating the boss');g.update(.05);assert.equal(g.enemies.filter(e=>e.final).length,1,'the final boss spawns once');g.enemies=[];
       g.boons=['glass'];equip(g,{},{});
-      for(const [i,milestone] of [180,360,600].entries()){
+      for(const [i,milestone] of [180,360,RUN_DURATION].entries()){
         g.time=milestone;g.spawnBoss(milestone);const bosses=g.enemies.filter(e=>e.boss&&!e.dead);assert.equal(bosses.length,2);assert(bosses.every(e=>e.name===STAGES[stage].bosses[i]));
         for(const boss of bosses){boss.attack=0;g.updateEnemy(boss,.05)}
         if(stage==='coast')assert(g.hazards.some(h=>h.type==='tide'),'coast boss uses its own attack');
@@ -843,19 +901,19 @@ try{
       if(branch===CHARACTER_TALENTS.mariner.branches[0])assert(victims.every(e=>e.freeze>=1));
       if(branch===CHARACTER_TALENTS.mariner.branches[1]){assert.equal(g.player.shield,18);assert(g.player.hp>20);assert(victims.every(e=>e.markUntil>g.time))}
       if(branch.nodes[0].id.includes('_guard'))assert(compatibleWeapons('bulwark',g.weapons,{},g.talents,g.character.id).length,'new shield talents enable shield-break relics');
-      if(branch.nodes[0].id.includes('_dash')){g.timers={[character.weapon]:5,bolt:5};g.player.dashCooldown=0;const damage=g.damageByWeapon.talent;g.dash();assert(g.damageByWeapon.talent>damage,'dash route adds actual damage');assert(g.timers[character.weapon]<5,'dash advances matching cooldown')}
+      if(branch.nodes[0].id.includes('_dash')){g.timers={[character.weapon]:5,bolt:5};const damage=g.damageByWeapon.talent;onCharacterTravel(g);assert(g.damageByWeapon.talent>damage,'travel route adds actual damage');assert(g.timers[character.weapon]<5,'travel advances matching cooldown')}
       assert(!/undefined|NaN/.test(characterTalentSummary(g)));g.start(character);assert.equal(g.characterState.procs,0);assert.equal(g.characterState.charge,0);
     }
     const circuit=expedition();equip(circuit,{capacitor:1},{circuit:3});const origin=target(circuit,40,37,1e7),other=target(circuit,70,37,1e7);circuit.grid.rebuild(circuit.enemies);for(let i=0;i<6;i++)circuit.hit(origin,1,0,37,0,false,'capacitor');assert.equal(circuit.relicProcs.circuit,1);assert(other.hp<other.maxHp);assert.equal(circuit.circuitCharge,0,'secondary arcs do not charge themselves');
     const brine=expedition('coast');equip(brine,{tide:1},{brine:3});const salted=target(brine);brine.hit(salted,1,0,37,0,false,'tide');assert(salted.slow>2&&Math.abs(salted.marks.brine.multiplier-1.16)<1e-9);
     assert.deepEqual(compatibleWeapons('rime',{blade:1},{},{},'mariner'),['blade']);assert.deepEqual(compatibleWeapons('bulwark',{bolt:1},{emberheart:1},{},'smith'),['bolt']);
-    const wake=expedition();equip(wake,{bolt:1},{wake:3});wake.player.lastX=1;wake.player.lastY=0;wake.dash();assert.equal(wake.projectiles.length,5);assert(wake.projectiles.every(b=>b.vx<0&&b.refracted));
+    const wake=expedition();equip(wake,{bolt:1},{wake:3});wake.player.lastX=1;wake.player.lastY=0;onPlayerTravel(wake);assert.equal(wake.projectiles.length,5);assert(wake.projectiles.every(b=>b.vx<0&&b.refracted));
     const jar=expedition();equip(jar,{}, {souljar:3});for(let i=0;i<11;i++)jar.kill(target(jar));assert.equal(jar.projectiles.length,0);const child=target(jar);child.summoned=true;jar.kill(child);assert.equal(jar.projectiles.length,0);jar.kill(target(jar));assert.equal(jar.projectiles.length,3);assert.equal(jar.souljarCharge,0);
     const dial=expedition();equip(dial,{bolt:1,capacitor:1},{sundial:3});dial.timers={bolt:2,capacitor:5};for(let i=0;i<5;i++)onWeaponCast(dial,'bolt');assert.equal(dial.timers.capacitor,3.5);assert.equal(dial.timers.bolt,2);
     const heart=expedition();equip(heart,{}, {emberheart:3});heart.player.hp=30;heart.player.shield=0;const elite=target(heart);elite.elite=true;heart.kill(elite);assert.equal(heart.player.hp,38);assert.equal(heart.player.shield,16);heart.kill(elite);assert.equal(heart.player.hp,38,'a corpse cannot heal twice');
     for(const g of [circuit,jar,dial]){g.start(g.character);assert.equal(g.circuitCharge,0);assert.equal(g.souljarCharge,0);assert.equal(g.sundialCasts,0)}
     for(const key of ['tide','maelstrom']){const g=expedition();equip(g,{[key]:maxWeaponLevel(key)});const e=target(g);g.grid.rebuild(g.enemies);g.updateWeapons(.01);const wave=g.zones[0];updateExpandedZone(g,wave,.1);const hp=e.hp;updateExpandedZone(g,wave,.1);assert(e.hp<e.maxHp&&e.hp===hp,'one moving wave cannot repeatedly damage a target')}
-    console.log('PASS: all three chapters and six new enemies, boss attacks/rewards, tide safe-gap edges, finite shield turning, summon loot, both innates, eighteen talent nodes, six relics and run resets.');
+    console.log('PASS: three 15-minute chapters without ambient terrain damage, continued late waves, boss skills/rewards and tide gaps, six enemies, both innates, eighteen talents, six relics and run resets.');
   }
   console.log('PASS: 44 weapons / 88 live attacks, 24 fusions, 45 innate-driven talent nodes, three timed shrines, twelve altar bargains and growth parity.');
 
@@ -879,7 +937,7 @@ try{
       {name:'summon',weapons:{blade:4,stormsentry:3,bolt:4},pair:{soulpact:3,duration:3}},
       {name:'blood',weapons:{blade:4,bloodmoon:3,bolt:5},pair:{luck:3,deadeye:3}},
     ];
-    for(const route of lateRoutes)for(const at of [360,480,540,600])for(const linked of [false,true])builds.push({name:route.name+'-'+(linked?'linked':'mixed')+'-'+at,at,level:30,weapons:route.weapons,passives:{power:3,haste:3,area:3,armor:3,...(linked?route.pair:{echo:3,forkseed:3})},late:true,boss:at===600,linked,route:route.name});
+    for(const route of lateRoutes)for(const at of [360,480,540,600,720,840,RUN_DURATION])for(const linked of [false,true])builds.push({name:route.name+'-'+(linked?'linked':'mixed')+'-'+at,at,level:30,weapons:route.weapons,passives:{power:3,haste:3,area:3,armor:3,...(linked?route.pair:{echo:3,forkseed:3})},late:true,boss:at===RUN_DURATION,linked,route:route.name});
     const budget=build=>Object.entries(build.weapons).reduce((sum,[key,level])=>sum+level+(FUSIONS[key]?.ingredients.reduce((cost,i)=>cost+i.required,0)||0),0)+Object.values(build.passives).reduce((a,b)=>a+b,0);
     assert(builds.filter(b=>b.at===450).every(b=>budget(b)===37),'late builds spend the same upgrade budget, including consumed fusion materials');
     assert(builds.filter(b=>b.late).every(b=>budget(b)===37),'late route comparisons use the same 37-point budget');
@@ -890,7 +948,7 @@ try{
       assert(!consumed.some(key=>build.weapons[key]||build.passives[key]),'consumed ingredients cannot also be equipped');
     }
     for(const build of builds)for(const moving of [false,true])for(const trial of [311,733,1193,1733,2237]){
-      seed=trial;const game=start();game.time=build.at;game.level=build.level;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set(build.boss?[180,360]:[180,360,600]);game.xpNext=1e9;game.waveClock=15;
+      seed=trial;const game=start();game.time=build.at;game.level=build.level;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set(build.boss?[180,360]:[180,360,RUN_DURATION]);game.xpNext=1e9;game.waveClock=15;
       game.meta=build.meta||{};
       // Fixed-budget comparisons ignore chest upgrades while keeping enemies and other supplies.
       game.openChest=()=>{};
@@ -902,10 +960,10 @@ try{
       for(;frames<(build.boss?1800:1200)&&!game.ended;frames++){
         const p=game.player;
         if(moving){
-          let dx=Math.cos(game.time*.18),dy=Math.sin(game.time*.18),nearest=Infinity;
-          for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;nearest=Math.min(nearest,d-e.r);if(d<65){const strength=(65-d)/65*3;dx+=x/d*strength;dy+=y/d*strength}}
+          let dx=Math.cos(game.time*.18),dy=Math.sin(game.time*.18);
+          for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;if(d<65){const strength=(65-d)/65*3;dx+=x/d*strength;dy+=y/d*strength}}
           for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
-          const length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};if(nearest<24)game.dash();
+          const length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};
         }
         game.update(.05);
       }
@@ -920,19 +978,19 @@ try{
     const total=(name,key)=>reports.filter(r=>r.name===name&&r.moving).reduce((sum,r)=>sum+r[key],0);
     // More kills and at least 25% fewer remaining threats measure room to move under the same spawn budget.
     assert(total('chain-lightning','kills')>total('raw-late','kills')&&total('chain-lightning','remaining')<total('raw-late','remaining')*.75,'finishing a linked build must open a late clear-speed advantage');
-    for(const route of lateRoutes)for(const at of [360,480,540]){
+    for(const route of lateRoutes)for(const at of [360,480,540,600,720,840]){
       const linked=route.name+'-linked-'+at,mixed=route.name+'-mixed-'+at;
       assert(total(linked,'kills')>total(mixed,'kills')*1.05&&total(linked,'remaining')<total(mixed,'remaining')*.85,'linked '+route.name+' must create a measurable clear-speed and space advantage at '+at);
     }
     assert(reports.filter(r=>r.name.includes('-mixed-')&&!r.moving).every(r=>r.hp===0),'unlinked gear cannot idle through late hordes or the final boss');
-    console.log('PASS: '+reports.length+' pressure scenarios, movement advantage, six linked routes across minutes 6–10, and equal-budget controls.');
+    console.log('PASS: '+reports.length+' pressure scenarios, movement advantage, six linked routes across minutes 6–15, and equal-budget controls.');
   }
 
   if(process.argv.includes('--talents')){
     // Same gear, level, movement policy and seeds within each character; healing starts with room to work.
     const loadouts=[{blade:6,orbit:4,flame:3},{orbit:6,bolt:4,frost:3},{bolt:6,blade:4,storm:3},{capacitor:6,needle:4,storm:3},{tide:6,lantern:4,frost:3}],reports=[];
     for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const trial of [311,733,1193]){
-      seed=trial;const game=start(character);game.time=300;game.level=30;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set([180,360,600]);game.xpNext=1e9;game.waveClock=1e9;
+      seed=trial;const game=start(character);game.time=300;game.level=30;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set([180,360,RUN_DURATION]);game.xpNext=1e9;game.waveClock=1e9;
       game.openChest=()=>{};equip(game,loadouts[index],{power:2,haste:2});const initialHp=game.player.hp=game.player.maxHp*.65;
       for(const node of branch.nodes)assert(game.learnTalent(node.id));
       let frames=0;
@@ -943,7 +1001,7 @@ try{
         let dx=goal?goal.x-p.x:Math.cos(game.time*.18),dy=goal?goal.y-p.y:Math.sin(game.time*.18),length=Math.hypot(dx,dy)||1;dx/=length;dy/=length;
         for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;if(d<65){const weight=(65-d)/65*2.8;dx+=x/d*weight;dy+=y/d*weight}}
         for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
-        length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};game.dash();game.update(.05);
+        length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};game.update(.05);
       }
       const s=game.characterState,report={character:character.id,branch:branch.name,seed:trial,level:game.level,startTime:300,seconds:frames*.05,survived:!game.ended,initialHp,hp:Math.max(0,game.player.hp),shield:game.player.shield,damageTaken:game.damageTaken,kills:game.kills,talentDamage:game.damageByWeapon.talent||0,procs:s.procs,wells:s.wells||0,hunts:s.hunts||0,coldBursts:s.coldBursts||0,starXp:s.starXp||0,reviveReady:s.reviveReady,revived:s.revived,xp:game.xp,armor:game.stats.armor,regeneration:game.stats.regeneration,weapons:game.weapons,passives:game.passives};
       assert(Object.values(report).filter(v=>typeof v==='number').every(Number.isFinite),'finite talent results: '+branch.name);
@@ -968,18 +1026,18 @@ try{
       [{tide:1,maelstrom:3,beacon:3,frost:5},{brine:3,power:3,haste:3}],
     ];
     for(const [weapons,passives] of loadouts)assert.equal(Object.entries(weapons).reduce((sum,[key,level])=>sum+level+(FUSIONS[key]?.ingredients.reduce((n,item)=>n+item.required,0)||0),0)+Object.values(passives).reduce((a,b)=>a+b,0),37);
-    for(const bargains of [[],['horizon','frenzy','glass']])for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const at of [540,600])for(const moving of [false,true])for(const trial of [311,733,1193]){
-      seed=trial;const game=start(character);game.start(character,fullPermanent);game.time=at;game.level=30;game.enemies=[];game.nextShrine=3;game.bossMilestones=new Set(at===600?[180,360]:[180,360,600]);game.xpNext=1e9;game.waveClock=15;
+    for(const bargains of [[],['horizon','frenzy','glass']])for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const at of [RUN_DURATION-60,RUN_DURATION])for(const moving of [false,true])for(const trial of [311,733,1193]){
+      seed=trial;const game=start(character);game.start(character,fullPermanent);game.time=at;game.level=30;game.enemies=[];game.nextShrine=3;game.bossMilestones=new Set(at===RUN_DURATION?[180,360]:[180,360,RUN_DURATION]);game.xpNext=1e9;game.waveClock=15;
       game.boons=[...bargains];game.openChest=()=>{};let bossesSpawned=0;const spawnBoss=game.spawnBoss;game.spawnBoss=function(milestone){spawnBoss.call(this,milestone);bossesSpawned=this.enemies.filter(e=>e.boss&&!e.dead).length};equip(game,...loadouts[index]);for(const node of branch.nodes)assert(game.learnTalent(node.id));let frames=0;
-      for(;frames<(at===600?1800:1200)&&!game.ended;frames++){
+      for(;frames<(at===RUN_DURATION?1800:1200)&&!game.ended;frames++){
         const p=game.player;
         if(moving){
-          const boss=game.enemies.find(e=>e.boss&&!e.dead);let dx=Math.cos(game.time*.18),dy=Math.sin(game.time*.18),nearest=Infinity;
+          const boss=game.enemies.find(e=>e.boss&&!e.dead);let dx=Math.cos(game.time*.18),dy=Math.sin(game.time*.18);
           if(boss){const d=Math.hypot(boss.x-p.x,boss.y-p.y)||1;dx=(boss.x-p.x)/d*(d>170?1:d<100?-1:0)+dy*.6;dy=(boss.y-p.y)/d*(d>170?1:d<100?-1:0)-dx*.6}
-          for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;nearest=Math.min(nearest,d-e.r);if(d<65){const strength=(65-d)/65*3;dx+=x/d*strength;dy+=y/d*strength}}
+          for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;if(d<65){const strength=(65-d)/65*3;dx+=x/d*strength;dy+=y/d*strength}}
           for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
           for(const h of game.hazards)if(h.type==='blast'){const x=p.x-h.x,y=p.y-h.y,d=Math.hypot(x,y)||1;if(d<h.r+30){dx+=x/d*3;dy+=y/d*3}}
-          const length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};if(nearest<28)game.dash();
+          const length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};
         }
         game.update(.05);
       }
@@ -987,14 +1045,14 @@ try{
       assert.equal(Object.keys(game.talents).length,3);assert(Object.values(report).filter(v=>typeof v==='number').every(Number.isFinite));reports.push(report);
     }
     mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/difficulty-report.json',JSON.stringify(reports,null,2));
-    for(const contracted of [false,true])for(const at of [540,600])for(const moving of [false,true]){const rows=reports.filter(r=>!!r.bargains.length===contracted&&r.at===at&&r.moving===moving),mean=k=>Math.round(rows.reduce((s,r)=>s+r[k],0)/rows.length);console.log(JSON.stringify({contracted,at,moving,runs:rows.length,alive:rows.filter(r=>r.alive).length,won:rows.filter(r=>r.won).length,damageTaken:mean('damageTaken'),kills:mean('kills'),remaining:mean('remaining'),bossHp:mean('bossHp')}))}
+    for(const contracted of [false,true])for(const at of [RUN_DURATION-60,RUN_DURATION])for(const moving of [false,true]){const rows=reports.filter(r=>!!r.bargains.length===contracted&&r.at===at&&r.moving===moving),mean=k=>Math.round(rows.reduce((s,r)=>s+r[k],0)/rows.length);console.log(JSON.stringify({contracted,at,moving,runs:rows.length,alive:rows.filter(r=>r.alive).length,won:rows.filter(r=>r.won).length,damageTaken:mean('damageTaken'),kills:mean('kills'),remaining:mean('remaining'),bossHp:mean('bossHp')}))}
 
-    const base=reports.filter(r=>!r.bargains.length),bosses=base.filter(r=>r.at===600),hordes=base.filter(r=>r.at===540);
+    const base=reports.filter(r=>!r.bargains.length),bosses=base.filter(r=>r.at===RUN_DURATION),hordes=base.filter(r=>r.at===RUN_DURATION-60);
     assert(bosses.filter(r=>r.moving&&r.won).length>=18,'max-growth formed builds retain a practical moving boss window');
     assert(bosses.filter(r=>!r.moving&&r.won).length<=6,'max-growth boss fights cannot routinely be won standing still');
     assert(hordes.filter(r=>r.moving&&r.alive).length>=24&&hordes.filter(r=>!r.moving&&r.alive).length<=12,'full talents still reward movement through the late horde');
-    assert(reports.filter(r=>r.at===600).every(r=>r.bossesSpawned===(r.bargains.length?2:1)),'the live benchmark spawns the contracted number of final bosses');
-    console.log('PASS: '+reports.length+' full-permanent-growth, legal three-point talent trials across all nine branches, late hordes, bosses and three stacked contracts.');
+    assert(reports.filter(r=>r.at===RUN_DURATION).every(r=>r.bossesSpawned===(r.bargains.length?2:1)),'the live benchmark spawns the contracted number of final bosses');
+    console.log('PASS: '+reports.length+' full-permanent-growth, legal three-point talent trials across all fifteen branches, late hordes, bosses and three stacked contracts.');
 
   }
 
@@ -1013,8 +1071,8 @@ try{
 
   if(process.argv.includes('--simulate')||process.argv.includes('--progression')||process.argv.includes('--expeditions')){
     const reports=[],compare=process.argv.includes('--progression'),chapters=process.argv.includes('--expeditions');
-    for(const stage of chapters?['foundry','coast']:['graveyard'])for(const invulnerable of compare?[true]:[false,true])for(const index of compare?[0]:chapters?[3,4]:[0,1,2,3,4])for(const bargains of compare?[[],['horizon','frenzy','glass']]:[[]]){
-      seed=137+index;const game=start(CHARACTERS[index]),checkpoints=[];
+    for(const stage of chapters?Object.keys(STAGES):['graveyard'])for(const invulnerable of compare?[true]:[false,true])for(const index of compare?[0]:[0,1,2,3,4])for(const trial of chapters?[137,311,733]:[137])for(const bargains of compare?[[],['horizon','frenzy','glass']]:[[]]){
+      seed=trial+index;const game=start(CHARACTERS[index]),checkpoints=[];
       if(compare){game.start(CHARACTERS[index],fullPermanent);game.nextShrine=ALTAR_TIMES.length}
       if(chapters)game.start(CHARACTERS[index],{}, {stage});
       let firstMaxAt=null,refinementChoices=0,chests=0,eliteKills=0,noGrowthChoices=0;
@@ -1022,7 +1080,7 @@ try{
       const kill=game.kill.bind(game);game.kill=enemy=>{if(!enemy.dead&&enemy.elite&&!enemy.boss)eliteKills++;return kill(enemy)};
       const preferred=[['blade','flame','lance','meteor','power','haste','embercore','cinder','armor','aegis'],['orbit','frost','tether','bell','rime','power','area','haste','aegis','regen'],['bolt','storm','shard','sentinel','conductor','lens','power','haste','luck','focus'],['capacitor','sentinel','needle','frost','storm','power','haste','circuit','conductor','armor','aegis'],['tide','tether','lantern','bell','needle','frost','brine','soulpact','power','haste','armor','aegis']][index];
       let nextCheckpoint=60;
-      for(let frame=0;frame<14400&&!game.ended;frame++){
+      for(let frame=0;frame<(RUN_DURATION+120)/.05&&!game.ended;frame++){
         if(game.state==='running')for(const [i,id] of bargains.entries())if(game.time>=ALTAR_TIMES[i]&&!game.boons.includes(id)){game.state='reward';game.eventChoices=[id];game.chooseAltarReward(0)}
         for(const branch of CHARACTER_TALENTS[game.character.id].branches)for(const node of branch.nodes)if(talentNodeState(game,node.id).available)game.learnTalent(node.id);
         if(game.state==='talent')game.state='running';
@@ -1036,17 +1094,17 @@ try{
         for(const d of game.drops){if(d.dead||d.type==='heal'&&p.hp>=p.maxHp)continue;const distance=Math.hypot(d.x-p.x,d.y-p.y)*(d.type==='chest'?.25:d.type==='heal'&&p.hp<p.maxHp*.5?.2:1);if(distance<best){best=distance;goal=d}}
         goal||=game.closest(p.x,p.y,800);
         let dx=goal?goal.x-p.x:Math.cos(game.time*.06),dy=goal?goal.y-p.y:Math.sin(game.time*.06),length=Math.hypot(dx,dy)||1;dx/=length;dy/=length;
-        let nearest=Infinity;const avoid=game.time<100&&index===1?75:65;
-        for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;nearest=Math.min(nearest,d-e.r);if(d<avoid){const weight=(avoid-d)/avoid*2.8;dx+=x/d*weight;dy+=y/d*weight}}
+        const avoid=game.time<100&&index===1?75:65;
+        for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;if(d<avoid){const weight=(avoid-d)/avoid*2.8;dx+=x/d*weight;dy+=y/d*weight}}
         for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
         for(const h of game.hazards){if(h.type==='tide'){if(Math.abs(p.y-h.y)<45&&Math.abs(p.x-h.gap)>25){dx+=Math.sign(h.gap-p.x)*3;dy+=Math.sign(p.y-h.y||1)*2}continue}if(h.type!=='blast')continue;const x=p.x-h.x,y=p.y-h.y,d=Math.hypot(x,y)||1;if(d<h.r+30){dx+=x/d*3;dy+=y/d*3}}
-        length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};if(nearest<24)game.dash();game.update(.05);
+        length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};game.update(.05);
         if(firstMaxAt===null&&Object.entries(game.weapons).some(([key,level])=>level===maxWeaponLevel(key)))firstMaxAt=Math.round(game.time);
-        if(game.time>=nextCheckpoint){checkpoints.push({time:nextCheckpoint,level:game.level,kills:game.kills,hp:Math.round(p.hp),chests,eliteKills,refinementChoices});nextCheckpoint+=60}
+        if(game.time>=nextCheckpoint){checkpoints.push({time:nextCheckpoint,level:game.level,kills:game.kills,hp:Math.round(p.hp),chests,eliteKills,refinementChoices,groundXp:game.drops.filter(d=>!d.dead&&d.type==='xp').reduce((sum,d)=>sum+d.value,0)});nextCheckpoint+=60}
       }
-      reports.push({stage,character:game.character.id,mode:invulnerable?'collector (damage disabled)':'survival bot',bargains,firstMaxAt,chests,eliteKills,refinementChoices,noGrowthChoices,time:Math.round(game.time),won:!!game.finalDefeated,level:game.level,kills:game.kills,damageTaken:game.damageTaken,weapons:game.weapons,passives:game.passives,weaponUpgrades:game.weaponUpgrades,talents:Object.keys(game.talents),checkpoints});
-      if(chapters){assert(Number.isFinite(game.player.hp)&&Number.isFinite(game.xp));assert(chests<=3);if(invulnerable)assert(game.time>=600,'chapter collector reaches its final boss');assert.equal(game.stage,stage)}
-      if(compare){assert.equal(noGrowthChoices,0);assert(chests<=3,'contracts cannot multiply boss chests');assert(game.time>=600,'the collector comparison reaches the last minute')}
+      reports.push({stage,character:game.character.id,seed:trial+index,mode:invulnerable?'collector (damage disabled)':'survival bot',bargains,firstMaxAt,chests,eliteKills,refinementChoices,noGrowthChoices,time:Math.round(game.time),won:!!game.finalDefeated,level:game.level,kills:game.kills,damageTaken:game.damageTaken,weapons:game.weapons,passives:game.passives,weaponUpgrades:game.weaponUpgrades,talents:Object.keys(game.talents),checkpoints});
+      if(chapters){assert(Number.isFinite(game.player.hp)&&Number.isFinite(game.xp));assert(chests<=3);if(invulnerable)assert(game.time>=RUN_DURATION,'chapter collector reaches its final boss');assert.equal(game.stage,stage)}
+      if(compare){assert.equal(noGrowthChoices,0);assert(chests<=3,'contracts cannot multiply boss chests');assert(game.time>=RUN_DURATION,'the collector comparison reaches the last minute')}
       console.log(JSON.stringify(reports.at(-1)));
     }
     mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/'+(chapters?'expeditions':compare?'progression':'balance')+'-report.json',JSON.stringify(reports,null,2));
@@ -1086,11 +1144,11 @@ try{
         for(const d of game.drops){if(d.dead||d.type==='heal'&&p.hp>=p.maxHp)continue;const distance=Math.hypot(d.x-p.x,d.y-p.y)*(d.type==='chest'?.25:d.type==='heal'&&p.hp<p.maxHp*.5?.2:1);if(distance<best){best=distance;goal=d}}
         goal||=game.closest(p.x,p.y,800);
         let dx=goal?goal.x-p.x:Math.cos(game.time*.06),dy=goal?goal.y-p.y:Math.sin(game.time*.06),length=Math.hypot(dx,dy)||1;dx/=length;dy/=length;
-        let nearest=Infinity;const avoid=game.time<100&&index===1?75:65;
-        for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;nearest=Math.min(nearest,d-e.r);if(d<avoid){const weight=(avoid-d)/avoid*2.8;dx+=x/d*weight;dy+=y/d*weight}}
+        const avoid=game.time<100&&index===1?75:65;
+        for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;if(d<avoid){const weight=(avoid-d)/avoid*2.8;dx+=x/d*weight;dy+=y/d*weight}}
         for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
         for(const h of game.hazards){if(h.type!=='blast')continue;const x=p.x-h.x,y=p.y-h.y,d=Math.hypot(x,y)||1;if(d<h.r+30){dx+=x/d*3;dy+=y/d*3}}
-        length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};if(nearest<24)game.dash();game.update(.05);
+        length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};game.update(.05);
         if(game.time+1e-8>=times[checkpoints.length]){
           const groundXp=game.drops.filter(d=>!d.dead&&d.type==='xp').reduce((sum,d)=>sum+d.value,0);
           checkpoints.push({time:times[checkpoints.length],level:game.level,weaponLevels:{...game.weapons},kills:game.kills,collectedXp:Number(collectedXp.toFixed(2)),rawCollectedXp,groundXp});
@@ -1146,6 +1204,10 @@ try{
       await call('Page.navigate',{url:'http://127.0.0.1:4173/'});
       for(let i=0;i<120;i++){if(await evaluate('return document.readyState!=="loading"&&!!document.getElementById("world")'))break;await delay(500)}
       assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.state'),'menu');
+      const timeline=await evaluate(`const {game}=await import('/src/main.js'),{STAGES}=await import('/src/expeditions.js'),{RUN_DURATION}=await import('/src/balance.js');const rows=[];for(const stage of Object.keys(STAGES)){game.start(game.character,{}, {stage});game.state='paused';for(const time of [0,600,RUN_DURATION-1,RUN_DURATION]){game.time=time;game.on('hud');rows.push({stage,time,left:document.getElementById('time-left').textContent,next:document.getElementById('next-encounter').textContent,progress:parseFloat(document.getElementById('night-progress-fill').style.width)})}}game.returnToMenu();return {rows,markers:[...document.querySelectorAll('.night-progress b')].map(e=>parseFloat(e.style.left)),departure:document.getElementById('camp-departure-note').textContent,guide:document.querySelector('.guide-grid').textContent};`);
+      assert.deepEqual(timeline.markers,[20,40]);assert(timeline.departure.includes('15 分钟')&&timeline.guide.includes('10–15 分钟'));
+      for(const row of timeline.rows){assert.equal(row.left,row.time===0?'15:00':row.time===600?'05:00':row.time<RUN_DURATION?'00:01':'击败首领');if(row.time===600){assert(row.next.startsWith('15:00'));assert(Math.abs(row.progress-200/3)<.01)}}
+      console.log('PASS: all chapter HUDs show 15-minute timing, five minutes remaining at 10:00, final boss hints and correctly positioned early milestones.');
       if(process.argv.includes('--icon-menus')){
         let touch=false;
         const activate=async selector=>{
@@ -1189,7 +1251,7 @@ try{
             await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});assert.equal(await evaluate('return document.activeElement.dataset.choice'),String(i),'guide returns focus');
           }
           await activate('#archive-screen .close-button');
-          await evaluate(`const {game}=await import('/src/main.js');game.start(game.character);game.time=600;game.damageByWeapon={blade:25000,storm:5000};game.end(true);for(let i=0;i<100&&document.getElementById('end-screen').classList.contains('hidden');i++)await new Promise(r=>setTimeout(r,10))`);
+          await evaluate(`const {game}=await import('/src/main.js');game.start(game.character);game.time=(await import("/src/balance.js")).RUN_DURATION;game.damageByWeapon={blade:25000,storm:5000};game.end(true);for(let i=0;i<100&&document.getElementById('end-screen').classList.contains('hidden');i++)await new Promise(r=>setTimeout(r,10))`);
           if(touch){for(const key of ['summary','damage']){await activate('#end-report>.mobile-picker [data-choice='+key+']');await fit('result '+width+' '+key,'.end-panel')}await shot('icon-result-'+width+'x'+height)}
         }
         touch=false;await call('Emulation.setTouchEmulationEnabled',{enabled:false});await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await evaluate(`const {game}=await import('/src/main.js');game.returnToMenu();document.getElementById('play-button').click();document.querySelector('#stage-choices [data-choice=graveyard]').focus()`);
@@ -1219,7 +1281,7 @@ try{
             await activate('#menu-talents-button');assert.equal(await evaluate('return document.querySelectorAll("#sheet-talents .talent-node:not(.innate)").length'),9);await shot('expansion-talents-'+index+'-'+width+'x'+height);await activate('#sheet-close');
             await activate('#start-button');
             const live=await evaluate('const {game}=await import("/src/main.js");game.state="paused";return {character:game.character.id,stage:game.stage,weapon:Object.keys(game.weapons)[0],label:document.getElementById("stage-label").textContent}');assert.equal(live.character,CHARACTERS[index].id);assert.equal(live.stage,stage);assert.equal(live.weapon,CHARACTERS[index].weapon);
-            await evaluate(`const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js');game.time=180;game.enemies=[];game.effects=[];game.level=30;game.talents={};game.weapons=${JSON.stringify(stage==='foundry'?{arcforge:3,needle:6}:{maelstrom:3,beacon:3})};game.passives={area:2,haste:2};game.stats=characterStats(game.character,game.passives,{},game.talents,game.weapons);const kinds=${JSON.stringify(stage==='foundry'?['cinderling','bomber','bulwark','oracle']:['siren','leech','oracle','ghost'])};for(let i=0;i<24;i++){const a=i*Math.PI/12,e=game.spawnEnemy(kinds[i%4]);e.x=game.player.x+Math.cos(a)*(65+i%4*20);e.y=game.player.y+Math.sin(a)*(65+i%4*20);e.hp=e.maxHp=1e6;e.speed=0}game.grid.rebuild(game.enemies);game.updateWeapons(.01);for(let i=0;i<3;i++){game.updateProjectiles(.05);game.updateZones(.05)}game.nextStageHazard=0;const {updateExpedition}=await import('/src/expeditions.js');updateExpedition(game);game.on('weapons');game.on('hud');game.render();`);
+            await evaluate(`const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js');game.time=180;game.enemies=[];game.effects=[];game.level=30;game.talents={};game.weapons=${JSON.stringify(stage==='foundry'?{arcforge:3,needle:6}:{maelstrom:3,beacon:3})};game.passives={area:2,haste:2};game.stats=characterStats(game.character,game.passives,{},game.talents,game.weapons);const kinds=${JSON.stringify(stage==='foundry'?['cinderling','bomber','bulwark','oracle']:['siren','leech','oracle','ghost'])};for(let i=0;i<24;i++){const a=i*Math.PI/12,e=game.spawnEnemy(kinds[i%4]);e.x=game.player.x+Math.cos(a)*(65+i%4*20);e.y=game.player.y+Math.sin(a)*(65+i%4*20);e.hp=e.maxHp=1e6;e.speed=0}game.grid.rebuild(game.enemies);game.updateWeapons(.01);for(let i=0;i<3;i++){game.updateProjectiles(.05);game.updateZones(.05)}game.spawnBoss(180);for(const boss of game.enemies.filter(e=>e.boss)){boss.attack=0;game.updateEnemy(boss,.01)}game.on('weapons');game.on('hud');game.render();`);
             await shot('expansion-'+stage+'-'+width+'x'+height);assert(await evaluate('const {game}=await import("/src/main.js");return !Object.values(game.stats).some(v=>typeof v==="number"&&!Number.isFinite(v))'));assert.equal(errors.length,0,JSON.stringify(errors));
             await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("play-button").click()');
           }
@@ -1240,7 +1302,7 @@ try{
             await evaluate(`
               const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{upgradePool}=await import('/src/balance.js');
               if(!document.getElementById('status-screen').classList.contains('hidden'))document.getElementById('sheet-close').click();
-              game.start(game.character);game.level=40;game.time=480;game.nextShrine=3;game.bossMilestones=new Set([180,360,600]);game.enemies=[];game.player.invincible=999;game.spawnClock=game.waveClock=1e9;
+              game.start(game.character);game.level=40;game.time=480;game.nextShrine=3;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.enemies=[];game.player.invincible=999;game.spawnClock=game.waveClock=1e9;
               game.weapons={blade:6,bolt:6,hailfire:3,soulforge:3,thorn:6,storm:6};game.passives={power:5,haste:5,area:3,armor:5,luck:5,focus:3};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth,game.weaponUpgrades);
               const pool=upgradePool(game);game.choices=${JSON.stringify(selection)}.map(([key,refinement,rarity])=>pool.find(item=>item.key===key&&item.refinement===refinement&&item.rarity===rarity));if(game.choices.some(item=>!item))throw Error('missing refinement');
               game.state='level';game.pendingLevels=2;game.on('weapons');game.on('hud');game.on('level');
@@ -1333,7 +1395,7 @@ try{
       await evaluate('document.getElementById("status-button").click();document.getElementById("sheet-tab-items").click();');
       await shot('build-desktop');
       assert(await evaluate('return document.getElementById("sheet-build-summary").textContent.includes("3 / 6")'));
-      await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.time=602;game.level=40;game.weapons={starfall:2,ricochet:2,soulchain:2,lance:4,sentinel:4,frost:4};game.passives={aegis:2,venomfang:2,rime:2,area:1,armor:2,thorns:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.player.hp=game.player.maxHp=game.stats.maxHp;game.player.invincible=50;game.enemies=[];game.drops=[];game.zones=[];game.projectiles=[];game.bossMilestones=new Set([180,360,600]);game.spawnClock=10;game.waveClock=10;game.pendingLevels=0;game.xpNext=10000;for(let i=0;i<100;i++){const e=game.spawnEnemy(i%4===0?"knight":i%3===0?"ghost":"reaper");const a=i*2.4,r=85+(i%10)*12;e.x=game.player.x+Math.cos(a)*r;e.y=game.player.y+Math.sin(a)*r;}game.spawnBoss(600);game.on("weapons");for(let i=0;i<96;i++)game.update(.025);game.state="over";game.on("hud");game.render();');
+      await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.time=(await import("/src/balance.js")).RUN_DURATION+2;game.level=40;game.weapons={starfall:2,ricochet:2,soulchain:2,lance:4,sentinel:4,frost:4};game.passives={aegis:2,venomfang:2,rime:2,area:1,armor:2,thorns:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.player.hp=game.player.maxHp=game.stats.maxHp;game.player.invincible=50;game.enemies=[];game.drops=[];game.zones=[];game.projectiles=[];game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.spawnClock=10;game.waveClock=10;game.pendingLevels=0;game.xpNext=10000;for(let i=0;i<100;i++){const e=game.spawnEnemy(i%4===0?"knight":i%3===0?"ghost":"reaper");const a=i*2.4,r=85+(i%10)*12;e.x=game.player.x+Math.cos(a)*r;e.y=game.player.y+Math.sin(a)*r;}game.spawnBoss((await import("/src/balance.js")).RUN_DURATION);game.on("weapons");for(let i=0;i<96;i++)game.update(.025);game.state="over";game.on("hud");game.render();');
       await delay(100);await shot('combat-desktop');
       await evaluate('const {game}=await import("/src/main.js");game.state="running";game.end(false);for(let i=0;i<100&&document.getElementById("end-screen").classList.contains("hidden");i++)await new Promise(r=>setTimeout(r,10));');
       assert(await evaluate('return document.getElementById("end-damage").textContent.includes("累计输出")'));
@@ -1397,7 +1459,7 @@ try{
         await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
         assert(await evaluate('const {game}=await import("/src/main.js");return '+JSON.stringify(selector)+'===".banish-button"?game.banishes===2&&game.state==="level":game.state==="running"'),'touch '+selector+' activates only its intended action');
       }
-      const visuals=await evaluate('const {game}=await import("/src/main.js");const {WEAPONS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");let frames=0;game.passives={area:3,amount:2,luck:3,deadeye:3};game.stats=characterStats(game.character,game.passives,{});game.player.invincible=1000;game.pendingLevels=0;game.xpNext=1e9;game.spawnClock=game.waveClock=1e9;game.bossMilestones=new Set([180,360,600]);for(const [key,data] of Object.entries(WEAPONS)){game.state="running";game.weapons={[key]:data.maxLevel||6};game.timers={};game.projectiles=[];game.zones=[];game.effects=[];game.enemies=[];for(let i=0;i<16;i++){const e=game.spawnEnemy("skeleton",false,30+i*8);e.hp=e.maxHp=1e8;}for(let i=0;i<100;i++){game.update(.05);game.render();frames++;}}game.state="over";return frames;');
+      const visuals=await evaluate('const {game}=await import("/src/main.js");const {WEAPONS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");let frames=0;game.passives={area:3,amount:2,luck:3,deadeye:3};game.stats=characterStats(game.character,game.passives,{});game.player.invincible=1000;game.pendingLevels=0;game.xpNext=1e9;game.spawnClock=game.waveClock=1e9;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);for(const [key,data] of Object.entries(WEAPONS)){game.state="running";game.weapons={[key]:data.maxLevel||6};game.timers={};game.projectiles=[];game.zones=[];game.effects=[];game.enemies=[];for(let i=0;i<16;i++){const e=game.spawnEnemy("skeleton",false,30+i*8);e.hp=e.maxHp=1e8;}for(let i=0;i<100;i++){game.update(.05);game.render();frames++;}}game.state="over";return frames;');
       assert.equal(visuals,Object.keys(WEAPONS).length*100);
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
       await call('Emulation.setTouchEmulationEnabled',{enabled:false});
@@ -1463,7 +1525,7 @@ try{
         await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
         await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[0]);game.time=8;game.player.invincible=999;game.bannerUntil=game.toastUntil=0;document.getElementById("event-banner").classList.remove("visible");document.getElementById("toast").classList.remove("visible");game.on("hud");');
         assert(await evaluate(`
-          const ids=['status-button','pause-button','hud-talents-button','fusion-tracker','hud-catalog-button','hud-loadout-button','touch-dash'];
+          const ids=['status-button','pause-button','hud-talents-button','fusion-tracker','hud-catalog-button','hud-loadout-button'];
           const rects=ids.map(id=>document.getElementById(id).getBoundingClientRect());
           const center={left:innerWidth*.28,right:innerWidth*.72,top:innerHeight*.36,bottom:innerHeight*.7};
           return document.documentElement.scrollWidth<=innerWidth&&!document.getElementById('world-event-card')&&rects.every(r=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&(r.right<=center.left||r.left>=center.right||r.bottom<=center.top||r.top>=center.bottom))&&rects.every((r,i)=>rects.slice(i+1).every(s=>r.right<=s.left||r.left>=s.right||r.bottom<=s.top||r.top>=s.bottom));
@@ -1485,14 +1547,13 @@ try{
         await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
         const anchor={x:width*.25,y:height*.65,id:1},moving={x:width*.25+40,y:height*.65,id:1};
         await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[anchor]});await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
-        const dash=await evaluate('const {game}=await import("/src/main.js");game.player.dashCooldown=0;const r=document.getElementById("touch-dash").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,id:2}');
-        await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[moving,dash]});
-        assert(await evaluate('const {game}=await import("/src/main.js");return game.player.dashCooldown>0&&game.stick.x>.99&&Math.abs(game.stick.y)<.01'),'second finger can dash while the first keeps moving');
+        assert(await evaluate('const {game}=await import("/src/main.js");return !document.getElementById("touch-dash")&&!document.querySelector(".dash-status")&&typeof game.dash==="undefined"&&game.stick.x>.99'),'single-finger movement needs no action button');
+        const second={x:width*.8,y:height*.65,id:2};await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[moving,second]});
+        assert(await evaluate('const {game}=await import("/src/main.js");return game.stick.x>.99&&Math.abs(game.stick.y)<.01'),'another touch cannot steal the movement joystick');
         await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
-        assert(await evaluate('const {game}=await import("/src/main.js");return game.stick.x>.99'),'releasing dash does not release movement');
+        assert(await evaluate('const {game}=await import("/src/main.js");return game.stick.x>.99'),'releasing another touch preserves movement');
         await shot('floating-joystick-'+width+'x'+height);
         await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-        await evaluate('const {game}=await import("/src/main.js");game.player.dashTime=0;');
         for(const action of ['pause','level','status','blur','resize']){
           await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[anchor]});await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[moving]});
           await evaluate('const {game}=await import("/src/main.js");const action='+JSON.stringify(action)+';if(action==="pause")game.pause();else if(action==="level"){game.gainXp(game.xpNext);game.update(.016)}else if(action==="status")document.getElementById("status-button").click();else window.dispatchEvent(new Event(action));');
@@ -1506,7 +1567,7 @@ try{
         await evaluate('document.getElementById("sheet-close").click();');
       }
       // Timed altar choices: real task completion, paused clocks, explicit costs and safe skipping.
-      const prepareAltar=async kind=>evaluate('if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();const {game}=await import("/src/main.js"),{updateWorldEvents,ALTAR_ORDER}=await import("/src/world-events.js");game.start(game.character);game.time=60;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,600]);game.player.invincible=999;updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind:'+JSON.stringify(kind)+',index:ALTAR_ORDER.indexOf('+JSON.stringify(kind)+'),goal:'+JSON.stringify(kind==='vigil'?12:kind==='hunt'?1:6)+'});Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y});game.on("hud");');
+      const prepareAltar=async kind=>evaluate('if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();const {game}=await import("/src/main.js"),{updateWorldEvents,ALTAR_ORDER}=await import("/src/world-events.js");game.start(game.character);game.time=60;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.player.invincible=999;updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind:'+JSON.stringify(kind)+',index:ALTAR_ORDER.indexOf('+JSON.stringify(kind)+'),goal:'+JSON.stringify(kind==='vigil'?12:kind==='hunt'?1:6)+'});Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y});game.on("hud");');
       const finishAltar=async()=>evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js"),s=game.activeEvent;if(s.kind==="hunt")game.kill(s.guardian);else if(s.kind==="vigil")s.progress=s.goal;else for(const mote of s.motes)Object.assign(mote,{x:game.player.x,y:game.player.y});updateWorldEvents(game,.01);game.enemies=[];game.drops=[];');
       const altarFit=async label=>assert.deepEqual(await evaluate('const p=document.querySelector(".altar-panel"),r=p.getBoundingClientRect(),issues=[];if(r.top<0||r.left<0||r.bottom>innerHeight||r.right>innerWidth||p.scrollHeight>p.clientHeight+1)issues.push("panel overflow");for(const e of p.querySelectorAll("button,h2,h3,p")){const b=e.getBoundingClientRect();if(b.top<r.top||b.bottom>r.bottom||b.left<r.left||b.right>r.right||e.scrollWidth>e.clientWidth+1)issues.push(e.textContent);if(e.tagName==="BUTTON"&&document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.closest("button")!==e)issues.push("covered button")}return issues;'),[],label);
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
@@ -1568,7 +1629,7 @@ try{
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
         const mobile=width<=700||height<=500;await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});await delay(60);
         for(const index of [0,1,2]){
-          await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS,META}=await import("/src/data.js"),{CHARACTER_TALENTS}=await import("/src/talents.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.start(CHARACTERS['+index+'],Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.max])));game.time=100;game.level=30;game.nextShrine=3;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.lastPhase=1;game.bossMilestones=new Set([180,360,600]);for(const node of CHARACTER_TALENTS[game.character.id].branches['+([2,0,1][index])+'].nodes)game.learnTalent(node.id);for(const id of ["horizon","frenzy","glass"]){game.state="reward";game.eventChoices=[id];game.chooseAltarReward(0)}const e=game.spawnEnemy("skeleton");Object.assign(e,{x:game.player.x+50,y:game.player.y,hp:1e9,maxHp:1e9});const roll=Math.random;Math.random=()=>0;try{game.hit(e,1,game.player.x,game.player.y,0,false,game.character.weapon)}finally{Math.random=roll}game.dash();game.player.shield=16;game.player.invincible=2;game.enemies=[];game.projectiles=[];game.zones=[];game.state="paused";game.on("hud");game.render()');
+          await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS,META}=await import("/src/data.js"),{CHARACTER_TALENTS}=await import("/src/talents.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.start(CHARACTERS['+index+'],Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.max])));game.time=100;game.level=30;game.nextShrine=3;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.lastPhase=1;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);for(const node of CHARACTER_TALENTS[game.character.id].branches['+([2,0,1][index])+'].nodes)game.learnTalent(node.id);for(const id of ["horizon","frenzy","glass"]){game.state="reward";game.eventChoices=[id];game.chooseAltarReward(0)}const e=game.spawnEnemy("skeleton");Object.assign(e,{x:game.player.x+50,y:game.player.y,hp:1e9,maxHp:1e9});const roll=Math.random;Math.random=()=>0;try{game.hit(e,1,game.player.x,game.player.y,0,false,game.character.weapon)}finally{Math.random=roll}(await import("/src/talents.js")).onCharacterTravel(game);game.player.shield=16;game.player.invincible=2;game.enemies=[];game.projectiles=[];game.zones=[];game.state="paused";game.on("hud");game.render()');
           const labels=await evaluate('return Object.fromEntries([...document.querySelectorAll("#hud-buffs li")].map(e=>[e.dataset.buff,e.lastElementChild.textContent]))');assert.equal(labels.tempo,'6.0s');assert.equal(labels.flare,'8.0s');assert.equal(labels.wind,'6.0s');assert.equal(labels.invincible,'2.0s');assert.equal(labels.shield,'16盾');for(const id of ['horizon','frenzy','glass'])assert.equal(labels[id],'本局');
           if(index!==1)assert.equal(labels[index===0?'assaultUntil':'ghostUntil'],index===0?'4.0s':'3.0s');
           assert.deepEqual(await evaluate('const list=document.getElementById("hud-buffs"),issues=[];for(const e of list.children){const r=e.getBoundingClientRect(),label=e.lastElementChild;if(r.left<0||r.right>innerWidth||r.top<0||r.bottom>innerHeight||label.scrollWidth>label.clientWidth+1)issues.push(e.dataset.buff);if(!e.getAttribute("aria-label")||e.getAttribute("role")!=="img")issues.push("missing accessible label");for(const b of document.querySelectorAll("#hud button")){if(!b.getClientRects().length)continue;const q=b.getBoundingClientRect();if(r.left<q.right&&r.right>q.left&&r.top<q.bottom&&r.bottom>q.top)issues.push("overlaps "+b.id)}}return issues;'),[],'buff icons fit without covering controls '+width+' '+index);
@@ -1576,7 +1637,7 @@ try{
           if(index===0)await shot('buff-countdowns-'+width+'x'+height);
           await evaluate('const {game}=await import("/src/main.js");game.state="running";for(let i=0;i<10;i++)game.update(.05);game.state="paused";game.on("hud")');assert.equal(await evaluate('return document.querySelector("#hud-buffs [data-buff=tempo] span").textContent'),'5.5s','countdown follows elapsed game time');
           await evaluate('const {game}=await import("/src/main.js");game.state="running";for(let i=0;i<154;i++)game.update(.05);game.state="paused";game.on("hud")');assert.deepEqual(await evaluate('return [...document.querySelectorAll("#hud-buffs li")].map(e=>e.dataset.buff)'),['shield','horizon','frenzy','glass'],'expired temporary effects disappear while shield and run contracts remain');
-          await evaluate('const {game}=await import("/src/main.js");game.enemies=[];game.spawnBoss(600);game.on("hud")');assert(await evaluate('return document.getElementById("boss-name").textContent.includes("剩余 2 位")'),'extra final bosses are counted in the HUD');
+          await evaluate('const {game}=await import("/src/main.js");game.enemies=[];game.spawnBoss((await import("/src/balance.js")).RUN_DURATION);game.on("hud")');assert(await evaluate('return document.getElementById("boss-name").textContent.includes("剩余 2 位")'),'extra final bosses are counted in the HUD');
           await evaluate('const {game}=await import("/src/main.js");const bosses=game.enemies.filter(e=>e.final);game.kill(bosses[0]);game.on("hud");if(game.finalDefeated||document.getElementById("boss-bar").classList.contains("hidden"))throw Error("premature victory");if(document.querySelector("#hud-buffs [data-buff=tempo] span").textContent!=="10.0s")throw Error("conquest must display its real ten-second buff");game.kill(bosses[1]);if(!game.finalDefeated)throw Error("all bosses must finish the fight");game.start(game.character);game.on("hud")');assert(await evaluate('return !document.querySelector("#hud-buffs [data-buff=tempo]")&&!document.querySelector("#hud-buffs [data-buff=glass]")'),'restarting clears timed effects and contracts');
         }
       }
@@ -1732,7 +1793,7 @@ try{
         assert(await evaluate('return document.getElementById("sheet-weapon-solar").getClientRects().length>0&&document.getElementById("sheet-tab-items").getAttribute("aria-selected")==="true"'),'recipe return selects the equipped weapon');
         await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");game.pause()');await mobileFit('pause '+width);await shot('menus-pause-'+width+'x'+height);
         await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("archive-button").click()');await visitMobile('.guide-grid>.mobile-pages-picker','guide '+width);await shot('menus-guide-'+width+'x'+height);
-        await evaluate('document.querySelector("[data-close=archive-screen]").click();const {game}=await import("/src/main.js");game.start(game.character);game.time=600;game.damageByWeapon={solar:100000,talent:20000,orb:8000};game.damageTaken=300;game.end(true)');
+        await evaluate('document.querySelector("[data-close=archive-screen]").click();const {game}=await import("/src/main.js");game.start(game.character);game.time=(await import("/src/balance.js")).RUN_DURATION;game.damageByWeapon={solar:100000,talent:20000,orb:8000};game.damageTaken=300;game.end(true)');
         for(let i=0;i<30;i++){if(await evaluate('return !document.getElementById("end-screen").classList.contains("hidden")'))break;await delay(50)}
         await visitMobile('#end-report>.mobile-pages-picker','result '+width);await shot('menus-result-'+width+'x'+height);
         await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();game.start(game.character);game.level=30;game.time=300;game.player.invincible=1e9;game.spawnClock=game.waveClock=1e9;game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,curse:5,regen:5,volatile:3};const {characterStats}=await import("/src/stats.js");game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);document.getElementById("status-button").click()');
@@ -1807,7 +1868,7 @@ try{
           const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{upgradePool}=await import('/src/balance.js'),{FUSIONS}=await import('/src/fusions.js');
           if(!document.getElementById('status-screen').classList.contains('hidden'))document.getElementById('sheet-close').click();game.returnToMenu();game.start(game.character);
           game.discoveredFusions=new Set(Object.keys(FUSIONS));game.level=30;game.time=540;game.weapons={solar:3,bolt:4};game.passives={embercore:3,cinder:2,haste:3,area:3,power:3,armor:3};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);
-          game.player.invincible=999;game.spawnClock=game.waveClock=999;game.bossMilestones=new Set([180,360,600]);game.state='level';const pool=upgradePool(game);game.choices=['cinder','haste','bolt','power'].map(key=>pool.find(item=>item.key===key));game.on('level');
+          game.player.invincible=999;game.spawnClock=game.waveClock=999;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.state='level';const pool=upgradePool(game);game.choices=['cinder','haste','bolt','power'].map(key=>pool.find(item=>item.key===key));game.on('level');
         `);
         assert(await evaluate('return document.querySelector(".upgrade-card .rarity").textContent.includes("共振Ⅱ")&&document.querySelector(".upgrade-card .relic-card-link").textContent.includes("30%")'),'the offer explains the new resonance tier');
         await shot('resonance-offer-'+width+'x'+height);await mobileFit('resonance offer '+width);

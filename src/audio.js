@@ -21,7 +21,6 @@ export class Sound{
   if(name==='slash'){this.hiss(.14,.18,1800);this.tone(280,.10,'triangle',.07,0,80)}
   if(name==='shoot')this.tone(520,.08,'triangle',.06,0,160);
   if(name==='hurt'){this.tone(160,.22,'sawtooth',.09,0,55);this.hiss(.13,.15,700)}
-  if(name==='dash'){this.hiss(.2,.19,3000);this.tone(140,.18,'sine',.10,0,450)}
   if(name==='level'){[392,493.88,587.33,783.99].forEach((f,i)=>this.tone(f,.65,'triangle',.15,i*.10))}
   if(name==='fusion'){this.hiss(.45,.16,1600);[130.81,196,261.63,392,523.25,783.99,1046.5].forEach((f,i)=>this.tone(f,1.5,'triangle',.14,i*.11));this.tone(65.4,1.8,'sine',.16)}
   if(name==='select'){this.tone(580,.07,'triangle',.09);this.tone(870,.13,'sine',.07,.06)}

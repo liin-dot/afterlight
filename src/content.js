@@ -1,6 +1,6 @@
 // All entries are local, original game content. Levels share the combat formulas in stats.js.
 export const NEW_WEAPONS = {
-  capacitor:{name:'鸣雷线圈',evolution:'终焉·电冕',color:'#e4c179',category:'雷电 / 跳跃放电',desc:'向近敌释放电弧，在不同目标间跳跃；进化后末端爆发雷环。',upgrades:['电弧跳向两个不同目标。','提高电弧伤害与连锁距离。','增加连锁目标。','提高伤害与放电频率。','再次增加连锁目标。','进化：连锁末端引发雷环。'],cooldown:1.1},
+  capacitor:{name:'鸣雷线圈',evolution:'终焉·电冕',color:'#e4c179',category:'雷电 / 跳跃放电',desc:'向近敌释放电弧，在不同目标间跳跃；进化后末端爆发雷环。',upgrades:['电弧跳向两个不同目标。','增加一个连锁目标，提高伤害。','提高电弧伤害与连锁距离。','再次增加连锁目标，放电更快。','提高电弧伤害与连锁距离。','进化：再增一个连锁目标，末端爆发雷环。'],cooldown:1.1},
   tide:{name:'回潮法印',evolution:'终焉·沧浪',color:'#91d9e0',category:'寒潮 / 移动波阵',desc:'向近敌推出缓慢前进的潮环，击退并减速沿途敌人；同一潮环只命中每名敌人一次。',upgrades:['推出击退与减速潮环。','提高潮环伤害与半径。','每轮推出两道潮环。','提高伤害与减速持续。','潮环覆盖更远。','进化：三道宽阔寒潮冻结敌人。'],cooldown:2.1},
   needle:{name:'霜织飞梭',evolution:'终焉·千针雪',color:'#badfee',category:'投射 / 寒针穿透',desc:'发射高速寒针，穿透并减速；进化后命中附带短暂冻结。',upgrades:['发射两枚穿透寒针。','提高伤害与穿透。','增加一枚寒针。','提高伤害与射速。','增加寒针与穿透目标。','进化：六枚寒针冻结追兵。'],cooldown:1.8},
   lantern:{name:'渡魂天灯',evolution:'终焉·千灯渡',color:'#c2e7bb',category:'灵魂 / 追踪灯火',desc:'放飞追踪魂灯，穿过敌群；进化后每枚魂灯首次命中引发魂光震荡。',upgrades:['放飞两枚追踪魂灯。','提高魂灯伤害。','增加魂灯数量。','提高伤害与穿透。','再次增加魂灯数量。','进化：魂灯首击引发范围震荡。'],cooldown:2.8},
@@ -40,13 +40,13 @@ export const NEW_WEAPONS = {
 export const RELICS = {
   circuit:{name:'过载铜环',color:'#e7c27d',max:3,relic:true,trigger:'雷电直接命中',families:['lightning'],desc:'每累计六次雷电命中，向附近目标放出额外电弧。',lore:'过载的余音，也能成为兵器。'},
   brine:{name:'深盐结晶',color:'#9cdae0',max:3,relic:true,trigger:'寒霜、灵魂直接命中',families:['cold','spirit'],desc:'命中留下减速盐痕，并附加短暂易伤。',lore:'大海退去之后，伤口仍记得它。'},
-  wake:{name:'破浪罗盘',color:'#99d3df',max:3,relic:true,trigger:'主动冲刺',families:['dash'],desc:'冲刺时向身后放出扇形穿透魂矢。',lore:'归路永远指向你身后的潮声。'},
+  wake:{name:'破浪罗盘',color:'#99d3df',max:3,relic:true,trigger:'累计移动',families:['travel'],desc:'每累计移动 240 像素，向身后放出扇形穿透魂矢。',lore:'归路永远指向你身后的潮声。'},
   souljar:{name:'拾魂瓮',color:'#c4dcaa',max:3,relic:true,trigger:'击败敌人',families:['hit'],desc:'每击败十二个非召唤敌人，放出三枚追踪魂火。',lore:'没有一个灵魂愿意独自远行。'},
   sundial:{name:'逆刻日晷',color:'#ddc69e',max:3,relic:true,trigger:'武器主动施放',families:['cast'],desc:'每施放五次武器，推进当前冷却最长的武器。',lore:'它不使时间倒流，只偷走等待。'},
   emberheart:{name:'炉心余温',color:'#e4ac8c',max:3,relic:true,trigger:'击败精英、首领',families:['guard'],desc:'击败精英或首领后恢复生命，并补充护盾。',lore:'熄灭的炉膛，也能温暖归人。'},
   everseed:{name:'无尽薪种',color:'#e4cc82',max:3,relic:true,rarity:'rare',trigger:'学习天赋后，角色能力命中',families:['talent'],desc:'学会任一天赋后，角色能力每次命中有 3% / 4.5% / 6% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2。本局累计无层数上限，无触发冷却；增加生命上限不治疗。',lore:'偶然拾到的微光，也能燃成无尽长夜。'},
   soulpact:{name:'牧魂契',color:'#acd3da',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'灵魂与召唤武器',families:['spirit','summon'],desc:'强化灵魂与召唤武器的伤害，并加快石像的射击节奏。学习星群路线后，也强化角色伴星。',lore:'灯火有了守护灯火的人。'},
-  hoarfrost:{name:'霜行石',color:'#b7dce2',max:3,relic:true,rarity:'uncommon',trigger:'主动冲刺',families:['dash'],desc:'冲刺起点爆发冰环，冻结并减速追兵；可为碎冰、雷霜反应提供寒冷状态。',lore:'踏过的地方，脚步仍留在冬天。'},
+  hoarfrost:{name:'霜行石',color:'#b7dce2',max:3,relic:true,rarity:'uncommon',trigger:'累计移动',families:['travel'],desc:'每累计移动 240 像素，脚下爆发冰环，冻结并减速追兵；可为碎冰、雷霜反应提供寒冷状态。',lore:'踏过的地方，脚步仍留在冬天。'},
   rotclock:{name:'腐时沙漏',color:'#c6bd81',max:3,relic:true,rarity:'uncommon',trigger:'燃烧与侵蚀状态伤害',families:['fire','poison'],desc:'提高附着在敌人身上的燃烧与侵蚀伤害；地面火场、毒池的独立伤害不受影响。',lore:'流逝的不是沙，是尚未腐尽的时间。'},
   bulwark:{name:'碎灯棱片',color:'#d1dbae',max:3,relic:true,rarity:'rare',trigger:'护盾被击破',families:['guard'],desc:'每次护盾被击破都向外释放追踪棱片；补盾后可再次触发，无独立冷却。',lore:'每一片碎光，都记得来袭的方向。'},
   forkseed:{name:'分岔骨钉',color:'#d7b6cf',max:3,relic:true,rarity:'rare',trigger:'武器暴击',families:['hit'],desc:'暴击时从目标位置分裂两枚追踪骨片，寻找其他敌人；骨片不暴击或再次分裂。',lore:'命运在骨缝间分出岔路。'},
@@ -59,7 +59,7 @@ export const RELICS = {
   deadeye:{name:'猎魂目',color:'#d0b2da',max:3,relic:true,rarity:'uncommon',trigger:'武器暴击',families:['hit'],desc:'暴击标记目标，短时间内受到更多伤害；重复暴击刷新标记，不叠层。',lore:'看见每一道裂隙。'},
   aegis:{name:'灯塔护符',color:'#c1d6ad',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'武器直接命中',families:['guard'],desc:'每次武器直接命中补充少量护盾，最多储存规定上限；无独立冷却。',lore:'灯光照向尚未到来的伤口。'},
   thorns:{name:'铁棘印',color:'#c4b99d',max:3,relic:true,trigger:'受到攻击',families:['guard'],desc:'每次受到攻击都向周围反击；护甲提高反击伤害，无独立冷却。',lore:'盔甲上的每一道旧伤，都朝外生长。'},
-  dashfire:{name:'踏火灰',color:'#e5ac72',max:3,relic:true,trigger:'主动冲刺',families:['dash'],desc:'冲刺起点留下燃烧区域，诱导追兵进入火场。',lore:'将退路点成火。'},
+  dashfire:{name:'踏火灰',color:'#e5ac72',max:3,relic:true,trigger:'累计移动',families:['travel'],desc:'每累计移动 240 像素，脚下留下燃烧区域，诱导追兵进入火场。',lore:'将退路点成火。'},
   harvest:{name:'拾穗烛',color:'#d3d99d',max:3,relic:true,rarity:'uncommon',trigger:'拾取经验',families:['pickup'],desc:'累计拾取一定基础经验后释放追踪魂火；经验合并不会减少充能。',lore:'每一缕遗光，都愿再守你一程。'},
   embercore:{name:'不熄燃芯',color:'#e5a16a',max:3,relic:true,catalyst:true,trigger:'刃器、投射物命中',families:['melee','projectile'],desc:'刃器或投射物命中点燃敌人，灼烧持续 2 秒。',lore:'灰烬中仍在跳动的火。'},
   conductor:{name:'引雷针',color:'#c4b2e9',max:3,relic:true,catalyst:true,trigger:'投射物、光束命中',families:['projectile','beam'],desc:'每次命中都向附近其他敌人传导闪电，无独立触发冷却。',lore:'将远方的雷声缝入武器。'},
@@ -130,10 +130,10 @@ export function itemTags(key){
 export const SYNERGIES=[
   {items:['circuit','stormcoil'],name:'双环过载',resonance:true,desc:'雷电积蓄电弧与护盾，连续命中形成连锁。'},
   {items:['brine','rime'],name:'盐霜碎镜',resonance:true,desc:'盐痕制造寒冷易伤，后续命中引发碎冰。'},
-  {items:['wake','speed'],name:'逐浪归航',resonance:true,desc:'缩短冲刺间隔，让身后不断留下魂矢。'},
+  {items:['wake','speed'],name:'逐浪归航',resonance:true,desc:'提高移速，更快积蓄移动距离，让身后不断留下魂矢。'},
   {items:['souljar','soulpact'],name:'万魂归瓮',desc:'召唤武器完成击杀，魂瓮追加追踪火力。'},
-  {items:['hoarfrost','rime'],name:'踏雪碎镜',resonance:true,desc:'冲刺冻结追兵，后续武器命中触发碎冰。'},
-  {items:['hoarfrost','stormseal'],name:'逐雷寒径',resonance:true,desc:'冲刺施加寒冷，再由雷电武器传导冻结。'},
+  {items:['hoarfrost','rime'],name:'踏雪碎镜',resonance:true,desc:'移动蓄满后冻结追兵，后续武器命中触发碎冰。'},
+  {items:['hoarfrost','stormseal'],name:'逐雷寒径',resonance:true,desc:'移动蓄满后施加寒冷，再由雷电武器传导冻结。'},
   {items:['embercore','rotclock'],name:'迟燃余烬',resonance:true,desc:'燃芯提供附着灼烧，沙漏提高每次灼烧伤害。'},
   {items:['venomfang','rotclock'],name:'侵蚀倒计时',resonance:true,desc:'蚀骨针附加侵蚀，沙漏强化每次侵蚀伤害。'},
   {items:['aegis','bulwark'],name:'碎光再生',desc:'灯塔补充护盾，护盾被击破后棱片追击敌群。'},
@@ -149,7 +149,7 @@ export const SYNERGIES=[
   {items:['focus','executioner'],name:'破军终结',resonance:true,desc:'高倍暴击配合低血增伤，更快击破重型目标。'},
   {items:['aegis','thorns'],name:'灯盾反击',desc:'护盾承受的攻击也会触发铁棘反击。'},
   {items:['armor','thorns'],name:'重甲荆棘',desc:'护甲既减伤，也直接提高铁棘反击伤害。'},
-  {items:['speed','dashfire'],name:'踏火游击',desc:'缩短冲刺冷却，留下更多火场阻断追兵。'},
+  {items:['speed','dashfire'],name:'踏火游击',desc:'提高移速，更快积蓄移动距离，留下更多火场阻断追兵。'},
   {items:['magnet','harvest'],name:'拾光引魂',desc:'扩大收集范围，更安全地积累魂火充能。'},
 ];
 
@@ -195,13 +195,13 @@ export function relicDescription(key,level,stats) {
   switch(key) {
     case 'circuit': return '每累计 6 次雷电直接命中，传导 '+v.count+' 个其他目标，各 '+d(v.damage)+' 伤害；追加电弧不递归触发。';
     case 'brine': return '寒霜、灵魂武器直接命中减速 55%，并施加 '+d((v.multiplier-1)*100)+'% 易伤，持续 '+s(v.duration)+' 秒；同类刷新，易伤只取最高。';
-    case 'wake': return '每次冲刺向身后发射 '+v.count+' 枚魂矢，各 '+d(v.damage)+' 伤害，穿透 2 个目标；不触发命中遗物。';
+    case 'wake': return '每累计移动 240 像素，向身后发射 '+v.count+' 枚魂矢，各 '+d(v.damage)+' 伤害，穿透 2 个目标；不触发命中遗物。';
     case 'souljar': return '击败 12 个非召唤敌人，放出 3 枚追踪魂火，各 '+d(v.damage)+' 伤害；追加火力不触发命中遗物。';
     case 'sundial': return '每施放 5 次武器，将剩余施放冷却最长的一件武器推进 '+s(v.advance)+' 秒；环绕接触不计数。';
     case 'emberheart': return '击败精英或首领恢复 '+v.heal+' 生命，护盾补至 '+v.shield+'；不超过生命上限，不覆盖更高护盾。';
     case 'everseed': return '学会天赋后，角色能力命中：'+s(v.chance*100)+'% 随机获得伤害 +1%、范围 +1% 或生命上限 +2；本局无限累加、无冷却，加生命不治疗。';
     case 'soulpact': return '灵魂、召唤武器伤害 +'+d((v.multiplier-1)*100)+'%；石像与灵龛射击间隔缩短 '+d((1-v.interval)*100)+'%。学习星群路线后，伴星继承上述两项加成。';
-    case 'hoarfrost': return '冲刺起点爆发半径 '+v.radius+' 冰环，造成 '+d(v.damage)+' 伤害；冻结普通敌人 '+s(v.freeze)+' 秒、首领 '+v.bossFreeze+' 秒，再减速 55% 持续 '+s(v.slowDuration)+' 秒。';
+    case 'hoarfrost': return '每累计移动 240 像素，脚下爆发半径 '+v.radius+' 冰环，造成 '+d(v.damage)+' 伤害；冻结普通敌人 '+s(v.freeze)+' 秒、首领 '+v.bossFreeze+' 秒，再减速 55% 持续 '+s(v.slowDuration)+' 秒。';
     case 'rotclock': return '附着燃烧、侵蚀的每次状态伤害 +'+d((v.multiplier-1)*100)+'%；地面火场与毒池伤害不变。';
     case 'bulwark': return '每次护盾被击破都释放 '+v.count+' 枚追踪棱片，各造成 '+d(v.damage)+' 伤害，无独立冷却。棱片不暴击或触发命中遗物。';
     case 'forkseed': return '每次武器暴击都分裂 '+v.count+' 枚追踪骨片，寻找其他敌人，各造成 '+d(v.damage)+' 伤害，无独立冷却。骨片不暴击、不触发命中遗物。';
@@ -214,7 +214,7 @@ export function relicDescription(key,level,stats) {
     case 'deadeye': return '武器暴击后标记 '+v.duration+' 秒，目标受到伤害 +'+d((v.multiplier-1)*100)+'%；刷新不叠加。';
     case 'aegis': return '每次武器直接命中补充 '+s(v.gain)+' 护盾，最多存至 '+v.shield+' 点；无独立冷却，不能提高已有的更高护盾。';
     case 'thorns': return '每次受到攻击，都在半径 '+v.radius+' 内反击 '+d(v.damage)+' 伤害（已计护甲）；无独立冷却。';
-    case 'dashfire': return '冲刺起点留下半径 '+v.radius+' 火场，持续 '+s(v.duration)+' 秒，每 0.5 秒造成 '+d(v.damage)+' 伤害并点燃。';
+    case 'dashfire': return '每累计移动 240 像素，脚下留下半径 '+v.radius+' 火场，持续 '+s(v.duration)+' 秒，每 0.5 秒造成 '+d(v.damage)+' 伤害并点燃。';
     case 'harvest': return '累计拾取 '+v.charge+' 基础经验释放 '+v.count+' 枚追踪魂火，各造成 '+d(v.damage)+' 伤害；合并结晶按完整经验充能。';
     case 'embercore': return '刃器或投射物命中点燃 2 秒，每 0.5 秒造成 '+d(v.damage)+' 灼烧伤害；重复命中刷新持续时间。';
     case 'conductor': return '每次投射物或光束命中，都向 '+v.count+' 个其他目标传导各 '+d(v.damage)+' 伤害；无独立冷却，追加闪电不递归触发。';
@@ -232,14 +232,14 @@ export const ALTAR_BOONS={
   horizon:{name:'裂界星图',icon:'area',positive:'范围 +45%',negative:'普通刷怪与怪潮数量 +50%',multiply:{areaMultiplier:1.45},difficulty:{population:.5}},
   frenzy:{name:'疾鸣沙漏',icon:'haste',positive:'攻击频率 +35%',negative:'随机精英出现概率 +50%',multiply:{haste:1/1.35},difficulty:{elite:.5}},
   glass:{name:'碎命烛冠',icon:'curse',positive:'伤害 +40%',negative:'后续每波首领数量 +1',multiply:{damageMultiplier:1.4},difficulty:{bosses:1}},
-  stride:{name:'逐风契约',icon:'speed',positive:'移速 +25%，冲刺冷却 −20%',negative:'怪物移动速度 +12%',multiply:{moveSpeed:1.25,dashCooldown:.8},difficulty:{speed:.12}},
+  stride:{name:'逐风契约',icon:'speed',positive:'移速 +25%，拾取范围 +25%',negative:'怪物移动速度 +12%',multiply:{moveSpeed:1.25,pickupRadius:1.25},difficulty:{speed:.12}},
   winter:{name:'长夜寒誓',icon:'duration',positive:'持续时间 +55%，范围 +15%',negative:'怪物与首领生命 +25%',multiply:{durationMultiplier:1.55,areaMultiplier:1.15},difficulty:{hp:.25}},
   twins:{name:'破碎双生',icon:'amount',positive:'投射物、环绕物与落雷目标 +2',negative:'后续每波首领数量 +1',add:{amount:2},difficulty:{bosses:1}},
   harvest:{name:'饥渴灵冠',icon:'growth',positive:'经验 +35%，拾取范围 +60%',negative:'普通刷怪与怪潮数量 +50%',multiply:{xpMultiplier:1.35,pickupRadius:1.6},difficulty:{population:.5}},
   fortress:{name:'负山灯壁',icon:'armor',positive:'最大生命 +30%，护甲 +3',negative:'怪物与首领伤害 +20%',add:{armor:3},multiply:{maxHp:1.3},difficulty:{damage:.2}},
   precision:{name:'孤注猎瞳',icon:'focus',positive:'暴击率 +20 个百分点，暴击倍率 +0.5',negative:'随机精英出现概率 +50%',add:{criticalChance:.2,criticalMultiplier:.5},difficulty:{elite:.5}},
   renewal:{name:'回生苔心',icon:'regen',positive:'每秒恢复 0.8 生命',negative:'怪物与首领生命 +25%',add:{regeneration:.8},difficulty:{hp:.25}},
-  pilgrim:{name:'灰烬行者',icon:'dashfire',positive:'冲刺冷却 −40%，冲刺保护 +0.12 秒',negative:'怪物移动速度 +12%',add:{dashInvincibility:.12},multiply:{dashCooldown:.6},difficulty:{speed:.12}},
+  pilgrim:{name:'灰烬行者',icon:'dashfire',positive:'护甲 +3，受到伤害 −15%',negative:'怪物移动速度 +12%',add:{armor:3},multiply:{damageTakenMultiplier:.85},difficulty:{speed:.12}},
   souls:{name:'群魂共鸣',icon:'soulpact',positive:'灵魂、召唤武器与伴星伤害 +45%',negative:'怪物与首领伤害 +20%',multiply:{summonMultiplier:1.45},difficulty:{damage:.2}},
 };
 
@@ -257,7 +257,7 @@ export function compatibleWeapons(key,weapons,passives={},talents={},characterId
   if(key==='volatile'&&!(fire&&poison)||key==='stormseal'&&!cold)return [];
   return Object.keys(weapons).filter(id=>{
     const tags=WEAPON_FAMILIES[id]||[];
-    return families.some(tag=>['hit','guard','dash','pickup'].includes(tag))||tags.some(tag=>families.includes(tag))
+    return families.some(tag=>['hit','guard','travel','pickup'].includes(tag))||tags.some(tag=>families.includes(tag))
       || key==='cinder'&&fire
       || key==='spore'&&poison
       || key==='rime'&&cold

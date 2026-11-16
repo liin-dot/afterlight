@@ -14,8 +14,8 @@ export function characterStats(character, passives = {}, meta = {}, talents = {}
     maxHp: character.hp + (meta.vitality || 0) * 4 + (passives.vitality || 0) * 12 + (growth.vitality||0)*2,
     damageMultiplier: character.damage * (1 + (meta.power || 0) * .03 + (passives.power || 0) * .12 + (passives.curse || 0) * .10)*(1+(growth.damage||0)*.01),
     haste: Math.max(.7, 1 - (passives.haste || 0) * .06),
-    moveSpeed: character.speed * (1 + (passives.speed || 0) * .06 + (meta.pace||0)*.02),
-    pickupRadius: 42 * (character.id === 'witch' ? 1.35 : 1) * (1 + (passives.magnet || 0) * .35),
+    moveSpeed: character.speed * (1 + (passives.speed || 0) * .06 + (meta.pace||0)*.02)*(character.id==='mariner'?1.1:1),
+    pickupRadius: 48 * (character.id === 'witch' ? 1.35 : 1) * (1 + (passives.magnet || 0) * .35 + (passives.speed||0)*.06),
     xpMultiplier: 1 + (passives.growth || 0) * .10 + (meta.magnet || 0) * .03 + (passives.curse || 0) * .08,
     armor: (passives.armor || 0) * 2 + (character.id==='smith'?1:0),
     regeneration: (passives.regen || 0) * .22,
@@ -26,10 +26,6 @@ export function characterStats(character, passives = {}, meta = {}, talents = {}
     durationMultiplier: 1 + (passives.duration || 0) * .15,
     amount: passives.amount || 0,
     curse: passives.curse || 0,
-    dashCooldown: 3 * (1 - (passives.speed || 0) * .06)*(character.id==='mariner'?.85:1),
-    dashDuration: .22,
-    dashInvincibility: .38,
-    dashSpeedMultiplier: 4.7,
   };
   for(const id of new Set(boons)){
     const boon=ALTAR_BOONS[id];if(!boon)continue;

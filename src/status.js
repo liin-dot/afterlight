@@ -246,7 +246,7 @@ export class CharacterSheet {
     this.renderCollection('items');
     this.buildMeta(meta,preview);
     const attributes=[...$('sheet-stat-grid').children],groups=[];
-    for(let i=0;i<attributes.length;i+=4)groups.push(['stats-'+i,['战斗','续航','增幅','机制','冲刺'][i/4],attributes.slice(i,i+4),['blade','regen','luck','duration','speed'][i/4]]);
+    for(let i=0;i<attributes.length;i+=4)groups.push(['stats-'+i,['战斗','续航','增幅','机制'][i/4],attributes.slice(i,i+4),['blade','regen','luck','duration'][i/4]]);
     groups.push(...META_TREES.map((tree,index)=>['meta-'+tree.id,tree.name,[$('sheet-meta').children[index]],tree.nodes[0]]));
     this.mobilePages($('sheet-attributes'),'选择属性分类',groups);
     this.buildFusions(weapons,passives,preview);
@@ -328,17 +328,15 @@ export class CharacterSheet {
   }
 
   buildAttributes(character, stats, p, m, preview) {
-    const dashLeft = preview ? 0 : this.game.player.dashCooldown;
-    const dashState = !preview && this.game.player.dashTime > 0 ? '正在冲刺' : dashLeft > 0 ? '剩余 ' + seconds(dashLeft) : '已就绪';
     const rows = [
       ['vitality', '最大生命', stats.maxHp, '点', source(['角色基础 ' + character.hp, m.vitality && `长明之躯 +${m.vitality * 4}`, p.vitality && `不灭之心 +${p.vitality * 12}`])],
       ['power', '武器伤害', percent(stats.damageMultiplier), '倍率', source([`角色基础 ×${number(character.damage, 2)}`, m.power && `祭坛 +${m.power * 3}%`, p.power && `猩红誓约 +${p.power * 12}%`,p.curse&&`禁忌烛冠 +${p.curse*10}%`])],
       ['haste', '武器间隔缩减', percent(1-stats.haste*(stats.metaBuffs.haste||1)), '', p.haste ? `时隙沙漏 ${p.haste} 级；含召唤、环绕与领域，共振另计。` : '暂无间隔祝福；武器等级与共振仍会影响实际频率。'],
-      ['speed', '移动速度', number(stats.moveSpeed*(stats.metaBuffs.move||1)), '像素 / 秒', source([`角色基础 ${character.speed}`,m.pace&&'行旅轻步 +'+m.pace*2+'%', p.speed && `夜行之靴 +${p.speed * 6}%`])],
-      ['armor', '伤害减免', stats.armor, '点 / 次', (character.id==='smith'?'铸雷师自带 1 护甲。':'')+'护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'],
+      ['speed', '移动速度', number(stats.moveSpeed*(stats.metaBuffs.move||1)), '像素 / 秒', source([`角色基础 ${character.speed}`,character.id==='mariner'&&'渡潮人 ×1.1',m.pace&&'行旅轻步 +'+m.pace*2+'%', p.speed && `夜行之靴 +${p.speed * 6}%`])],
+      ['armor', '伤害减免', stats.armor, '点 / 次', (character.id==='smith'?'铸雷师自带 1 护甲。':'')+'护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'+(stats.damageTakenMultiplier!==1?'契约额外伤害倍率 ×'+number(stats.damageTakenMultiplier,2)+'。':'')],
       ['regen', '持续恢复', number(stats.regeneration,2), '点 / 秒', p.regen ? '复苏苔芽在战斗中持续恢复。' : '需要本局选择恢复道具。'],
       ['regen', '避伤恢复', number(stats.recovery,2), '点 / 秒', '春回之息：连续 4 秒未受攻击后生效；护盾受击也会打断。'],
-      ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 42', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .35, 2)}`])],
+      ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 48', character.id === 'witch' && '逐星者 ×1.35', p.magnet && ('引魂石 +'+p.magnet*35+'%'),p.speed && ('夜行之靴 +'+p.speed*6+'%')])],
       ['growth', '经验获取', percent(stats.xpMultiplier), '倍率', source(['基础 100%', p.growth && `记忆冠冕 +${p.growth * 10}%`, m.magnet && `祭坛 +${m.magnet * 3}%`,p.curse&&`禁忌烛冠 +${p.curse*8}%`])],
       ['luck', '暴击率', percent(stats.criticalChance), '', source(['武器直接命中独立判定，基础 5%', p.luck && `命运四叶 +${p.luck * 5} 个百分点`])],
       ['focus', '暴击伤害', percent(stats.criticalMultiplier), '倍率', '持续状态、天赋与遗物的追加伤害不暴击。'],
@@ -347,8 +345,6 @@ export class CharacterSheet {
       ['amount','额外数量',stats.amount,'个','弹数、环绕物与落雷目标；炮台数量上限仍为 2。'],
       ['aegis','当前护盾',preview?(character.id==='warden'?8:0):number(this.game.player.shield),'点','护盾先于生命承受伤害，多个来源取较高值。'],
       ['curse','禁忌等级',stats.curse,'级',stats.curse?`敌人生命 +${stats.curse*12}%，生成频率 +${stats.curse*8}%，速度 +${stats.curse*3}%。`:'未持有禁忌烛冠；怪物按时间变强，不随你的等级额外膨胀。'],
-      ['speed', '冲刺冷却', number(stats.dashCooldown, 2), '秒', source([dashState,'基础 3 秒',character.id==='mariner'&&'渡潮人缩短 15%',p.speed&&`夜行之靴缩短 ${p.speed * 6}%`])],
-      ['armor', '冲刺保护', number(stats.dashInvincibility, 2), '秒', `${number(stats.dashDuration, 2)} 秒冲刺，速度 ×${stats.dashSpeedMultiplier}；冲刺起手获得无敌。`],
     ];
     $('sheet-stat-grid').replaceChildren(...rows.map(([key, label, value, unit, detail]) => {
       const card = node('article', 'sheet-stat'), list = node('dl'), term = node('dt');

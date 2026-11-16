@@ -150,8 +150,8 @@ export function onPlayerHurt(game,shieldBroke=false){
   }
 }
 
-export function onPlayerDash(game){
-  if(game.passives.wake){const v=relicValues('wake',game.passives.wake,game.stats),p=game.player,a=Math.atan2(-p.dashY,-p.dashX);for(let i=0;i<v.count;i++){const angle=a+(i-(v.count-1)/2)*.25;game.projectiles.push({type:'soul',x:p.x,y:p.y-8,vx:Math.cos(angle)*220,vy:Math.sin(angle)*220,r:4,t:2,pierce:v.pierce,damage:v.damage,hit:new Set(),trail:[],refracted:true})}readyProc(game,'wake')}
+export function onPlayerTravel(game){
+  if(game.passives.wake){const v=relicValues('wake',game.passives.wake,game.stats),p=game.player,a=Math.atan2(-p.lastY,-p.lastX);for(let i=0;i<v.count;i++){const angle=a+(i-(v.count-1)/2)*.25;game.projectiles.push({type:'soul',x:p.x,y:p.y-8,vx:Math.cos(angle)*220,vy:Math.sin(angle)*220,r:4,t:2,pierce:v.pierce,damage:v.damage,hit:new Set(),trail:[],refracted:true})}readyProc(game,'wake')}
   const p=game.player;
   if(game.passives.dashfire){
     const v=relicValues('dashfire',game.passives.dashfire,game.stats);

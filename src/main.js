@@ -114,7 +114,7 @@ function updatePreparation(){
  text('camp-weapon-label',WEAPONS[weapon].name+' · LV.1');
  text('camp-start-context',character.name+' · '+STAGES[selectedStage].name);
  for(const button of $('stage-choices').children)button.setAttribute('aria-pressed',String(button.dataset.choice===selectedStage));
- text('stage-description',STAGES[selectedStage].hint);text('camp-departure-note','生存十分钟 · 击败'+STAGES[selectedStage].bosses[2]+' · 通关额外 +'+STAGES[selectedStage].reward+' 余烬');
+ text('stage-description',STAGES[selectedStage].hint);text('camp-departure-note','生存 '+RUN_DURATION/60+' 分钟 · 击败'+STAGES[selectedStage].bosses[2]+' · 通关额外 +'+STAGES[selectedStage].reward+' 余烬');
 }
 function updateMenu(){
  text('meta-count',save.embers.toLocaleString()+' ✦');
@@ -142,9 +142,9 @@ function updateHud(){
  updateBuffHud();
  text('shield-label',game.player.shield>0?'◇ 护盾 '+Math.ceil(game.player.shield):'');
  $('night-progress-fill').style.width=Math.min(100,game.time/RUN_DURATION*100)+'%';
- const bossesForStage=STAGES[game.stage].bosses;text('next-encounter',game.time<180?'03:00 · '+bossesForStage[0]:game.time<360?'06:00 · '+bossesForStage[1]:game.time<600?'10:00 · '+bossesForStage[2]:'终局 · 击败'+bossesForStage[2]);
+ const bossesForStage=STAGES[game.stage].bosses;text('next-encounter',game.time<180?'03:00 · '+bossesForStage[0]:game.time<360?'06:00 · '+bossesForStage[1]:game.time<RUN_DURATION?formatTime(RUN_DURATION)+' · '+bossesForStage[2]:'终局 · 击败'+bossesForStage[2]);
  text('curse-label',game.stats.curse?'禁忌 '+game.stats.curse+' · 怪物强化':'');
- const maxCooldown=game.stats.dashCooldown;$('dash-cooldown').style.height=Math.min(100,game.player.dashCooldown/maxCooldown*100)+'%';$('touch-dash').style.opacity=game.player.dashCooldown>0?'.45':'1';
+
  const bosses=game.enemies.filter(e=>e.boss&&!e.dead);const boss=bosses.find(e=>e.final)||bosses[0];if(boss){show('boss-bar');text('boss-name',boss.name+(bosses.length>1?' · 剩余 '+bosses.length+' 位':'')+(boss.enraged?' · 狂怒':''));$('boss-fill').style.width=Math.max(0,boss.hp/boss.maxHp*100)+'%';text('boss-health',Math.max(0,Math.ceil(boss.hp)).toLocaleString()+' / '+boss.maxHp.toLocaleString());lastBoss=boss.id}else{hide('boss-bar');lastBoss=null}
 }
 function buildDock(){
@@ -234,7 +234,7 @@ function buildUpgrades(reveal=true){
   if(item.fusion){const ingredients=document.createElement('div');ingredients.className='fusion-card-materials';ingredients.textContent='消耗：'+item.ingredients.map(i=>`${ingredientData(i).name} LV.${i.level}`).join(' ＋ ')+(item.ingredients.some(i=>game.weaponUpgrades[i.id])?' · 材料精修不继承':'');button.append(ingredients)}
   if(relic){
    const linked=compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades),note=document.createElement('div');note.className='relic-card-link';
-   const broad=PASSIVES[item.key].families.some(tag=>['guard','dash','pickup'].includes(tag)),companion=item.key==='soulpact'&&game.talents.s_swarm1;
+   const broad=PASSIVES[item.key].families.some(tag=>['guard','travel','pickup'].includes(tag)),companion=item.key==='soulpact'&&game.talents.s_swarm1;
    note.textContent=(companion?'当前联动：星群伴星'+(linked.length?'、'+linked.map(id=>WEAPONS[id].name).join('、'):''):linked.length?(broad?'触发方式：'+PASSIVES[item.key].trigger:'当前联动：'+linked.map(id=>WEAPONS[id].name).join('、')):'尚缺稳定触发来源')+(PASSIVES[item.key].catalyst?' · 可作为融合材料':'');note.dataset.compact=linked.length||companion?'联动已就绪':'尚缺触发来源';if(!resonance)button.append(note);
   }
   if(resonance){const note=document.createElement('div');note.className='relic-card-link';note.textContent=resonanceText(resonance);note.dataset.compact='间隔 −'+resonance.resonance.rank*15+'% · 范围 +'+resonance.resonance.rank*20+'%';button.append(note)}
@@ -342,7 +342,7 @@ async function saveWeapon(change){
 
 game.on=(event,data)=>{
  if(event==='start')openCampPage('prepare');
- if(event==='startRun'){hide('menu');hide('camp-return-note');closeOverlays();show('hud');$('event-banner').classList.remove('visible');$('toast').classList.remove('visible');document.body.classList.add('playing');text('player-name',game.character.name);text('stage-label',STAGES[game.stage].name);paintAvatar($('hud-avatar'),game.character.id);document.activeElement?.blur();announce('远征开始。WASD 移动，空格冲刺，Esc 打开菜单。')}
+ if(event==='startRun'){hide('menu');hide('camp-return-note');closeOverlays();show('hud');$('event-banner').classList.remove('visible');$('toast').classList.remove('visible');document.body.classList.add('playing');text('player-name',game.character.name);text('stage-label',STAGES[game.stage].name);paintAvatar($('hud-avatar'),game.character.id);document.activeElement?.blur();announce('远征开始。WASD 移动，武器自动攻击，Esc 打开菜单。')}
  if(event==='hud')updateHud();
  if(event==='weapons'){storeItemDiscoveries(rememberInventory(save,game));buildDock()}
  if(event==='level'){resetTouchInput();buildUpgrades()}
@@ -500,8 +500,6 @@ movementSurface.addEventListener('pointermove',e=>{if(e.pointerId===activePointe
 function resetJoystick(e){if(e.pointerId===activePointer)resetTouchInput()}
 for(const event of ['pointerup','pointercancel','lostpointercapture'])movementSurface.addEventListener(event,resetJoystick);
 window.addEventListener('resize',resetTouchInput);
-$('touch-dash').addEventListener('pointerdown',e=>{e.preventDefault();game.dash()});
-$('touch-dash').addEventListener('click',()=>game.dash());
 
 window.addEventListener('storage',event=>{
  if(event.key!=='afterlight-save-v1')return;

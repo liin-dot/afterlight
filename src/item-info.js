@@ -9,7 +9,7 @@ export const passiveEffect = (key, level) => ({
   power: `武器伤害加成 +${level * 12}%。`,
   vitality: `最大生命 +${level * 12}。`,
   haste: `武器施放、召唤射击、环绕接触与领域伤害间隔缩短 ${level * 6}%。`,
-  speed: `移动速度 +${level * 6}%，冲刺冷却缩短 ${level * 6}%。`,
+  speed: `移动速度 +${level * 6}%，拾取范围 +${level * 6}%。`,
   magnet: `拾取范围 +${level * 35}%。`,
   armor: `每次受伤减少 ${level * 2} 点；至少承受原始伤害的 30%。`,
   regen: `每秒恢复 ${number(level * .22)} 点生命。`,
