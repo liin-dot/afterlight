@@ -2,8 +2,13 @@ import {TAU,diamond,glow} from './art.js';
 import {WEAPONS} from './data.js';
 import {poisonEnemy,chainLightning,onWeaponCast} from './relic-combat.js';
 
-const KINDS=new Set(['capacitor','arcforge','tide','maelstrom','needle','frostloom','lantern','beacon','crescent','thorn','bell','prism','eclipse','requiem','plague','bloodmoon','tempest','absolute','shard','meteor','mine','tether','sentinel','lance','starfall','bastion','wintermine','soulchain','ricochet','execution','supernova','stormsentry','pestilence','hailfire','soulforge']);
+const KINDS=new Set(['blade','axe','hammer','whirlwind','quake','capacitor','arcforge','tide','maelstrom','needle','frostloom','lantern','beacon','crescent','thorn','bell','prism','eclipse','requiem','plague','bloodmoon','tempest','absolute','shard','meteor','mine','tether','sentinel','lance','starfall','bastion','wintermine','soulchain','ricochet','execution','supernova','stormsentry','pestilence','hailfire','soulforge']);
 const nearby=(game,x,y,r)=>game.grid.near(x,y,r+30).filter(e=>!e.dead&&Math.hypot(e.x-x,e.y-y)<r+e.r);
+function meleeTarget(game,range){
+  const p=game.player;let target=null,nearest=Infinity;
+  for(const e of nearby(game,p.x,p.y,range)){const d=(e.x-p.x)**2+(e.y-p.y)**2;if(d<nearest){target=e;nearest=d}}
+  return target;
+}
 function wave(game,kind,x,y,r,damage,freeze=0,bossFreeze=0,slowDuration=3.2) {
   const color=WEAPONS[kind].color;
   game.effects.push({type:kind==='absolute'?'frost':'pulse',source:kind,x,y:y-8,r,color,t:.55,max:.55});
@@ -14,12 +19,27 @@ function wave(game,kind,x,y,r,damage,freeze=0,bossFreeze=0,slowDuration=3.2) {
   game.burst(x,y-8,16,color,90);
 }
 
+function slashStrike(game,kind,x,y,angle,v){
+  game.effects.push({type:v.impact?'pulse':'slash',source:kind,x,y:y-8,r:v.radius,a:angle,arc:v.arc,color:WEAPONS[kind].color,t:.32,max:.32});
+  for(const e of nearby(game,x,y,v.radius)){
+    const dx=e.x-x,dy=e.y-y,d=Math.hypot(dx,dy),delta=Math.atan2(Math.sin(Math.atan2(dy,dx)-angle),Math.cos(Math.atan2(dy,dx)-angle));
+    // Test the enemy's body against the sector, including its two straight edges.
+    const edge=angle+Math.max(-v.arc/2,Math.min(v.arc/2,delta)),reach=Math.max(0,Math.min(v.radius,dx*Math.cos(edge)+dy*Math.sin(edge)));
+    if(Math.hypot(dx-Math.cos(edge)*reach,dy-Math.sin(edge)*reach)>e.r)continue;
+    const outer=v.edgeMultiplier&&d>=v.radius*.6?v.edgeMultiplier:1;
+    const execute=v.executeMultiplier&&e.hp/e.maxHp<=v.threshold?1+(v.executeMultiplier-1)*(e.boss?.5:1):1;
+    if(v.slowDuration)e.slow=Math.max(e.slow,v.slowDuration);
+    game.hit(e,v.damage*outer*execute,x,y,v.knock??100,true,kind);
+  }
+  if(v.impact)game.burst(x,y-8,12,WEAPONS[kind].color,70);
+}
+
 function lanceStrike(game,kind,x,y,angle,v){
   const tx=x+Math.cos(angle)*v.range,ty=y+Math.sin(angle)*v.range;
   game.effects.push({type:'beam',source:kind,x,y:y-8,tx,ty:ty-8,width:v.width,color:WEAPONS[kind].color,t:.28,max:.28});
-  for(const e of nearby(game,x,y,v.range+30)){
+  for(const e of nearby(game,x,y,Math.hypot(v.range,v.width))){
     const dx=e.x-x,dy=e.y-y,along=dx*Math.cos(angle)+dy*Math.sin(angle),across=Math.abs(-dx*Math.sin(angle)+dy*Math.cos(angle));
-    if(along<0||along>v.range+e.r||across>v.width+e.r)continue;
+    if(Math.hypot(Math.max(-along,0,along-v.range),Math.max(0,across-v.width))>e.r)continue;
     const bonus=v.executeMultiplier&&e.hp/e.maxHp<=v.threshold?1+(v.executeMultiplier-1)*(e.boss?.5:1):1;
     game.hit(e,v.damage*bonus,x,y,50,true,kind);
   }
@@ -43,11 +63,17 @@ function detonate(game,z){
 export function updateExpandedWeapon(game,kind,v,dt) {
   if(!KINDS.has(kind))return false;
   game.timers[kind]=(game.timers[kind]||0)-dt;if(game.timers[kind]>0)return true;
-  const p=game.player,target=game.closest(p.x,p.y,['bell','requiem','absolute'].includes(kind)?v.radius+24:420);
+  const p=game.player,melee=['blade','axe','hammer','whirlwind','quake','lance','execution'].includes(kind);
+  const target=melee?meleeTarget(game,v.range||v.radius):game.closest(p.x,p.y,['bell','requiem','absolute'].includes(kind)?v.radius+24:420);
   const trap=['mine','wintermine','pestilence'].includes(kind),turret=['sentinel','bastion','stormsentry','soulforge'].includes(kind);
   if(!target&&!trap&&!turret){game.timers[kind]=.08;return true}
   game.timers[kind]=v.cooldown;
   const angle=target?Math.atan2(target.y-p.y,target.x-p.x):Math.atan2(p.lastY,p.lastX),before=game.projectiles.length;
+  if(['blade','axe','hammer','whirlwind','quake'].includes(kind)){
+    slashStrike(game,kind,p.x,p.y,angle,v);
+    for(let i=1;i<=v.echoCount;i++)game.zones.push({kind:'meleeEcho',source:kind,x:p.x,y:p.y,angle,t:v.echoDelay*i,max:v.echoDelay*i,values:{...v,damage:v.echoDamage}});
+    game.sound.play('slash');
+  }
   if(kind==='capacitor'||kind==='arcforge'){
     const used=new Set();let last=p;
     for(let i=0;i<v.count;i++){const e=game.closest(last.x,last.y,i? v.chainRange:340,used);if(!e)break;used.add(e.id);game.effects.push({type:'lightning',source:kind,x:last.x,y:last.y-8,tx:e.x,ty:e.y-8,t:.3,max:.3,seed:Math.random()*100,lvl:2});game.hit(e,v.damage,last.x,last.y,25,true,kind);last=e}
@@ -74,15 +100,15 @@ export function updateExpandedWeapon(game,kind,v,dt) {
     for(let i=0;i<v.count;i++){
       const e=game.closest(last.x,last.y,i===0?300:v.range,used);if(!e)break;used.add(e.id);
       game.effects.push({type:'beam',source:kind,x:last.x,y:last.y-8,tx:e.x,ty:e.y-8,width:2,color:WEAPONS[kind].color,t:.4,max:.4});
-      e.slow=Math.max(e.slow,v.slowDuration);
-      const dx=p.x-e.x,dy=p.y-e.y,d=Math.hypot(dx,dy)||1,shift=Math.max(0,Math.min(d-25,v.pull*(e.boss?.12:1)));
-      e.x+=dx/d*shift;e.y+=dy/d*shift;game.hit(e,v.damage,p.x,p.y,0,true,kind);
+      e.root=Math.max(e.root,e.boss?v.bossRoot:v.rootDuration);e.slow=Math.max(e.slow,v.rootDuration);
+      e.knockX=e.knockY=0;game.hit(e,v.damage,p.x,p.y,0,true,kind);
       if(v.blastDamage)game.zones.push({kind:'echoWave',source:kind,x:e.x,y:e.y,r:v.blastRadius,t:v.echoDelay||.45,max:v.echoDelay||.45,damage:v.blastDamage});
       last=e;
     }
     game.sound.play('storm');
   }
   if(kind==='lance'||kind==='execution'){
+    slashStrike(game,kind,p.x,p.y,angle,{...v,damage:v.sweepDamage});
     lanceStrike(game,kind,p.x,p.y,angle,v);
     if(v.strikes>1)game.zones.push({kind:'lanceEcho',source:kind,x:p.x,y:p.y,angle,t:v.echoDelay,max:v.echoDelay,values:v});
     game.sound.play('slash');
@@ -189,14 +215,21 @@ export function updateExpandedZone(game,z,dt) {
     z.t-=dt;if(z.t<=0)return true;z.x+=z.vx*dt;z.y+=z.vy*dt;const v=z.values;
     for(const e of nearby(game,z.x,z.y,z.r))if(!z.hit.has(e.id)){
       z.hit.add(e.id);e.slow=Math.max(e.slow,v.slowDuration);if(v.freeze)e.freeze=Math.max(e.freeze,e.boss?v.bossFreeze:v.freeze);
-      if(v.pull){const dx=z.x-e.x,dy=z.y-e.y,d=Math.hypot(dx,dy)||1,shift=Math.min(d,v.pull)*(e.boss?.15:1);e.x+=dx/d*shift;e.y+=dy/d*shift}
+      if(v.pull&&e.root<=0){const dx=z.x-e.x,dy=z.y-e.y,d=Math.hypot(dx,dy)||1,shift=Math.min(d,v.pull)*(e.boss?.15:1);e.x+=dx/d*shift;e.y+=dy/d*shift}
       game.hit(e,v.damage,z.x-z.vx,z.y-z.vy,v.pull?0:90,true,z.source);
     }return true;
   }
-  if(!['poison','echoWave','meteorStrike','mine','turret','aftermath','relicFire','lanceEcho'].includes(z.kind))return false;
+  if(!['poison','echoWave','meteorStrike','mine','turret','aftermath','relicFire','lanceEcho','meleeEcho'].includes(z.kind))return false;
   z.t-=dt;
   if(z.kind==='meteorStrike'){if(z.t<=0)detonate(game,z);return true}
-  if(z.kind==='lanceEcho'){if(z.t<=0)lanceStrike(game,z.source,z.x,z.y,z.angle,z.values);return true}
+  if(z.kind==='lanceEcho'||z.kind==='meleeEcho'){
+    if(z.t<=0){
+      const p=game.player,target=meleeTarget(game,z.values.range||z.values.radius),angle=target?Math.atan2(target.y-p.y,target.x-p.x):z.angle;
+      if(z.kind==='lanceEcho')lanceStrike(game,z.source,p.x,p.y,angle,z.values);
+      else slashStrike(game,z.source,p.x,p.y,angle,z.values);
+      game.sound.play('slash');
+    }return true;
+  }
   if(z.kind==='mine'){
     z.arm-=dt;
     if(z.t<=0||z.arm<=0&&nearby(game,z.x,z.y,26).length){z.t=0;detonate(game,z)}
@@ -267,8 +300,8 @@ export function drawExpandedProjectile(g,b,ox,oy,t) {
 
 export function drawExpandedZone(g,z,ox,oy,t) {
   if(z.kind==='tidalWave'){const x=z.x+ox,y=z.y+oy;g.strokeStyle=WEAPONS[z.source].color;g.lineWidth=2;g.beginPath();g.ellipse(x,y,z.r,z.r*.65,0,0,TAU);g.stroke();g.fillStyle=WEAPONS[z.source].color+'1c';g.fill();for(let i=0;i<6;i++){const a=t*3+i*TAU/6;diamond(g,x+Math.cos(a)*z.r,y+Math.sin(a)*z.r*.65,3,'#d0ece3')}return true}
-  if(!['poison','echoWave','meteorStrike','mine','turret','aftermath','relicFire','lanceEcho'].includes(z.kind))return false;
-  if(z.kind==='lanceEcho')return true;
+  if(!['poison','echoWave','meteorStrike','mine','turret','aftermath','relicFire','lanceEcho','meleeEcho'].includes(z.kind))return false;
+  if(z.kind==='lanceEcho'||z.kind==='meleeEcho')return true;
   const x=z.x+ox,y=z.y+oy,color=WEAPONS[z.source]?.color||'#e6a875';
   if(z.kind==='turret'){
     g.fillStyle='#35463c';g.fillRect(Math.round(x)-10,Math.round(y)-5,20,7);g.fillStyle='#7b8b79';g.fillRect(Math.round(x)-6,Math.round(y)-18,12,14);g.fillStyle='#b6bea2';g.fillRect(Math.round(x)-5,Math.round(y)-19,3,13);diamond(g,Math.round(x),Math.round(y)-19,5,color);glow(g,x,y-18,17,color+'22');

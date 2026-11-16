@@ -7,7 +7,7 @@ import {CharacterSheet} from './status.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData,fusionUsesRelic} from './fusions.js';
 import {compatibleWeapons,relicDescription,BUILD_TAGS,itemTags,ALTAR_BOONS,REFINEMENT_RARITIES} from './content.js';
 import {rememberItems,rememberInventory,recoverFusionDiscoveries} from './discovery.js';
-import {pressureAt,itemRarity,buildProfile} from './balance.js';
+import {BOSS_TIMES,pressureAt,itemRarity,buildProfile} from './balance.js';
 import {characterStats,weaponStats} from './stats.js';
 import {passiveEffect,resonanceText,weaponFacts} from './item-info.js';
 import {CHARACTER_TALENTS,talentPoints,characterTalentStatus,characterTalentProgress} from './talents.js';
@@ -117,7 +117,7 @@ function updatePreparation(){
  text('camp-weapon-label',WEAPONS[weapon].name+' · LV.1');
  text('camp-start-context',character.name+' · '+STAGES[selectedStage].name);
  for(const button of $('stage-choices').children)button.setAttribute('aria-pressed',String(button.dataset.choice===selectedStage));
- text('stage-description',STAGES[selectedStage].hint);text('camp-departure-note','生存 '+RUN_DURATION/60+' 分钟 · 击败'+STAGES[selectedStage].bosses[2]+' · 通关额外 +'+STAGES[selectedStage].reward+' 余烬');
+ text('stage-description',STAGES[selectedStage].hint);text('camp-departure-note','生存 '+RUN_DURATION/60+' 分钟 · 击败'+STAGES[selectedStage].bosses.at(-1)+' · 通关额外 +'+STAGES[selectedStage].reward+' 余烬');
 }
 function updateMenu(){
  text('meta-count',save.embers.toLocaleString()+' ✦');
@@ -145,7 +145,7 @@ function updateHud(){
  updateBuffHud();
  text('shield-label',game.player.shield>0?'◇ 护盾 '+Math.ceil(game.player.shield):'');
  $('night-progress-fill').style.width=Math.min(100,game.time/RUN_DURATION*100)+'%';
- const bossesForStage=STAGES[game.stage].bosses;text('next-encounter',game.time<180?'03:00 · '+bossesForStage[0]:game.time<360?'06:00 · '+bossesForStage[1]:game.time<RUN_DURATION?formatTime(RUN_DURATION)+' · '+bossesForStage[2]:'终局 · 击败'+bossesForStage[2]);
+ const bossesForStage=STAGES[game.stage].bosses,nextBoss=BOSS_TIMES.findIndex(at=>game.time<at);text('next-encounter',nextBoss<0?'终局 · 击败'+bossesForStage.at(-1):formatTime(BOSS_TIMES[nextBoss])+' · '+bossesForStage[nextBoss]);
  text('curse-label',game.stats.curse?'禁忌 '+game.stats.curse+' · 怪物强化':'');
 
  const bosses=game.enemies.filter(e=>e.boss&&!e.dead);const boss=bosses.find(e=>e.final)||bosses[0];if(boss){show('boss-bar');text('boss-name',boss.name+(bosses.length>1?' · 剩余 '+bosses.length+' 位':'')+(boss.enraged?' · 狂怒':''));$('boss-fill').style.width=Math.max(0,boss.hp/boss.maxHp*100)+'%';text('boss-health',Math.max(0,Math.ceil(boss.hp)).toLocaleString()+' / '+boss.maxHp.toLocaleString());lastBoss=boss.id}else{hide('boss-bar');lastBoss=null}
@@ -272,7 +272,7 @@ async function endRun(result){
   show('camp-return-note');announce('已退出远征，返回营地。获得 '+result.reward+' 余烬。');
   return;
  }
- text('end-eyebrow',result.won?'THE DAWN REMEMBERS YOUR NAME':'THE EMBER NEVER DIES');text('end-title',result.won?'长夜已尽，黎明是你。':result.abandoned?'灯火尚存，暂别长夜。':'灯灭，余烬犹存。');text('end-description',result.won?'你击败了'+STAGES[game.stage].bosses[2]+'，为'+STAGES[game.stage].name+'带回晨光。':result.abandoned?'带上收获的余烬，下一次会走得更远。':'每一次倒下，都让下一盏灯更明亮。');
+ text('end-eyebrow',result.won?'THE DAWN REMEMBERS YOUR NAME':'THE EMBER NEVER DIES');text('end-title',result.won?'长夜已尽，黎明是你。':result.abandoned?'灯火尚存，暂别长夜。':'灯灭，余烬犹存。');text('end-description',result.won?'你击败了'+STAGES[game.stage].bosses.at(-1)+'，为'+STAGES[game.stage].name+'带回晨光。':result.abandoned?'带上收获的余烬，下一次会走得更远。':'每一次倒下，都让下一盏灯更明亮。');
  const fields=[[formatTime(result.time),'守夜时间'],[result.kills.toLocaleString(),'击败敌人'],['LV. '+result.level,'最终等级'],['+'+result.reward.toLocaleString(),'收获余烬']];$('end-stats').replaceChildren();fields.forEach(([value,label],i)=>{let d=document.createElement('div');if(i===3)d.className='gold';let strong=document.createElement('strong');strong.textContent=value;let span=document.createElement('span');span.textContent=label;d.append(strong,span);$('end-stats').append(d)});
  const damage=Object.entries(game.damageByWeapon).sort((a,b)=>b[1]-a[1]),total=damage.reduce((sum,[,value])=>sum+value,0);
  $('end-damage').innerHTML='<h3>本局伤害记录</h3>'+damage.slice(0,3).map(([key,value])=>`<div><span>${WEAPONS[key]?.name||(key==='talent'?'角色天赋':'遗物与次生伤害')}</span><b>${Math.round(value).toLocaleString()} · ${Math.round(value/(total||1)*100)}%</b></div>`).join('')+`<div><span>累计输出 / 承受伤害（不含护盾）</span><b>${Math.round(total).toLocaleString()} / ${game.damageTaken}</b></div>`;

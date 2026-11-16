@@ -1,14 +1,15 @@
 import {TAU,diamond,pixelText} from './art.js';
 import {ALTAR_BOONS} from './content.js';
+import {RUN_DURATION,BOSS_TIMES} from './balance.js';
 
 export const EVENT_TYPES={
-  vigil:{name:'守灯仪式',color:'#e7bf83',hint:'在灯圈内累计守护 12 秒；离圈暂停，援兵每 5 秒出现',reward:'特殊奖励三选一 · 可跳过并随机强化武器'},
-  hunt:{name:'猎影悬赏',color:'#dca08a',hint:'击败召来的精英守卫；援兵每 5 秒出现',reward:'特殊奖励三选一 · 可跳过并随机强化武器'},
-  souls:{name:'归魂引路',color:'#a6d9cf',hint:'沿青白光柱回收 6 枚魂光，靠近自动收取；援兵每 5 秒出现',reward:'特殊奖励三选一 · 可跳过并随机强化武器'},
+  vigil:{name:'守灯仪式',color:'#e7bf83',goal:18,hint:'在灯圈内累计守护 18 秒；离圈暂停，每 4 秒出现 4 名援兵',reward:'特殊奖励三选一 · 可跳过并随机强化武器'},
+  hunt:{name:'猎影悬赏',color:'#dca08a',goal:1,hint:'击败双倍生命、伤害 +20% 的精英守卫；每 4 秒出现 6 名援兵',reward:'特殊奖励三选一 · 可跳过并随机强化武器'},
+  souls:{name:'归魂引路',color:'#a6d9cf',goal:8,hint:'沿青白光柱回收 8 枚魂光，靠近自动收取；每 4 秒出现 5 名援兵',reward:'特殊奖励三选一 · 可跳过并随机强化武器'},
 };
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
-export const ALTAR_TIMES=[60,240,420];
+export const ALTAR_TIMES=[60,240,420].map(time=>time*RUN_DURATION/600);
 export const ALTAR_ORDER=['vigil','souls','hunt'];
 export const ALTAR_REWARDS=[
   {xp:80,gold:40,heal:20,upgrades:1},
@@ -37,7 +38,7 @@ function unavailable(game,s){
   if(game.state!=='running'||!game.player||game.player.hp<=0)return '仅可在战斗中开启';
   if(game.activeEvent)return '先完成当前事件';
   if(!s||s.state!=='idle')return '附近没有可用祭坛';
-  if(game.enemies.some(e=>e.boss&&!e.dead)||game.time>=155&&game.time<180||game.time>=335&&game.time<360)return '首领来袭期间暂停开启';
+  if(game.enemies.some(e=>e.boss&&!e.dead)||BOSS_TIMES.some(at=>game.time>=at-25&&game.time<at))return '首领来袭期间暂停开启';
   if(distance(game.player,s)>45)return '靠近祭坛至 45 距离内';
   if(s.kind==='hunt'&&game.enemies.length>=game.pressure.cap)return '先清理附近敌群，再召来守卫';
   return '';
@@ -45,12 +46,12 @@ function unavailable(game,s){
 
 export function startWorldEvent(game){
   const s=nearestWorldEvent(game);if(unavailable(game,s))return false;
-  s.state='active';s.progress=0;s.endsAt=game.time+45;s.nextWave=game.time+5;game.activeEvent=s;
+  s.state='active';s.progress=0;s.endsAt=game.time+45;s.nextWave=game.time+4;game.activeEvent=s;
   if(s.kind==='hunt'){
-    s.guardian=game.spawnEnemy('knight',true,145);s.guardian.eventGuardian=true;
+    s.guardian=game.spawnEnemy('knight',true,145);s.guardian.eventGuardian=true;s.guardian.hp*=2;s.guardian.maxHp=s.guardian.hp;s.guardian.damage*=1.2;
   }
-  if(s.kind==='souls')s.motes=Array.from({length:6},(_,i)=>{const a=i*TAU/6,r=110+(i%2)*50;return {x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r,collected:false}});
-  game.banner({vigil:'守灯 · 留在灯圈内 12 秒',hunt:'猎影 · 击败标记守卫',souls:'归魂 · 回收 6 枚魂光'}[s.kind],'限时 45 秒 · '+EVENT_TYPES[s.kind].hint,3);game.on('hud');
+  if(s.kind==='souls')s.motes=Array.from({length:s.goal},(_,i)=>{const a=i*TAU/s.goal,r=130+(i%2)*60;return {x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r,collected:false}});
+  game.banner({vigil:'守灯 · 留在灯圈内 '+s.goal+' 秒',hunt:'猎影 · 击败标记守卫',souls:'归魂 · 回收 '+s.goal+' 枚魂光'}[s.kind],'限时 45 秒 · '+EVENT_TYPES[s.kind].hint,3);game.on('hud');
   return true;
 }
 
@@ -59,8 +60,8 @@ export function updateWorldEvents(game,dt){
   if(game.eventReward&&game.time>=game.eventReward.expiresAt)game.eventReward=null;
   if(game.nextShrine<ALTAR_TIMES.length&&game.time>=ALTAR_TIMES[game.nextShrine]){
     const index=game.nextShrine++,kind=ALTAR_ORDER[index],angle=Math.random()*TAU,radius=180+Math.random()*80;
-    game.shrines.push({kind,index,x:game.player.x+Math.cos(angle)*radius,y:game.player.y+Math.sin(angle)*radius,state:'idle',used:false,progress:0,goal:kind==='vigil'?12:kind==='hunt'?1:6});
-    game.banner('祭坛显现 · '+(index+1)+' / 3',EVENT_TYPES[kind].name+' · 按顺序接取挑战',3);game.on('hud');
+    game.shrines.push({kind,index,x:game.player.x+Math.cos(angle)*radius,y:game.player.y+Math.sin(angle)*radius,state:'idle',used:false,progress:0,goal:EVENT_TYPES[kind].goal});
+    if(!game.enemies.some(e=>e.boss&&!e.dead))game.banner('祭坛显现 · '+(index+1)+' / 3',EVENT_TYPES[kind].name+' · 按顺序接取挑战',3);game.on('hud');
   }
   const s=game.activeEvent;if(!s)return;
   const boss=game.enemies.some(e=>e.boss&&!e.dead);
@@ -70,7 +71,7 @@ export function updateWorldEvents(game,dt){
   }
   if(s.kind==='vigil'&&distance(game.player,s)<=80)s.progress=Math.min(s.goal,s.progress+dt);
   if(s.kind==='hunt'&&s.guardian.dead)s.progress=1;
-  if(s.kind==='souls')for(const mote of s.motes)if(!mote.collected&&distance(game.player,mote)<=16){mote.collected=true;s.progress++;game.burst(mote.x,mote.y-8,7,EVENT_TYPES.souls.color,35);game.sound.play('xp');game.toast('魂光 '+s.progress+'/6 · 沿指引寻找下一枚',1.5)}
+  if(s.kind==='souls')for(const mote of s.motes)if(!mote.collected&&distance(game.player,mote)<=16){mote.collected=true;s.progress++;game.burst(mote.x,mote.y-8,7,EVENT_TYPES.souls.color,35);game.sound.play('xp');game.toast('魂光 '+s.progress+'/'+s.goal+' · 沿指引寻找下一枚',1.5)}
   if(s.progress>=s.goal){
     s.state='complete';s.used=true;game.activeEvent=null;game.eventsCompleted++;
     const pool=Object.keys(ALTAR_BOONS).filter(id=>!game.boons.includes(id));game.eventChoices=[];
@@ -80,8 +81,8 @@ export function updateWorldEvents(game,dt){
     game.effects.push({type:'pulse',x:s.x,y:s.y-8,r:85,color:type.color,t:.8,max:.8});game.sound.play('chest');game.on('altarReward',{name:type.name});game.on('hud');return;
   }
   if(game.time>=s.nextWave){
-    s.nextWave=game.time+5;
-    for(let i=0;i<3&&game.enemies.length<game.pressure.cap;i++)game.spawnEnemy(game.time<120?'skeleton':'ghoul',false,150+i*12);
+    s.nextWave=game.time+4;
+    for(let i=0;i<4+s.index&&game.enemies.length<game.pressure.cap;i++)game.spawnEnemy(game.chooseEnemy(),false,150+i*12);
   }
 }
 
@@ -90,7 +91,7 @@ export function worldEventStatus(game){
   if(!s||!game.player||!game.activeEvent&&game.enemies.some(e=>e.boss&&!e.dead))return empty;
   const type=EVENT_TYPES[s.kind],active=s===game.activeEvent,d=Math.round(distance(game.player,s)),blocked=unavailable(game,s);
   const target=worldEventTarget(game),direction=target?['→','↘','↓','↙','←','↖','↑','↗'][(Math.round(Math.atan2(target.y-game.player.y,target.x-game.player.x)/TAU*8)+8)%8]+' '+Math.round(distance(game.player,target)):'';
-  const detail=active?(s.kind==='vigil'?(distance(game.player,s)<=80?'守护中':'返回灯圈')+' · '+s.progress.toFixed(1)+'/12 秒':s.kind==='hunt'?'守卫 · '+direction:'魂光 '+s.progress+'/6 · 最近 '+direction)+' · 剩余 '+Math.min(45,Math.max(0,Math.ceil(s.endsAt-game.time)))+' 秒':d>45?'距离 '+d+' · 未接取将一直保留':blocked||type.hint+' · 限时 45 秒';
+  const detail=active?(s.kind==='vigil'?(distance(game.player,s)<=80?'守护中':'返回灯圈')+' · '+s.progress.toFixed(1)+'/'+s.goal+' 秒':s.kind==='hunt'?'守卫 · '+direction:'魂光 '+s.progress+'/'+s.goal+' · 最近 '+direction)+' · 剩余 '+Math.min(45,Math.max(0,Math.ceil(s.endsAt-game.time)))+' 秒':d>45?'距离 '+d+' · 未接取将一直保留':blocked||type.hint+' · 限时 45 秒';
   const guide=active?{vigil:'留在金色灯圈内；离圈暂停进度',hunt:'追击红色「守卫」标记，击杀后完成',souls:'朝青白光柱移动，贴近自动回收'}[s.kind]:(blocked&&d<=45?blocked:'依序接取 · 未接取 '+game.shrines.filter(s=>s.state==='idle').length+' 座 · '+(d>45?type.hint:'接取后开始计时'));
   const reward=ALTAR_REWARDS[s.index];
   return {visible:true,name:(s.index+1)+' / 3 · '+type.name,detail,guide,reward:'经验 +'+reward.xp+' · 余烬 +'+reward.gold+' · 生命 +'+reward.heal+' · 契约或 '+reward.upgrades+' 次武器强化',progress:s.progress,max:s.goal,canStart:!blocked,active};

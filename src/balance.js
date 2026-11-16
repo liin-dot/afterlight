@@ -6,6 +6,7 @@ import {CHARACTER_TALENTS} from './talents.js';
 import {STAGES} from './expeditions.js';
 
 export const RUN_DURATION=900;
+export const BOSS_TIMES=[180,360,600,RUN_DURATION];
 export const PHASES=[
   {at:0,name:'拾火',hint:'保持走位 · 前中期避免硬抗',hp:1.1,damage:1.15,speed:1.03,count:1,interval:1.05,cap:85,roster:{skeleton:80,bat:20}},
   {at:60,name:'夜翼',hint:'幽魂加入围猎 · 走位避开远射',hp:2.6,damage:1.27,speed:1.08,count:2,interval:.98,cap:115,roster:{skeleton:30,ghoul:35,bat:25,ghost:10}},
@@ -17,7 +18,7 @@ export const PHASES=[
   {at:420,name:'猎月',hint:'收割者突进 · 提前横移避开正面',hp:11.2,damage:2.24,speed:1.38,count:5,interval:.84,cap:235,roster:{bat:30,ghost:20,knight:20,reaper:30}},
   {at:480,name:'蚀潮',hint:'控制与穿透 · 打开一条生路',hp:12.6,damage:2.4,speed:1.43,count:5,interval:.8,cap:255,roster:{ghoul:15,bat:20,ghost:20,knight:20,reaper:25}},
   {at:540,name:'长夜合围',hint:'完成融合联动 · 为成型反攻准备',hp:14,damage:2.56,speed:1.48,count:6,interval:.78,cap:275,roster:{bat:15,ghost:15,knight:30,reaper:40}},
-  {at:600,name:'余烬反攻',hint:'构筑成型 · 清扫怪潮并继续精修',hp:15.2,damage:2.7,speed:1.5,count:6,interval:.78,cap:275,roster:{ghoul:20,bat:20,ghost:15,knight:20,reaper:25}},
+  {at:600,name:'余烬反攻',hint:'第三位守门人 · 用成型构筑突破封锁',hp:15.2,damage:2.7,speed:1.5,count:6,interval:.78,cap:275,roster:{ghoul:20,bat:20,ghost:15,knight:20,reaper:25}},
   {at:660,name:'百魂回响',hint:'收集灵光 · 让精修放大联动',hp:16,damage:2.7,speed:1.5,count:6,interval:.78,cap:275,roster:{bat:25,ghost:20,knight:25,reaper:30}},
   {at:720,name:'破阵',hint:'穿透与范围 · 打开清场路线',hp:16.8,damage:2.7,speed:1.5,count:6,interval:.78,cap:275,roster:{bat:15,ghost:15,knight:30,reaper:40}},
   {at:780,name:'逐暗',hint:'保持联动 · 回收怪潮留下的经验',hp:17.6,damage:2.7,speed:1.5,count:6,interval:.78,cap:275,roster:{bat:20,ghost:20,knight:25,reaper:35}},
@@ -28,9 +29,9 @@ export const PHASES=[
 export function pressureAt(time,curse=0,difficulty={},stage='graveyard'){
   const index=Math.min(PHASES.length-1,Math.max(0,Math.floor(time/60))),phase=PHASES[index],next=PHASES[Math.min(index+1,PHASES.length-1)];
   const fraction=Math.min(1,Math.max(0,(time-phase.at)/60));
-  const bossBreather=(time>=180&&time<192)||(time>=360&&time<372);
+  const bossBreather=BOSS_TIMES.some(at=>at<RUN_DURATION&&time>=at&&time<at+12);
   const chapter=STAGES[stage]||STAGES.graveyard;
-  return {...phase,name:stage==='graveyard'?phase.name:time>=RUN_DURATION?chapter.bosses[2]:chapter.name+' · '+(index+1),hint:stage==='graveyard'?phase.hint:chapter.hint,roster:chapter.rosters?.[Math.min(5,Math.floor(time/120))]||phase.roster,index,hp:(phase.hp+(next.hp-phase.hp)*fraction)*(1+curse*.12)*(difficulty.hp||1)*(chapter.hp||1),damage:(phase.damage+(next.damage-phase.damage)*fraction)*(difficulty.damage||1),
+  return {...phase,name:stage==='graveyard'?phase.name:time>=RUN_DURATION?chapter.bosses.at(-1):chapter.name+' · '+(index+1),hint:stage==='graveyard'?phase.hint:chapter.hint,roster:chapter.rosters?.[Math.min(5,Math.floor(time/120))]||phase.roster,index,hp:(phase.hp+(next.hp-phase.hp)*fraction)*(1+curse*.12)*(difficulty.hp||1)*(chapter.hp||1),damage:(phase.damage+(next.damage-phase.damage)*fraction)*(difficulty.damage||1),
     speed:(phase.speed+(next.speed-phase.speed)*fraction)*(1+curse*.03)*(difficulty.speed||1),interval:phase.interval/((1+curse*.08)*(bossBreather?.6:1)*(difficulty.population||1)),
     cap:Math.round(phase.cap*(difficulty.population||1)),eliteChance:time<180?0:.02*(difficulty.elite||1)};
 }
@@ -81,7 +82,7 @@ export function upgradePool(game){
       for(const [refinement,info] of refinements)for(const [rarity,tier] of Object.entries(REFINEMENT_RARITIES)){
         const value=refinementValue(game.stats,key,refinement,rarity);if(!value)continue;
         pool.push({key,weapon:true,current,next:current,refinement,rarity,value,choiceId:key+':'+refinement,name:weaponName(key,current)+' · '+info.name,color:tier.color,
-          description:refinementGain(refinement,value)+'。'+(refinement==='anomaly'?'命中时：'+weaponAnomalyText(key)+'。':refinement==='control'?'首领冻结时长不变。':refinement==='amount'?(tags.includes('summon')?'增加齐射弹数，召唤物仍最多 2 座。':'本武器精修额外数量上限 +4。'):''),
+          description:refinementGain(refinement,value)+'。'+(refinement==='anomaly'?'命中时：'+weaponAnomalyText(key)+'。':refinement==='control'?'首领冻结、禁锢时长不变。':refinement==='amount'?(tags.includes('summon')?'增加齐射弹数，召唤物仍最多 2 座。':'本武器精修额外数量上限 +4。'):''),
           weight:itemRarity(data).weight*2.25*tagAffinity(key,profile).multiplier*tier.weight/100/refinements.length,reason:'满级精修 · 仅此武器生效 · 同类收益累加'});
       }
       continue;
@@ -116,10 +117,10 @@ export function upgradePool(game){
 export function rollUpgradeChoices(game,previous=[]){
   const pool=upgradePool(game),result=[];
   const available=Object.keys(FUSIONS).filter(key=>!game.banished?.has(key)&&fusionState(key,game.weapons,game.passives,game).ready);
-  const limitRefinements=available.length>0||pool.some(item=>!item.refinement);
+  const refinementSlots=Math.max(1,4-pool.filter(item=>!item.refinement).length-(available.length?1:0));
   // ponytail: four weighted draws scan a small catalogue; use an indexed sampler if the pool grows into thousands.
   const weight=item=>item.weight*(previous.includes(item.choiceId||item.key)?.12:1);
-  const take=item=>{if(!item)return;result.push(item);for(let i=pool.length-1;i>=0;i--)if((pool[i].choiceId||pool[i].key)===(item.choiceId||item.key)||limitRefinements&&item.refinement&&pool[i].refinement)pool.splice(i,1)};
+  const take=item=>{if(!item)return;result.push(item);const refinementsFull=result.filter(choice=>choice.refinement).length>=refinementSlots;for(let i=pool.length-1;i>=0;i--)if((pool[i].choiceId||pool[i].key)===(item.choiceId||item.key)||refinementsFull&&pool[i].refinement)pool.splice(i,1)};
   if(available.length){const key=available.includes(game.trackedFusion)?game.trackedFusion:available[Math.floor(Math.random()*available.length)];take(fusionChoice(key,game.weapons,game.passives))}
   if(FUSIONS[game.trackedFusion]&&game.discoveredFusions?.has(game.trackedFusion)){
     const state=fusionState(game.trackedFusion,game.weapons,game.passives,game);

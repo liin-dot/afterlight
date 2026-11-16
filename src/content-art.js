@@ -35,6 +35,11 @@ export function drawContentIcon(g,kind) {
   if(['tether','soulchain'].includes(kind)){
     for(let i=0;i<3;i++)ring(i%2?'#b7cdce':'#839dac',5+i*6,5+i*6,4);if(kind==='soulchain'){gem('#d8cff0',18,4,3);gem('#bacfe8',4,18,3)}return true;
   }
+  if(['axe','hammer','whirlwind','quake'].includes(kind)){
+    box('#8a7360',10,5,3,17);const c=kind==='hammer'||kind==='quake'?'#bdc9d1':'#daba94';
+    if(kind==='hammer'||kind==='quake'){box(c,4,3,16,7);box('#e4e3cf',5,3,3,6);box('#566473',18,4,2,5)}
+    else{box(c,13,2,7,11);box('#f1e0b5',18,4,3,7);if(kind==='whirlwind'){box(c,3,2,7,11);box('#f1e0b5',2,4,2,7)}}return true;
+  }
   if(['lance','execution','executioner'].includes(kind)){
     for(let i=0;i<17;i++)box('#a39165',3+i,21-i,2,2);gem('#e9dcaa',18,5,5);box('#fff0c8',17,3,2,5);if(kind==='execution'||kind==='executioner'){box('#b48c79',7,5,6,6);box('#ead9ae',5,5,4,8);gem('#d69e8b',5,18,2)}return true;
   }

@@ -6,7 +6,7 @@ import {FUSIONS,fusionState,maxWeaponLevel} from './fusions.js';
 import {updateFusion,chainArrow,updateFusionZone,drawFusionZone,drawFusionWeapons} from './fusion-combat.js';
 import {updateExpandedWeapon,updateExpandedProjectile,updateExpandedZone,drawExpandedProjectile,drawExpandedZone,drawExpandedEffect} from './expanded-combat.js';
 import {onWeaponHit,onEnemyKilled,onWeaponCast,onPlayerHurt,onPlayerTravel,onXpPickup,updateRelicStates,readyProc} from './relic-combat.js';
-import {RUN_DURATION,pressureAt,xpForLevel,weightedPick,upgradePool,rollUpgradeChoices,recordUpgradeChoice} from './balance.js';
+import {RUN_DURATION,BOSS_TIMES,pressureAt,xpForLevel,weightedPick,upgradePool,rollUpgradeChoices,recordUpgradeChoice} from './balance.js';
 import {talentPoints,talentNodeState,resetCharacterTalents,updateCharacterTalents,onCharacterLearn,onCharacterHit,onCharacterProjectileHit,characterHitMultiplier,onCharacterTravel,onCharacterHurt,drawCharacterTalents} from './talents.js';
 import {EVENT_TYPES,ALTAR_REWARDS,resetWorldEvents,startWorldEvent,updateWorldEvents,drawWorldEvents,nearestWorldEvent,worldEventTarget} from './world-events.js';
 import {ALTAR_BOONS,relicValues,refinementGain} from './content.js';
@@ -105,10 +105,10 @@ export class Game{
   p.hp=Math.min(p.maxHp,p.hp+(this.stats.regeneration+(this.time-this.lastHurt>=4?this.stats.recovery:0))*dt);
   this.camera.x=lerp(this.camera.x,p.x,1-Math.exp(-dt*7));this.camera.y=lerp(this.camera.y,p.y-8,1-Math.exp(-dt*7));
   this.pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty,this.stage);
-  if(this.pressure.index!==this.lastPhase){this.lastPhase=this.pressure.index;if(![3,6,RUN_DURATION/60].includes(this.lastPhase))this.banner(this.pressure.name,this.pressure.hint,3);this.checkFusionReadiness()}
+  if(this.pressure.index!==this.lastPhase){this.lastPhase=this.pressure.index;if(!BOSS_TIMES.includes(this.lastPhase*60))this.banner(this.pressure.name,this.pressure.hint,3);this.checkFusionReadiness()}
   this.spawnClock-=dt;if(this.spawnClock<=0){for(let i=0;i<this.pressure.count&&this.enemies.length<this.pressure.cap;i++)this.spawnEnemy(this.chooseEnemy(),Math.random()<this.pressure.eliteChance);this.spawnClock+=this.pressure.interval}
   this.waveClock-=dt;if(this.waveClock<=0&&this.time<RUN_DURATION){this.spawnWave();this.waveClock=48}
-  for(const milestone of [180,360,RUN_DURATION])if(this.time>=milestone&&!this.bossMilestones.has(milestone)){this.bossMilestones.add(milestone);this.spawnBoss(milestone)}
+  for(const milestone of BOSS_TIMES)if(this.time>=milestone&&!this.bossMilestones.has(milestone)){this.bossMilestones.add(milestone);this.spawnBoss(milestone)}
   for(const e of [...this.enemies])this.updateEnemy(e,dt);
   this.grid.rebuild(this.enemies);updateRelicStates(this);
   const moved=Math.hypot(p.x-oldX,p.y-oldY);
@@ -127,7 +127,7 @@ export class Game{
  chooseEnemy(){return weightedPick(Object.entries(this.pressure.roster),item=>item[1])[0]}
  spawnEnemy(kind,elite=false,radius=0){
   const a=Math.random()*TAU;const edge=radius||(Math.max(this.w,this.h)*.56+35+Math.random()*70);let x=this.player.x+Math.cos(a)*edge,y=this.player.y+Math.sin(a)*edge;
-  const data=ENEMIES[kind],pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty,this.stage),growth=pressure.hp;const e={id:++this.uid,kind,x,y,hp:data.hp*growth,maxHp:data.hp*growth,speed:data.speed*pressure.speed,damage:data.damage*pressure.damage,xp:data.xp,r:data.r,score:data.score,flip:false,walk:0,flash:0,slow:0,freeze:0,knockX:0,knockY:0,attack:1+Math.random()*3,orbitHit:0,dead:false,elite,boss:false,scale:elite?1.4:1,phase:Math.random()*TAU};
+  const data=ENEMIES[kind],pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty,this.stage),growth=pressure.hp;const e={id:++this.uid,kind,x,y,hp:data.hp*growth,maxHp:data.hp*growth,speed:data.speed*pressure.speed,damage:data.damage*pressure.damage,xp:data.xp,r:data.r,score:data.score,flip:false,walk:0,flash:0,slow:0,freeze:0,root:0,knockX:0,knockY:0,attack:1+Math.random()*3,orbitHit:0,dead:false,elite,boss:false,scale:elite?1.4:1,phase:Math.random()*TAU};
   if(elite){e.hp*=7;e.maxHp=e.hp;e.speed*=.85;e.xp*=8;e.r*=1.4;e.damage*=1.3;e.score*=8}this.enemies.push(e);return e;
  }
  spawnWave(){
@@ -137,17 +137,18 @@ export class Game{
   if(this.waveCount%3===0&&this.enemies.length<this.pressure.cap){this.spawnEnemy('knight',true);this.banner('提灯精英 · 追猎开始','击败精英回收八倍经验结晶',2.7)}else this.banner('鸦群掠过长夜','寻找缺口，避开怪潮正面',2.7);
  }
  spawnBoss(milestone){
-  const final=milestone===RUN_DURATION,difficulty=this.stats.difficulty,count=1+difficulty.bosses,angle=Math.random()*TAU;
+  const final=milestone===RUN_DURATION,difficulty=this.stats.difficulty,count=1+difficulty.bosses,angle=Math.random()*TAU,chapter=STAGES[this.stage],rank=BOSS_TIMES.indexOf(milestone);
   for(let i=0;i<count;i++){
-   const chapter=STAGES[this.stage],rank=final?2:milestone===360?1:0;const e=this.spawnEnemy(chapter.bossKinds[rank]),a=angle+i*TAU/count;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=chapter.bosses[rank];e.hp=(final?42000:milestone===360?16500:4800)*(1+(this.stats.curse||0)*.12)*difficulty.hp;e.maxHp=e.hp;e.speed=(final?45:30)*difficulty.speed;e.damage=(final?52:milestone===360?40:30)*difficulty.damage;e.xp=final?180:90;e.r=final?23:19;e.scale=final?2.7:2.25;e.score=100;e.attack=3+i*.7;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
+   const e=this.spawnEnemy(chapter.bossKinds[rank]),a=angle+i*TAU/count;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=chapter.bosses[rank];e.hp=[4800,16500,28000,42000][rank]*(1+(this.stats.curse||0)*.12)*difficulty.hp;e.maxHp=e.hp;e.speed=[30,30,38,45][rank]*difficulty.speed;e.damage=[30,40,46,52][rank]*difficulty.damage;e.xp=final?180:rank===2?120:90;e.r=final?23:rank===2?21:19;e.scale=final?2.7:rank===2?2.5:2.25;e.score=100;e.attack=3+i*.7;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
    e.bossWave=milestone;this.effects.push({type:'pulse',x:e.x,y:e.y,r:100,t:1,max:1,color:'#d69a77'});this.burst(e.x,e.y-30,40,'#a78eaa',80);
   }
-  if(final)this.finalSpawned=true;this.sound.play('boss');this.shake=5;this.banner(STAGES[this.stage].bosses[final?2:milestone===360?1:0]+' · '+count+' 位降临',final?'THE ECLIPSE SOVEREIGN':'GUARDIAN OF THE GRAVE',4);this.on('hud');
+  if(final)this.finalSpawned=true;this.sound.play('boss');this.shake=5;this.banner(chapter.bosses[rank]+' · '+count+' 位降临',final?'THE ECLIPSE SOVEREIGN':'GUARDIAN OF THE GRAVE',4);this.on('hud');
  }
  updateEnemy(e,dt){
-  if(e.dead)return;e.flash=Math.max(0,e.flash-dt);e.slow=Math.max(0,e.slow-dt);e.freeze=Math.max(0,e.freeze-dt);e.orbitHit=Math.max(0,e.orbitHit-dt);let dx=this.player.x-e.x,dy=this.player.y-e.y,d=Math.hypot(dx,dy)||1;
-  if(d>Math.max(this.w,this.h)*1.1&&!e.boss){const a=Math.random()*TAU,r=Math.max(this.w,this.h)*.65;e.x=this.player.x+Math.cos(a)*r;e.y=this.player.y+Math.sin(a)*r;return}
-  e.flip=dx<0;e.walk+=dt*6*(e.slow>0?.5:1);e.attack-=dt;
+  if(e.dead)return;e.flash=Math.max(0,e.flash-dt);e.slow=Math.max(0,e.slow-dt);e.freeze=Math.max(0,e.freeze-dt);e.root=Math.max(0,e.root-dt);e.orbitHit=Math.max(0,e.orbitHit-dt);let dx=this.player.x-e.x,dy=this.player.y-e.y,d=Math.hypot(dx,dy)||1;
+  const rooted=e.root>0,oldX=e.x,oldY=e.y;
+  if(d>Math.max(this.w,this.h)*1.1&&!e.boss&&!rooted){const a=Math.random()*TAU,r=Math.max(this.w,this.h)*.65;e.x=this.player.x+Math.cos(a)*r;e.y=this.player.y+Math.sin(a)*r;return}
+  e.flip=dx<0;if(!rooted)e.walk+=dt*6*(e.slow>0?.5:1);e.attack-=dt;
   let speed=e.speed*(e.freeze>0?0:e.slow>0?.45:1);
   if(e.freeze>0){speed=0}
   else if(e.boss&&this.stage!=='graveyard'){speed*=expeditionEnemy(this,e,dt,d,dx,dy)}
@@ -173,6 +174,8 @@ export class Game{
   // Light local separation keeps dense hordes readable without blocking the player.
   if(!e.boss&&e.freeze<=0){let contacts=0;for(const other of this.grid.near(e.x,e.y,24)){if(other.id===e.id||other.dead)continue;const sx=e.x-other.x,sy=e.y-other.y,sep=Math.hypot(sx,sy)||.1,desired=(e.r+other.r)*.76;if(sep<desired){const force=(desired-sep)*dt*3;e.x+=sx/sep*force;e.y+=sy/sep*force;if(++contacts>=7)break}}}
   e.x+=e.knockX*dt;e.y+=e.knockY*dt;e.knockX*=Math.exp(-dt*13);e.knockY*=Math.exp(-dt*13);
+  // Root holds all movement (including charges and separation), while attack clocks keep running.
+  if(rooted){e.x=oldX;e.y=oldY;e.knockX=e.knockY=0}
   if(e.freeze<=0&&distance(e,this.player)<e.r+this.player.r&&this.player.invincible<=0)this.hurt(e.damage,e.x,e.y);
  }
  closest(x=this.player.x,y=this.player.y,range=420,exclude=null){let best=null,ds=range*range;for(const e of this.enemies){if(e.dead||(exclude&&exclude.has(e.id)))continue;const d=(e.x-x)**2+(e.y-y)**2;if(d<ds){ds=d;best=e}}return best}
@@ -184,12 +187,8 @@ export class Game{
    if(WEAPONS[kind].fusion){updateFusion(this,kind,values,dt);continue}
    if(kind==='orbit'){let count=values.count;for(let i=0;i<count;i++){let a=this.orbitAngle*(lvl===6&&i%2?-1:1)+i*TAU/count,r=values.radius+(i%2?values.outerOffset:0);const x=p.x+Math.cos(a)*r,y=p.y-8+Math.sin(a)*r;for(const e of this.grid.near(x,y,values.contactRadius+32))if(distance({x,y},{x:e.x,y:e.y-8})<e.r+values.contactRadius&&e.orbitHit<=0){e.orbitHit=values.hitInterval;this.hit(e,values.damage,x,y,75,true,kind);this.burst(x,y,3,'#bee6cf',30)}}continue}
    this.timers[kind]=(this.timers[kind]||0)-dt;if(this.timers[kind]>0)continue;
-   const target=this.closest(p.x,p.y,kind==='blade'?values.radius+10:420);if(!target){this.timers[kind]=.08;continue}let a=Math.atan2(target.y-p.y,target.x-p.x);
+   const target=this.closest(p.x,p.y,420);if(!target){this.timers[kind]=.08;continue}let a=Math.atan2(target.y-p.y,target.x-p.x);
    this.timers[kind]=values.cooldown;const projectileStart=this.projectiles.length;
-   if(kind==='blade'){
-    const r=values.radius,arc=values.arc;this.effects.push({type:'slash',source:kind,x:p.x,y:p.y-8,r,a,arc,t:.28,max:.28,evolved:lvl===6,color:lvl===6?'#f5d18d':'#e2d3a1'});
-    for(const e of this.grid.near(p.x,p.y,r+30)){if(distance(p,e)<r+e.r&&Math.abs(angleDifference(Math.atan2(e.y-p.y,e.x-p.x),a))<arc/2)this.hit(e,values.damage,p.x,p.y,100,true,kind)}this.sound.play('slash');
-   }
    if(kind==='bolt'){
     const count=values.count;for(let i=0;i<count;i++){const angle=a+(i-(count-1)/2)*.15;this.projectiles.push({type:'bolt',x:p.x,y:p.y-9,vx:Math.cos(angle)*270,vy:Math.sin(angle)*270,r:3,damage:values.damage,pierce:values.pierce,t:2,hit:new Set(),homing:values.homing,angle,trail:[]})}this.sound.play('shoot');
    }
@@ -218,7 +217,7 @@ export class Game{
    }
   }this.projectiles=this.projectiles.filter(b=>b.t>0);
  }
- addFire(b,trail=false){const values=weaponStats('flame',b.lvl,this.stats,this.character),upgrades=this.weaponUpgrades.flame||{},r=trail?20*this.stats.areaMultiplier*(1+(upgrades.area||0)):values.radius,duration=trail?1.4*this.stats.durationMultiplier*(1+(upgrades.duration||0)):values.duration;this.zones.push({x:b.x,y:b.y,r,t:duration,max:duration,tick:0,hitInterval:values.hitInterval,damage:values.burnDamage,seed:Math.random()*100});if(!trail){this.effects.push({type:'pulse',source:'flame',x:b.x,y:b.y,r:r*1.1,t:.3,max:.3,color:'#e6ad6a'});this.burst(b.x,b.y,14,'#dc9b55',65)}}
+ addFire(b,trail=false){const values=weaponStats('flame',b.lvl,this.stats,this.character),upgrades=this.weaponUpgrades.flame||{},r=trail?20*this.stats.areaMultiplier*(1+(upgrades.area||0)):values.radius,duration=trail?1.4*this.stats.durationMultiplier*(1+(upgrades.duration||0)):values.duration;this.zones.push({x:b.x,y:b.y,r,t:duration,max:duration,trail,tick:0,hitInterval:values.hitInterval,damage:values.burnDamage,seed:Math.random()*100});if(!trail){this.effects.push({type:'pulse',source:'flame',x:b.x,y:b.y,r:r*1.1,t:.3,max:.3,color:'#e6ad6a'});this.burst(b.x,b.y,14,'#dc9b55',65)}}
  updateZones(dt){
   for(const z of this.zones){if(updateExpandedZone(this,z,dt))continue;if(z.kind==='solar'||z.kind==='glacier'){updateFusionZone(this,z,dt);continue}z.t-=dt;if(z.t<=0)continue;z.tick-=dt;if(z.tick<=0){z.tick=z.hitInterval;for(const e of this.grid.near(z.x,z.y,z.r+15))if(distance(z,e)<z.r+e.r)this.hit(e,z.damage,z.x,z.y,0,false,'flame',true)}}
   // ponytail: retain the newest 128 fields to bound rendering; pool fields if future content routinely reaches this ceiling.
@@ -237,7 +236,7 @@ export class Game{
   const dmg=Math.max(1,Math.round(damage*(guard?.55:1)*(critical?this.stats.criticalMultiplier:1)*execute*marked*characterHitMultiplier(this,e,source,periodic)));
   this.damageByWeapon[source||'reaction']=(this.damageByWeapon[source||'reaction']||0)+Math.min(Math.max(0,e.hp),dmg);
   if(execute>1)this.relicProcs.executioner=(this.relicProcs.executioner||0)+1;
-  e.hp-=dmg;e.flash=.11;const a=Math.atan2(e.y-fromY,e.x-fromX);e.knockX+=Math.cos(a)*knock*(e.boss?.15:1);e.knockY+=Math.sin(a)*knock*(e.boss?.15:1);
+  e.hp-=dmg;e.flash=.11;if(e.root<=0){const a=Math.atan2(e.y-fromY,e.x-fromX);e.knockX+=Math.cos(a)*knock*(e.boss?.15:1);e.knockY+=Math.sin(a)*knock*(e.boss?.15:1)}
   if(this.texts.length<90)this.texts.push({x:e.x+(Math.random()-.5)*9,y:e.y-22*e.scale,text:dmg,t:.65,max:.65,critical,color:critical?'#efd395':'#d6ddbd'});
   if(feedback){this.sound.play('hit');this.burst(e.x,e.y-10,critical?6:3,critical?'#efd096':'#a3ab78',40)}
   if(critical&&feedback){this.shake=Math.max(this.shake,1.6);this.hitstop=Math.max(this.hitstop,.022)}
@@ -435,7 +434,6 @@ export class Game{
   if(menu||this.stage==='graveyard')this.landscape.drawFloor(g,cam,w,h,t);else drawExpeditionFloor(this,g,cam,w,h);const decor=this.landscape.getObjects(cam,w,h).map(o=>!menu&&this.stage!=='graveyard'?{...o,kind:({foundry:{tree:'furnace',deadTree:'anvil',grave:o.variant%2?'crate':'scrap',cross:'pillar',bush:'scrap'},coast:{tree:'coral',deadTree:'wreck',grave:'tideStone',cross:'pillar',bush:'seaweed'}}[this.stage][o.kind]||o.kind)}:o);
   // Subtle cool moonlight travels diagonally through the canopy.
   g.save();g.globalAlpha=.05;g.fillStyle='#b7c5a0';for(let i=0;i<3;i++){const x=w*.6+i*110+Math.sin(t*.08)*10;g.beginPath();g.moveTo(x,0);g.lineTo(x+70,0);g.lineTo(x-85,h);g.lineTo(x-160,h);g.closePath();g.fill()}g.restore();
-  if(!menu){this.drawZones(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
   // Shadows are drawn beneath all sprites, maintaining a coherent depth plane.
   for(const obj of decor)shadow(g,obj.x+ox,obj.y+oy,obj.kind==='tree'?28:obj.kind==='arch'?53:10,.20);
   if(!menu){for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+40&&Math.abs(e.y-cam.y)<h/2+50)shadow(g,e.x+ox,e.y+oy,e.r*1.3,.3);shadow(g,this.player.x+ox,this.player.y+oy,12,.44)}
@@ -443,21 +441,24 @@ export class Game{
   if(menu){renderables.push({kind:this.character.id,x:24,y:48,category:'hero',frame:Math.floor(t*4)%4,flip:true});for(const e of this.menuWalkers)renderables.push({...e,x:e.x+Math.sin(t*.15+e.phase)*16,y:e.y+Math.cos(t*.12+e.phase)*12,category:'enemy',scale:1,moving:true,frame:Math.floor(t*5+e.phase)%4})}
   else{
    for(const s of this.shrines)if(Math.abs(s.x-cam.x)<w/2+40&&Math.abs(s.y-cam.y)<h/2+80)renderables.push({...s,kind:'shrine',category:'decor'});
-   for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+50&&Math.abs(e.y-cam.y)<h/2+80)renderables.push({...e,category:'enemy',moving:e.freeze<=0,frame:Math.floor(e.walk)%4});
+   for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+50&&Math.abs(e.y-cam.y)<h/2+80)renderables.push({...e,category:'enemy',moving:e.freeze<=0&&e.root<=0,frame:Math.floor(e.walk)%4});
    renderables.push({...this.player,kind:this.character.id,category:'hero',frame:this.player.moving?Math.floor(this.player.walk)%4:Math.floor(t*4)%4});
   }
-  renderables.sort((a,b)=>a.y-b.y);
+  // Scenery and broad spell effects stay below actors, including enemies behind a building.
+  renderables.sort((a,b)=>(menu?0:Number(a.category==='enemy'||a.category==='hero')-Number(b.category==='enemy'||b.category==='hero'))||a.y-b.y);
+  let combatLayer=false;
   for(const o of renderables){const x=Math.round(o.x+ox),y=Math.round(o.y+oy);
-   if(o.category==='fire'){fire(g,x,y,t);continue}
-   let alpha=o.used?.42:1;
+   if(!menu&&!combatLayer&&(o.category==='enemy'||o.category==='hero')){this.drawZones(g,ox,oy,t);this.drawEffects(g,ox,oy,t);this.drawWeapons(g,ox,oy,t);this.drawProjectiles(g,ox,oy,t);this.drawDrops(g,ox,oy,t);combatLayer=true}
+   if(o.category==='fire'){fire(g,x,y,t,menu?1:.65);continue}
+   let alpha=o.used?.42:1,scale=o.scale||1;
    if(o.category==='hero'&&!menu&&this.player.invincible>0&&Math.floor(t*18)%2===0)alpha=.55;
-   // Fade foliage when it occludes the player so the action stays readable.
-   if(!menu&&(o.kind==='tree'||o.kind==='arch'||o.kind==='deadTree')&&Math.abs(o.x-this.player.x)<35&&o.y>this.player.y&&o.y-this.player.y<80)alpha=.4;
+   if(!menu&&o.category==='decor'&&o.kind!=='shrine'){scale*=.75;alpha=.7*(.35+.65*clamp((Math.hypot(o.x-this.player.x,o.y-this.player.y)-24)/68,0,1))}
    if(o.kind==='ghost')alpha=.68+Math.sin(t*4+o.x)*.12;
    if(o.elite||o.boss){g.strokeStyle=o.boss?'#c3917066':'#d3ba7066';g.lineWidth=1;g.beginPath();g.ellipse(x,y,o.r+5,(o.r+5)*.45,0,0,TAU);g.stroke()}
-   drawSprite(g,o.kind,x,y+(o.kind==='ghost'?Math.sin(t*3+o.x)*3:0),{frame:o.frame||0,flip:o.flip,scale:o.scale||1,alpha,variant:o.variant||0,moving:o.moving});
+   drawSprite(g,o.kind,x,y+(o.kind==='ghost'?Math.sin(t*3+o.x)*3:0),{frame:o.frame||0,flip:o.flip,scale,alpha,variant:o.variant||0,moving:o.moving});
    if(o.flash>0){g.save();g.globalCompositeOperation='screen';g.globalAlpha=.65;drawSprite(g,o.kind,x,y,{frame:o.frame||0,flip:o.flip,scale:o.scale||1,moving:o.moving});g.restore()}
    if(o.freeze>0){g.fillStyle='#a4d6d54d';g.fillRect(x-o.r,y-o.r*2.3,o.r*2,o.r*2.5);diamond(g,x,y-o.r*2.5,3,'#c7e6d4')}
+   if(o.root>0){g.save();g.lineWidth=1.5;for(const side of [-1,1])for(let i=0;i<6;i++){const u=i/5;g.strokeStyle=i%2?'#dbe1df':'#7898a5';g.beginPath();g.ellipse(x+side*(u-.5)*o.r*2,y-o.r*2+u*o.r*1.9,Math.max(3,o.r*.24),Math.max(1.5,o.r*.12),side*.8,0,TAU);g.stroke()}g.restore()}
    if(o.hp<o.maxHp&&!o.boss&&o.category==='enemy'){const width=o.elite?26:16;g.fillStyle='#102219';g.fillRect(x-width/2,y+5,width,2);g.fillStyle=o.elite?'#b8a46f':'#a49468';g.fillRect(x-width/2,y+5,width*Math.max(0,o.hp/o.maxHp),1)}
    if(o.boss&&o.state==='windup')diamond(g,x,y-43*o.scale,5,'#edb783');
    if(o.markUntil>this.time)diamond(g,x,y-25*o.scale,3,'#d6aed5');
@@ -467,10 +468,10 @@ export class Game{
   // Pools of light and floating ash tie the hand-drawn scenery together.
   glow(g,ox,oy-6,92+Math.sin(t*7)*4,'#e9983e34');glow(g,ox,oy-6,32,'#f4c26a32');
   for(const o of decor)if(o.kind==='lantern')glow(g,o.x+ox,o.y+oy-24,37,'#e7b36221');
-  if(!menu){this.drawWeapons(g,ox,oy,t);this.drawProjectiles(g,ox,oy,t);this.drawEffects(g,ox,oy,t);for(const p of this.particles){g.globalAlpha=clamp(p.t/p.max,0,1);g.fillStyle=p.color;g.fillRect(Math.round(p.x+ox),Math.round(p.y+oy),p.size,p.size)}g.globalAlpha=1;for(const tx of this.texts){g.globalAlpha=Math.min(1,tx.t*4);pixelText(g,tx.text,tx.x+ox,tx.y+oy,tx.color,tx.critical?11:8)}g.globalAlpha=1}
+  if(!menu){for(const p of this.particles){g.globalAlpha=clamp(p.t/p.max,0,1)*.6;g.fillStyle=p.color;g.fillRect(Math.round(p.x+ox),Math.round(p.y+oy),p.size,p.size)}g.globalAlpha=1;for(const tx of this.texts){g.globalAlpha=Math.min(1,tx.t*4);pixelText(g,tx.text,tx.x+ox,tx.y+oy,tx.color,tx.critical?11:8)}g.globalAlpha=1}
   if(!menu){
    // Keep danger telegraphs and the player readable when several builds overlap.
-   this.drawHazards(g,ox,oy,t);for(const b of this.projectiles)if(b.enemy)drawCombatProjectile(g,b,ox,oy,t);const hero=renderables.find(o=>o.category==='hero');
+   this.drawHazards(g,ox,oy,t);this.drawProjectiles(g,ox,oy,t,true);const hero=renderables.find(o=>o.category==='hero');
    drawSprite(g,hero.kind,hero.x+ox,hero.y+oy,{frame:hero.frame,flip:hero.flip,moving:hero.moving,alpha:this.player.invincible>0&&Math.floor(t*18)%2===0?.55:1});
    drawCharacterTalents(this,g,ox,oy);
   }
@@ -482,7 +483,7 @@ export class Game{
  drawHazards(g,ox,oy,t){for(const z of this.hazards){let x=z.x+ox,y=z.y+oy;g.save();g.strokeStyle=z.color||'#db9a7a';g.lineWidth=1;if(z.type==='tide'){drawTideHazard(g,z,ox,oy)}else if(z.type==='line'){g.globalAlpha=.5;g.setLineDash([4,3]);g.beginPath();g.moveTo(x,y);let a=Math.atan2(z.ty-z.y,z.tx-z.x);g.lineTo(x+Math.cos(a)*150,y+Math.sin(a)*150);g.stroke()}else{g.fillStyle=`rgba(175,83,66,${.08+(1-z.t/z.max)*.2})`;g.beginPath();g.arc(x,y,z.r,0,TAU);g.fill();g.globalAlpha=.5+Math.sin(t*20)*.25;g.stroke();g.strokeStyle='#f3c597';g.beginPath();g.arc(x,y,z.r*(1-z.t/z.max),0,TAU);g.stroke();g.fillRect(x-2,y-2,4,4)}g.restore()}}
  drawDrops(g,ox,oy,t){for(const d of this.drops){const x=Math.round(d.x+ox),y=Math.round(d.y+oy);if(x<-20||x>this.w+20||y<-20||y>this.h+20)continue;const bob=Math.round(Math.sin(t*3+d.x)*1.5);shadow(g,x,y,4,.2);if(d.type==='xp'){const big=d.elite||d.value>=12;diamond(g,x,y-4+bob,big?5:3,big?'#e2cd89':d.value>=5?'#8fcabb':'#8cb16f');g.fillStyle=big?'#fae7b7':'#d2dfa2';g.fillRect(x-1,y-6+bob,1,2);if(big)glow(g,x,y,16,'#dec38712')}if(d.type==='heal'){g.fillStyle='#617d51';g.fillRect(x-2,y-9+bob,4,3);g.fillStyle='#b5c789';g.fillRect(x-4,y-6+bob,8,7);g.fillStyle='#e0e3b1';g.fillRect(x-2,y-5+bob,2,4)}if(d.type==='magnet'){diamond(g,x,y-7+bob,6,'#8bbccc');diamond(g,x,y-7+bob,3,'#daeee0');glow(g,x,y-7,22,'#8dc7d922')}if(['hourglass','nova','ward'].includes(d.type)){const color={hourglass:'#b4dbe7',nova:'#e8ae70',ward:'#c4dda8'}[d.type];glow(g,x,y-7,22,color+'33');diamond(g,x,y-7+bob,7,color);g.fillStyle='#eff2d2';if(d.type==='hourglass'){g.fillRect(x-4,y-12+bob,8,2);g.fillRect(x-4,y-4+bob,8,2)}else if(d.type==='nova'){g.fillRect(x-1,y-16+bob,2,17);g.fillRect(x-8,y-8+bob,17,2)}else diamond(g,x,y-8+bob,3,'#4f715c')}if(d.type==='chest'){glow(g,x,y-8,33,'#d7ac5d24');drawSprite(g,'chest',x,y+bob);for(let i=0;i<3;i++){g.fillStyle='#dec988';g.fillRect(x-12+i*11,y-12-Math.round((t*12+i*7)%19),1,2)}}}}
  drawWeapons(g,ox,oy,t){drawFusionWeapons(this,g,ox,oy);const p=this.player,lvl=this.weapons.orbit;if(p.shield>0){g.strokeStyle='#bfe4cc88';g.lineWidth=1;g.beginPath();g.arc(p.x+ox,p.y+oy-9,17,0,TAU);g.stroke()}if(!lvl)return;const v=weaponStats('orbit',lvl,this.stats,this.character),count=v.count;for(let i=0;i<count;i++){const dir=lvl===6&&i%2?-1:1,a=this.orbitAngle*dir+i*TAU/count,r=v.radius+(i%2?v.outerOffset:0),x=p.x+ox+Math.cos(a)*r,y=p.y+oy-8+Math.sin(a)*r;for(let j=4;j>0;j--){let aa=a-j*.09*dir;g.globalAlpha=.12+(4-j)*.09;g.fillStyle='#a6d7be';g.fillRect(Math.round(p.x+ox+Math.cos(aa)*r)-2,Math.round(p.y+oy-8+Math.sin(aa)*r)-2,4,4)}g.globalAlpha=1;drawSpirit(g,x,y,t+i*.3,lvl===6?20:16,lvl===6)}}
- drawProjectiles(g,ox,oy,t){for(const b of this.projectiles){if(drawCombatProjectile(g,b,ox,oy,t))continue;let x=Math.round(b.x+ox),y=Math.round(b.y+oy);if(b.trail){for(let i=0;i<b.trail.length;i++){g.globalAlpha=i/b.trail.length*.45;g.fillStyle=b.type==='flame'?'#d29a55':b.fusionKind?'#c7b4ec':b.homing?'#d8c9a0':'#9fac80';g.fillRect(Math.round(b.trail[i].x+ox)-1,Math.round(b.trail[i].y+oy)-1,b.type==='flame'?4:2,b.type==='flame'?4:2)}g.globalAlpha=1}
+ drawProjectiles(g,ox,oy,t,hostile=false){for(const b of this.projectiles){if(!!b.enemy!==hostile)continue;if(drawCombatProjectile(g,b,ox,oy,t))continue;let x=Math.round(b.x+ox),y=Math.round(b.y+oy);if(b.trail){for(let i=0;i<b.trail.length;i++){g.globalAlpha=i/b.trail.length*.45;g.fillStyle=b.type==='flame'?'#d29a55':b.fusionKind?'#c7b4ec':b.homing?'#d8c9a0':'#9fac80';g.fillRect(Math.round(b.trail[i].x+ox)-1,Math.round(b.trail[i].y+oy)-1,b.type==='flame'?4:2,b.type==='flame'?4:2)}g.globalAlpha=1}
   if(drawExpandedProjectile(g,b,ox,oy,t))continue;
   if(b.type==='bolt'){const a=Math.atan2(b.vy,b.vx);g.strokeStyle=b.fusionKind?'#d8c9ff':b.homing?'#efdfa5':'#e0d9ab';g.lineWidth=2;g.beginPath();g.moveTo(x-Math.cos(a)*9,y-Math.sin(a)*9);g.lineTo(x+Math.cos(a)*4,y+Math.sin(a)*4);g.stroke();diamond(g,x+Math.cos(a)*4,y+Math.sin(a)*4,2,'#eae1b3')}
   if(b.type==='flame'){glow(g,x,y,23,'#eca85b3d');diamond(g,x,y,6,'#ba713c');diamond(g,x,y,4,'#e8b565');g.fillStyle='#f8dfac';g.fillRect(x-1,y-2,2,3)}

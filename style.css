@@ -266,3 +266,26 @@ body.playing #masthead{opacity:0;pointer-events:none}#hud{position:absolute;inse
 #level-screen .refinement-card{border-color:var(--card-color);box-shadow:inset 0 3px var(--card-color)}
 #level-screen .refinement-card .rarity,#level-screen .refinement-card h3{color:var(--card-color)}
 #level-screen .refinement-card .upgrade-gains span{white-space:normal;overflow-wrap:anywhere}
+
+/* Quiet ink surfaces keep the pixel silhouettes and gameplay information prominent. */
+body.playing .screen-grain{opacity:.035}body.playing .vignette{opacity:.45}
+.modal-wrap .panel{background:linear-gradient(145deg,#202e30,#101d22);border-color:#82928b88;box-shadow:5px 5px 0 #060e12,0 0 0 3px #17272b}
+#hud :is(.player-status,.night-progress,.hud-utilities>button){background:#101d24d9;border-color:#7b91855c}
+#hud .weapon-dock,#hud .passive-dock{background:#0d1820bb;box-shadow:0 0 0 1px #87948a33}
+#hud .weapon-slot,#hud .passive-slot{background:linear-gradient(145deg,#2a393b,#132127);border-color:#80918b66;box-shadow:inset 0 1px #d6deca12}
+#hud .weapon-slot.evolved{border-color:#dfbd7e}#hud .weapon-slot.fused{border-color:#b7a1d6}
+#hud .weapon-level,#hud .passive-slot>span{padding:1px 3px;background:#0a141bee;color:#f1dfae;line-height:1.2;text-shadow:none}
+#hud .boss-bar>div{height:7px;border-color:#d2927777;background:#24151c}#hud .boss-bar>span{color:#f1c9a5;text-shadow:0 2px #081219}
+#hud .health-numbers,#hud .night-progress>span{color:#c2cfbf}
+.catalog-list .catalog-item{background:radial-gradient(ellipse at 50% 35%,#31474877,#13232b 75%);border-color:#80918b66;box-shadow:inset 0 1px #d9decd18,0 2px #060e1288}
+.catalog-list .catalog-item:is(:hover,.selected){background:linear-gradient(135deg,#4b4732,#253438);border-color:#e3c38a;box-shadow:inset 0 -3px #e3c38a55}
+.icon-choices .icon-choice{background:linear-gradient(145deg,#263b3c,#13252b);border-color:#7e938366;color:#d5dccc}
+.icon-choices .icon-choice[aria-pressed="true"]{background:linear-gradient(135deg,#4a4834,#28382f);border-color:#e0c58d;color:#f2e5c0}
+#level-screen .upgrade-card{background:linear-gradient(145deg,#293a3b,#152329);border-color:#82918a88;box-shadow:3px 3px #050e14}
+#level-screen .upgrade-card:is(:hover,:focus-visible){background:linear-gradient(145deg,#3b4c46,#1d3133);border-color:#e0c58d}
+#level-screen .upgrade-card.evolution{background:linear-gradient(145deg,#4a3e2c,#202b2a);border-color:#e0b877}
+#level-screen .refinement-card{border-color:var(--card-color);box-shadow:inset 0 3px var(--card-color),3px 3px #050e14}
+#level-screen .upgrade-card canvas{background:#0b182480;outline:1px solid #d6deca26;outline-offset:3px}
+#level-screen .upgrade-card p{color:#c1cdbb}#level-screen .upgrade-gains{color:#f0d3a0}
+.sheet-tabs button[aria-selected="true"]{color:#f3dfb0;border-bottom-color:#e1bb7c;background:linear-gradient(0deg,#c5a06c18,transparent)}
+@media(min-width:701px) and (min-height:501px){#level-screen .upgrade-card canvas{width:48px;height:48px}.catalog-list .catalog-item canvas{width:48px;height:48px}}

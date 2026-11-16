@@ -1,7 +1,7 @@
 import {WEAPONS,PASSIVES} from './data.js';
 
-export const WEAPON_SLOTS = 6;
-export const PASSIVE_SLOTS = 6;
+export const WEAPON_SLOTS = 5;
+export const PASSIVE_SLOTS = 5;
 export const FUSION_TIME = 180;
 const weapon=(id,required=4)=>({id,type:'weapon',required});
 const relic=id=>({id,type:'passive',required:2});
@@ -13,6 +13,8 @@ export const FUSIONS = {
   hailfire:{id:'hailfire',ingredients:[weapon('meteor'),weapon('frost')],motto:'群星披雪，落地成灰。',effect:'冻结陨星 + 持续灼烧与减速寒域'},
   soulforge:{id:'soulforge',ingredients:[weapon('sentinel',5),relic('soulpact')],motto:'一座空龛，住满不愿远去的星。',effect:'穿透追魂齐射 + 灵龛消散震波'},
   solar:{id:'solar',ingredients:[weapon('blade'),weapon('flame')],motto:'刃为骨，火为魂。',effect:'360° 日轮斩 + 持续灼烧火环'},
+  whirlwind:{id:'whirlwind',ingredients:[weapon('axe'),weapon('blade')],motto:'双刃起处，长风裂阵。',effect:'随身双重旋斩 + 外圈斧刃重击'},
+  quake:{id:'quake',ingredients:[weapon('hammer'),weapon('bell')],motto:'一锤落下，山岳回声。',effect:'全周重锤 + 两次随身击退余震'},
   thunderbolt:{id:'thunderbolt',ingredients:[weapon('bolt'),weapon('storm')],motto:'一箭贯星，万雷随行。',effect:'追踪穿透箭 + 命中连锁雷霆'},
   glacier:{id:'glacier',ingredients:[weapon('orbit'),weapon('frost')],motto:'灵魂归寂，长夜凝霜。',effect:'护身寒晶 + 牵引寒域 + 终结冰爆'},
   eclipse:{id:'eclipse',ingredients:[weapon('crescent'),weapon('blade')],motto:'月缺之处，锋刃生长。',effect:'往返巨镰 + 命中范围切割'},
@@ -24,9 +26,9 @@ export const FUSIONS = {
   starfall:{id:'starfall',ingredients:[weapon('meteor',5),relic('embercore')],motto:'所有坠星，都曾是一盏灯。',effect:'陨星雨 + 燃烧领域 + 短暂易伤'},
   bastion:{id:'bastion',ingredients:[weapon('sentinel',5),relic('aegis')],motto:'此地灯火，不许熄灭。',effect:'穿透炮台 + 近距离周期护盾'},
   wintermine:{id:'wintermine',ingredients:[weapon('mine'),weapon('frost')],motto:'脚步落下，寒冬醒来。',effect:'感应冰棺 + 冻结爆炸 + 减速寒域'},
-  soulchain:{id:'soulchain',ingredients:[weapon('tether'),weapon('bell')],motto:'钟声所至，冥河皆牢。',effect:'连锁牵引 + 每个锁定点的延迟震爆'},
+  soulchain:{id:'soulchain',ingredients:[weapon('tether'),weapon('bell')],motto:'钟声所至，冥河皆牢。',effect:'连锁禁锢 + 每个锁定点的延迟震爆'},
   ricochet:{id:'ricochet',ingredients:[weapon('shard',5),relic('lens')],motto:'白骨散尽，长风未止。',effect:'多重跳弹 + 首击分裂追踪骨片'},
-  execution:{id:'execution',ingredients:[weapon('lance',5),relic('executioner')],motto:'破晓之前，裁决已至。',effect:'贯穿枪芒 + 对低血目标的处决增伤'},
+  execution:{id:'execution',ingredients:[weapon('lance',5),relic('executioner')],motto:'破晓之前，裁决已至。',effect:'全周环扫 + 双重追刺 + 低血处决增伤'},
   supernova:{id:'supernova',ingredients:[weapon('meteor'),weapon('prism')],motto:'群星熔于一瞬。',effect:'延迟轰炸 + 落点四向贯穿光束'},
   stormsentry:{id:'stormsentry',ingredients:[weapon('sentinel'),weapon('storm')],motto:'无人值守，雷声不息。',effect:'固定雷塔 + 穿透电弹 + 首发连锁'},
   pestilence:{id:'pestilence',ingredients:[weapon('mine'),weapon('thorn')],motto:'每一步归途，都开出腐花。',effect:'孢子地雷 + 侵蚀疫池 + 终结毒爆'},

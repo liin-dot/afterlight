@@ -15,7 +15,7 @@ export const passiveEffect = (key, level) => ({
   regen: `每秒恢复 ${number(level * .22)} 点生命。`,
   luck: `暴击率增加 ${level * 5} 个百分点；基础暴击伤害为 2 倍。`,
   area: `武器范围、光束宽度、连锁与弹跳距离 +${level * 10}%。`,
-  duration: `武器领域、减速与普通敌人冻结持续 +${level * 15}%；首领冻结不变。`,
+  duration: `武器领域、减速与普通敌人冻结、禁锢持续 +${level * 15}%；首领冻结、禁锢不变。`,
   amount: `武器弹数、环绕物或落雷目标 +${level}；不增加炮台数量。`,
   focus: `暴击伤害倍率 +${number(level * .25,2)}。`,
   growth: `经验获取 +${level * 10}%。`,
@@ -35,6 +35,10 @@ export function weaponFacts(kind, values) {
     if (kind === 'thunderbolt') facts.push(['每轮追踪箭', v.count + ' 枚'], ['每矢最多命中', v.pierce + ' 个敌人'], ['每矢首次命中连锁', v.chainCount + ' 个其他目标'], ['连锁伤害', damage(v.chainDamage)], ['连锁搜索范围', v.chainRange + ' 像素']);
     if (kind === 'glacier') facts.push(['寒晶数量', v.count + ' 颗'], ['接触间隔', seconds(v.hitInterval)], ['环绕半径', v.radius + ' 像素'], ['寒域半径 / 持续', v.fieldRadius + ' 像素 / ' + seconds(v.fieldDuration)], ['寒域持续伤害', `${damage(v.fieldDamage)} / ${seconds(v.fieldInterval)}`], ['终结冰爆伤害', damage(v.blastDamage)], ['敌人 / 首领冻结', `${seconds(v.freeze)} / ${seconds(v.bossFreeze)}`], ['牵引与减速', '牵引至寒晶环 · 减速 55%']);
     if (kind === 'blade') facts.push(['斩击半径', v.radius + ' 像素'], ['斩击角度', number(v.arc * 180 / Math.PI) + '°']);
+    if(['axe','hammer','whirlwind','quake'].includes(kind))facts.push(['近战半径',v.radius+' 像素'],['覆盖角度',number(v.arc*180/Math.PI)+'°']);
+    if(v.edgeMultiplier)facts.push(['外圈重击',damage(v.damage*v.edgeMultiplier)],['斧刃范围',number(v.radius*.6)+'–'+v.radius+' 像素']);
+    if(['hammer','quake'].includes(kind))facts.push(['减速 55%',seconds(v.slowDuration)],['击退强度',v.knock+' · 首领仅 15%']);
+    if(['hammer','whirlwind','quake'].includes(kind)&&v.echoCount)facts.push(['随身追加攻击',v.echoCount+' 次'],['每次追加伤害',damage(v.echoDamage)],['追加间隔',seconds(v.echoDelay)]);
     if (kind === 'bolt') facts.push(['每轮弩矢', v.count + ' 枚'], ['每矢最多命中', v.pierce + ' 个敌人']);
     if (kind === 'orbit') facts.push(['游魂数量', v.count + ' 盏'], ['环绕半径', v.evolved ? `${v.radius} / ${v.radius + v.outerOffset} 像素` : v.radius + ' 像素'], ['游魂接触半径', v.contactRadius + ' 像素'], ['同一敌人命中间隔', seconds(v.hitInterval)]);
     if (kind === 'storm') facts.push(['最多落雷目标', v.count + ' 个'], ['连锁搜索范围', v.chainRange + ' 像素']);
@@ -64,9 +68,12 @@ export function weaponFacts(kind, values) {
     if(kind==='soulforge')facts.push(['散魂震波',damage(v.blastDamage)],['散魂半径',v.blastRadius+' 像素']);
     if(kind==='bastion')facts.push(['近身守护','每 5 秒补至 '+v.shield+' 护盾'],['守护范围',v.shieldRadius+' 像素']);
     if(kind==='stormsentry')facts.push(['每轮首弹连锁',v.chainCount+' 个目标'],['连锁伤害',damage(v.chainDamage)]);
-    if(['tether','soulchain'].includes(kind))facts.push(['最多锁定',v.count+' 个目标'],['连锁范围',v.range+' 像素'],['牵引距离',v.pull+' 像素 · 首领 12%'],['减速持续',seconds(v.slowDuration)]);
+    if(['tether','soulchain'].includes(kind))facts.push(['最多锁定',v.count+' 个目标'],['普通敌人 / 首领禁锢',seconds(v.rootDuration)+' / '+seconds(v.bossRoot)],['连锁范围',v.range+' 像素'],['禁锢效果','固定在命中位置，阻止移动、冲锋与位移'],['减速 55%',seconds(v.rootDuration)]);
     if((kind==='tether'||kind==='soulchain')&&v.blastDamage)facts.push(['延迟震爆',damage(v.blastDamage)],['震爆半径',v.blastRadius+' 像素']);
-    if(['lance','execution'].includes(kind))facts.push(['枪芒长度',v.range+' 像素'],['枪芒宽度',v.width*2+' 像素'],['每轮突刺',v.strikes+' 次']);
+    if(['lance','execution'].includes(kind)){
+      facts.push(['横扫伤害',damage(v.sweepDamage)],['横扫范围',v.radius+' 像素 / '+number(v.arc*180/Math.PI)+'°'],['枪芒长度',v.range+' 像素'],['枪芒宽度',v.width*2+' 像素'],['每轮突刺',v.strikes+' 次'],['正面命中','横扫与突刺分别结算']);
+      if(v.strikes>1)facts.push(['追刺延迟',seconds(v.echoDelay)],['追刺位置','跟随角色，重新瞄准近敌']);
+    }
     if(kind==='execution')facts.push(['处决阈值',percent(v.threshold)+' 生命以下'],['处决增伤',percent(v.executeMultiplier-1)+' · 首领减半']);
     facts.push(['直接命中暴击率',percent(v.criticalChance)],['异常触发率',percent(v.anomalyChance)]);
     return facts;

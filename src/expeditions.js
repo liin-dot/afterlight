@@ -2,10 +2,10 @@ import {TAU,hash,diamond} from './art.js';
 import {artAvailable} from './assets.js';
 
 export const STAGES={
-  graveyard:{name:'遗忘墓园',subtitle:'第一章 · 最后一盏灯',color:'#bdd397',hint:'十五分钟守夜，躲避首领冲锋与落点。',reward:250,bosses:['墓园看守','无名葬钟','蚀月君王'],bossKinds:['knight','knight','reaper']},
-  foundry:{name:'焚星熔炉',subtitle:'第二章 · 熄灭天火',color:'#eda376',hint:'绕过铁卫正面，避开自爆；首领落点以橙色圆圈预警。',reward:350,hp:1.08,wave:'cinderling',bosses:['炉心监工','熔铁巨像','焚城铸王'],bossKinds:['bomber','bulwark','oracle'],
+  graveyard:{name:'遗忘墓园',subtitle:'第一章 · 最后一盏灯',color:'#bdd397',hint:'十五分钟守夜，躲避首领冲锋与落点。',reward:250,bosses:['墓园看守','无名葬钟','长夜执刑者','蚀月君王'],bossKinds:['knight','knight','reaper','reaper']},
+  foundry:{name:'焚星熔炉',subtitle:'第二章 · 熄灭天火',color:'#eda376',hint:'绕过铁卫正面，避开自爆；首领落点以橙色圆圈预警。',reward:350,hp:1.08,wave:'cinderling',bosses:['炉心监工','熔铁巨像','焚星铁卫','焚城铸王'],bossKinds:['bomber','bulwark','bulwark','oracle'],
     rosters:[{cinderling:60,skeleton:30,bat:10},{cinderling:45,bomber:25,ghoul:30},{bulwark:25,cinderling:35,bomber:25,ghost:15},{bulwark:30,oracle:15,bomber:30,cinderling:25},{oracle:20,bulwark:35,bomber:20,reaper:25},{bulwark:30,oracle:25,reaper:25,cinderling:20}]},
-  coast:{name:'沉钟海岸',subtitle:'第三章 · 逆潮归航',color:'#91d7e0',hint:'避开歌妖远射与裂潮兽突进；首领潮汐留有青色缺口。',reward:400,hp:1.12,wave:'leech',bosses:['沉钟歌者','裂潮之牙','无潮女王'],bossKinds:['siren','leech','siren'],
+  coast:{name:'沉钟海岸',subtitle:'第三章 · 逆潮归航',color:'#91d7e0',hint:'避开歌妖远射与裂潮兽突进；首领潮汐留有青色缺口。',reward:400,hp:1.12,wave:'leech',bosses:['沉钟歌者','裂潮之牙','深潮祭司','无潮女王'],bossKinds:['siren','leech','oracle','siren'],
     rosters:[{leech:35,skeleton:50,bat:15},{leech:35,siren:20,ghoul:30,ghost:15},{siren:25,leech:35,bulwark:15,ghost:25},{siren:25,oracle:15,leech:35,knight:25},{oracle:20,siren:25,leech:35,reaper:20},{oracle:20,siren:30,reaper:25,leech:25}]},
 };
 

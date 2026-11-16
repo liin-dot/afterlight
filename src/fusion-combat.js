@@ -85,7 +85,7 @@ export function updateFusionZone(game,z,dt) {
   if(z.kind==='glacier') {
     for(const e of enemies) {
       const dx=z.x-e.x,dy=z.y-e.y,d=Math.hypot(dx,dy);
-      if(d<z.r+e.r&&d>z.pullRadius&&e.state!=='charge') {
+      if(d<z.r+e.r&&d>z.pullRadius&&e.state!=='charge'&&e.root<=0) {
         const shift=Math.min(d-z.pullRadius,z.pullSpeed*dt*(e.boss?.12:1));
         e.x+=dx/d*shift;e.y+=dy/d*shift;
         e.slow=Math.max(e.slow,.6);

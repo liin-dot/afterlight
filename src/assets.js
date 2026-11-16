@@ -25,12 +25,11 @@ export function spell(g,name,x,y,time=0,size=20,angle=0,stretch=1){
  g.save();g.translate(Math.round(x),Math.round(y));if(angle)g.rotate(angle);
  g.drawImage(sheets.spells,sx+frame*w,sy,w,h,-size*stretch/2,-size/2,size*stretch,size);g.restore();return true;
 }
-const equipmentIcons={blade:'weapon_knight_sword',solar:'weapon_golden_sword',bolt:'weapon_bow',thunderbolt:'weapon_bow_2',lance:'weapon_spear',execution:'weapon_lavish_sword',mine:'bomb_f0',thorn:'flask_green',plague:'flask_big_green'};
+const equipmentIcons={blade:'weapon_knight_sword',bolt:'weapon_bow',lance:'weapon_spear',axe:'weapon_waraxe',hammer:'weapon_hammer',whirlwind:'weapon_double_axe',quake:'weapon_big_hammer'};
 export function packedIcon(g,kind){
  if(!artAvailable())return false;
  const name=equipmentIcons[kind];
  if(name){const rect=frames.dungeon[name],scale=Math.min(22/rect[2],22/rect[3]);dungeon(g,name,(24-rect[2]*scale)/2,(24-rect[3]*scale)/2,rect[2]*scale,rect[3]*scale);return true}
- if(kind==='flame'){spell(g,'fireball',12,12,.1,26,-Math.PI/2);return true}
  if(kind==='needle'||kind==='frostloom'){const count=kind==='frostloom'?3:1;for(let i=0;i<count;i++){const offset=(i-(count-1)/2)*3;spell(g,'ice-lance',12+offset,12+offset,.1,23,-Math.PI/4)}return true}
  return false;
 }
@@ -66,13 +65,15 @@ export function packedSprite(kind,frame=0,variant=0,moving=false){
  }else if(kind==='furnace'){
   dungeon(g,'wall_fountain_top_2',2,0,48,24);dungeon(g,'wall_fountain_mid_red_anim_f'+frame%3,2,24,48,24);dungeon(g,'wall_fountain_basin_red_anim_f'+frame%3,2,48,48,16);
  }else if(kind==='crate')dungeon(g,'crate',0,0,32,40);
- else if(kind==='scrap'){tiny(g,24,0,2,32,20);g.save();g.translate(19,13);g.rotate(.8);dungeon(g,'weapon_rusty_sword',-4,-14,8,26);g.restore()}
+ else if(kind==='scrap'){
+  g.fillStyle='#25292d';g.fillRect(3,15,26,5);g.fillStyle='#505451';g.fillRect(4,12,11,5);g.fillRect(18,14,12,4);g.fillStyle='#777568';g.fillRect(5,12,8,1);g.fillRect(19,14,8,1);g.fillStyle='#8e7155';g.fillRect(8,13,2,2);g.fillRect(22,15,2,2);
+ }
  else if(kind==='wreck'){g.save();g.translate(22,17);g.rotate(-.22);dungeon(g,'crate',-20,-12,28,25);tiny(g,77,-3,-2,32,16);g.restore()}
  else if(kind==='seaweed'){
   for(let i=0;i<5;i++){g.fillStyle=i%2?'#457c79':'#64968b';for(let j=0;j<7;j++)g.fillRect(6+i*5+Math.round(Math.sin(j*.8+i)*2),27-j*3,2,4)}
  }else if(kind==='tideStone'){tiny(g,65,0,0,30,32);g.globalCompositeOperation='source-atop';g.fillStyle='#5ab8ca55';g.fillRect(0,0,30,36)}
  else if(kind==='anvil'){
-  dungeon(g,'floor_3',3,20,40,12);g.fillStyle='#31363e';g.fillRect(16,10,17,19);g.fillStyle='#7f8a91';g.fillRect(6,7,34,7);g.fillRect(2,7,10,3);g.fillStyle='#b4aaa0';g.fillRect(8,6,31,2);dungeon(g,'weapon_hammer',25,0,9,24);
+  g.fillStyle='#31363e';g.fillRect(16,10,17,19);g.fillRect(10,27,30,4);g.fillStyle='#737b7c';g.fillRect(6,7,34,7);g.fillRect(2,7,10,3);g.fillStyle='#9d9b8b';g.fillRect(8,6,31,2);
  }
  if(['grave','cross','tideStone'].includes(kind)){g.globalCompositeOperation='source-atop';g.fillStyle=kind==='tideStone'?'#19455288':'#1c3834aa';g.fillRect(0,0,c.width,c.height)}
  spriteCache.set(key,c);return c;
@@ -81,7 +82,7 @@ function terrainTile(stage,index){
  const key=stage+':'+index;if(tileCache.has(key))return tileCache.get(key);
  const c=document.createElement('canvas');c.width=c.height=32;const g=c.getContext('2d');g.imageSmoothingEnabled=false;
  if(stage==='coast')tiny(g,48+index%6,0,0,32,32);else dungeon(g,'floor_'+(index%8+1),0,0,32,32);
- g.globalCompositeOperation='source-atop';g.fillStyle={graveyard:'#12352caa',foundry:'#30232b66',coast:'#124858ba'}[stage];g.fillRect(0,0,32,32);
+ g.globalCompositeOperation='source-atop';g.fillStyle={graveyard:'#142c29c4',foundry:'#27282ec4',coast:'#19343bc4'}[stage];g.fillRect(0,0,32,32);
  g.globalCompositeOperation='multiply';g.fillStyle=stage==='foundry'?'#b4a4a0':stage==='coast'?'#aac6c7':'#a3bdb5';g.fillRect(0,0,32,32);
  tileCache.set(key,c);return c;
 }

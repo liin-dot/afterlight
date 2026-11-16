@@ -31,7 +31,7 @@ export function drawCombatProjectile(g,b,ox,oy,t){
  // Every projectile uses its actual world position; animation never changes hit geometry.
  g.save();
  if(b.trail){
-  const trail=b.trail;g.lineWidth=b.type==='flame'?3:1;
+  const trail=b.trail;g.lineWidth=b.type==='flame'?2:1;
   for(let i=1;i<trail.length;i++){g.globalAlpha=i/trail.length*.24;path(g,[[trail[i-1].x+ox,trail[i-1].y+oy],[trail[i].x+ox,trail[i].y+oy]],b.enemy?'#f07a83':color,false,g.lineWidth)}g.globalAlpha=1;
  }
  if(b.enemy){
@@ -52,7 +52,7 @@ export function drawCombatProjectile(g,b,ox,oy,t){
   for(let i=0;i<4;i++){g.rotate(Math.PI/2);g.fillStyle='#d9d4ba';g.fillRect(-2,0,4,10);g.fillRect(-4,7,8,3);g.fillStyle='#7e8580';g.fillRect(1,2,1,5)}
   g.fillStyle='#35444b';g.fillRect(-3,-3,6,6);if(source==='ricochet'){g.fillStyle='#f4c885';g.fillRect(-1,-1,2,2);for(let i=0;i<4;i++)crystal(g,Math.cos(i*TAU/4)*13,Math.sin(i*TAU/4)*13,4,i*TAU/4,'#e3e0c7')}
  }else if(b.type==='flame'){
-  spell(g,b.lvl===6?'firebomb':'fireball',x,y,t,b.lvl===6?32:25,a);glow(g,x,y,17,'#f9a15722');
+  g.globalAlpha*=.65;spell(g,b.lvl===6?'firebomb':'fireball',x,y,t,b.lvl===6?32:25,a);glow(g,x,y,17,'#f9a15716');
  }else if(b.type==='refraction'){
   g.translate(Math.round(x),Math.round(y));g.rotate(a);path(g,[[10,0],[-5,-5],[-2,0],[-5,5]],'#deb2f4');path(g,[[8,0],[-2,-2],[-2,2]],'#f4ede0');
  }else if(b.type==='soul'){
@@ -73,16 +73,18 @@ export function drawCombatProjectile(g,b,ox,oy,t){
 function iceField(g,x,y,r,t,strong=false){
  g.strokeStyle='#8dbed22d';g.lineWidth=1;
  for(let i=0;i<6;i++){const a=i*TAU/6,ex=x+Math.cos(a)*r,ey=y+Math.sin(a)*r;path(g,[[x,y],[ex,ey]],'#8dbed239',false);for(const side of [-1,1])path(g,[[x+Math.cos(a)*r*.65,y+Math.sin(a)*r*.65],[x+Math.cos(a+side*.25)*r*.45,y+Math.sin(a+side*.25)*r*.45]],'#8dbed22d',false)}
- for(let i=0;i<12;i++){const a=i*2.4,rr=r*(.28+hash(i,3)*.67),xx=x+Math.cos(a)*rr,yy=y+Math.sin(a)*rr;crystal(g,xx,yy,(strong?15:10)+Math.sin(t*2+i)*2,a*.2)}
+ for(let i=0;i<8;i++){const a=i*2.4,rr=r*(.52+hash(i,3)*.4),xx=x+Math.cos(a)*rr,yy=y+Math.sin(a)*rr;crystal(g,xx,yy,(strong?10:6)+Math.sin(t*2+i),a*.2)}
 }
 function fireField(g,x,y,r,t,inner=0){
+ g.save();g.globalAlpha*=.35;
  for(let i=0;i<14;i++){const a=i*2.4,rr=inner+(r-inner)*(.25+hash(i,8)*.7);spell(g,'fireball',x+Math.cos(a)*rr,y+Math.sin(a)*rr-5,t+i*.13,20+hash(i,2)*12,-Math.PI/2)}
+ g.restore();
 }
 export function drawCombatZone(g,z,ox,oy,t){
  if(!artAvailable())return false;
  const x=z.x+ox,y=z.y+oy,source=z.source||z.kind||'flame',color=colorOf(source),r=z.r||10;
  if(x+r<-40||y+r<-140||x-r>g.canvas.width+40||y-r>g.canvas.height+40)return true;
- if(z.kind==='lanceEcho')return true;
+ if(z.kind==='lanceEcho'||z.kind==='meleeEcho')return true;
  g.save();g.globalAlpha=Math.min(1,z.t*4);
  if(z.kind==='tidalWave'){
   const angle=Math.atan2(z.vy,z.vx),vortex=source==='maelstrom';
@@ -129,16 +131,16 @@ export function drawCombatZone(g,z,ox,oy,t){
   else if(source==='soulchain')spell(g,'magic-sparks',x,y-8,t,32);
   else if(ICE.has(source))crystal(g,x,y-8,14*p+.5,t);
  }else if(!z.kind||['solar','glacier','aftermath','poison','relicFire'].includes(z.kind)){
-  g.fillStyle=color+'0d';g.beginPath();g.arc(x,y,r,0,TAU);if(z.innerRadius)g.arc(x,y,z.innerRadius,0,TAU,true);g.fill();
-  g.strokeStyle=color+'33';g.lineWidth=1;g.beginPath();g.arc(x,y,r,0,TAU);g.stroke();
+  g.fillStyle=color+'08';g.beginPath();g.arc(x,y,r,0,TAU);if(z.innerRadius)g.arc(x,y,z.innerRadius,0,TAU,true);g.fill();
+  if(!z.trail){g.strokeStyle=color+'33';g.lineWidth=1;g.beginPath();g.arc(x,y,r,0,TAU);g.stroke()}
   if(POISON.has(source)||z.kind==='poison'){
-   for(let i=0;i<9;i++){const a=i*2.4,rr=r*(.23+hash(i,8)*.65),xx=x+Math.cos(a)*rr,yy=y+Math.sin(a)*rr;
+   for(let i=0;i<6;i++){const a=i*2.4,rr=r*(.5+hash(i,8)*.4),xx=x+Math.cos(a)*rr,yy=y+Math.sin(a)*rr;
     if(source==='pestilence'){g.fillStyle='#8cb06d';g.fillRect(xx-1,yy-4,2,7);path(g,[[xx-5,yy-4],[xx,yy-9],[xx+5,yy-4]],'#c4cb8c');g.fillStyle='#d4e3ac77';g.fillRect(xx+Math.sin(t+i)*3,yy-10-(t*7+i*3)%14,2,2)}
-    else{path(g,[[x+Math.cos(a)*r*.2,y+Math.sin(a)*r*.2],[xx-6,yy+5],[xx,yy-2],[xx+6,yy]],'#8cad6055',false,2);spell(g,'plant-missle',xx,yy,t*.7+i,source==='plague'?23:16,a);if(source==='plague')path(g,[[xx-4,yy],[xx,yy-11],[xx+3,yy+1]],'#b4ce8777')}
+    else{path(g,[[x+Math.cos(a)*r*.2,y+Math.sin(a)*r*.2],[xx-6,yy+5],[xx,yy-2],[xx+6,yy]],'#8cad6033',false,1);spell(g,'plant-missle',xx,yy,t*.7+i,source==='plague'?16:12,a);if(source==='plague')path(g,[[xx-4,yy],[xx,yy-8],[xx+3,yy+1]],'#b4ce8755')}
    }
   }else if(source==='hailfire'){iceField(g,x,y,r,t);fireField(g,x,y,r*.65,t)}
   else if(ICE.has(source)){iceField(g,x,y,r,t,source==='glacier');if(source==='glacier')for(let i=0;i<6;i++){const a=i*TAU/6-t*.7,rr=r*(1-(t*.35+i/6)%1);crystal(g,x+Math.cos(a)*rr,y+Math.sin(a)*rr,5,a)}}
-  else fireField(g,x,y,r,t,z.innerRadius||0);
+  else fireField(g,x,y,r,t+(z.seed||0),z.innerRadius||0);
   if(z.innerRadius){g.strokeStyle='#f0c16c66';g.beginPath();g.arc(x,y,z.innerRadius,0,TAU);g.stroke()}
  }else{g.restore();return false}
  g.restore();return true;
@@ -151,6 +153,10 @@ function burst(g,source,x,y,r,p,t,color){
   for(let i=0;i<count;i++){const a=i*TAU/count;crystal(g,x+Math.cos(a)*reach*.78,y+Math.sin(a)*reach*.78,(source==='absolute'?17:7)+Math.sin(p*Math.PI)*(source==='frostloom'?8:16),a+Math.PI/2);path(g,[[x+Math.cos(a)*reach*.25,y+Math.sin(a)*reach*.25],[x+Math.cos(a)*reach,y+Math.sin(a)*reach]],'#afddeb88',false,1)}
   if(source==='absolute'){const hex=[];for(let i=0;i<=6;i++){const a=i*TAU/6;hex.push([x+Math.cos(a)*reach,y+Math.sin(a)*reach])}path(g,hex,'#d9f1e4',false,2)}
   g.strokeStyle='#a6cfd94d';g.beginPath();g.arc(x,y,reach,0,TAU);g.stroke();
+ }else if(source==='hammer'||source==='quake'){
+  g.strokeStyle=color;g.lineWidth=source==='quake'?3:2;g.beginPath();g.arc(x,y,reach,0,TAU);g.stroke();
+  for(let i=0;i<8;i++){const a=i*TAU/8,rr=reach*.8;path(g,[[x+Math.cos(a)*rr*.2,y+Math.sin(a)*rr*.2],[x+Math.cos(a+.13)*rr*.55,y+Math.sin(a+.13)*rr*.55],[x+Math.cos(a)*rr,y+Math.sin(a)*rr]],'#c5b6a2',false,2)}
+  g.save();g.translate(x,y-8);g.rotate(-.65+p*.9);dungeon(g,source==='quake'?'weapon_big_hammer':'weapon_hammer',-8,-30,16,38);g.restore();
  }else if(source==='bell'||source==='requiem'){
   bell(g,x,y-4,(source==='requiem'?35:27)*(1-p*.2),color);
   for(let ring=0;ring<3;ring++){const rr=reach*(1-ring*.17),points=[];for(let i=0;i<=64;i++){const a=i*TAU/64,wave=Math.sin(a*12+p*18)*3;points.push([x+Math.cos(a)*(rr+wave),y+Math.sin(a)*(rr+wave)])}path(g,points,ring?'#d8bd7c77':color,false,ring?1:2)}
@@ -160,7 +166,8 @@ function burst(g,source,x,y,r,p,t,color){
  }else if(POISON.has(source)){
   for(let i=0;i<10;i++){const a=i*TAU/10;spell(g,'plant-missle',x+Math.cos(a)*reach*.75,y+Math.sin(a)*reach*.75,t+i,22,a);g.fillStyle='#b1ca7977';g.beginPath();g.arc(x+Math.cos(a+.15)*reach,y+Math.sin(a+.15)*reach,3,0,TAU);g.fill()}
  }else if(FIRE.has(source)||source==='hailfire'||source==='mine'){
-  g.globalAlpha*=.8;spell(g,'firebomb',x,y,t,Math.min(72,24+reach),-Math.PI/2);
+  g.globalAlpha*=.4;spell(g,'firebomb',x,y,t,Math.min(72,24+reach),-Math.PI/2);
+  g.strokeStyle='#efb571';g.lineWidth=1;g.beginPath();g.arc(x,y,reach,0,TAU);g.stroke();
   for(let i=0;i<9;i++){const a=i*TAU/9;spell(g,source==='hailfire'&&i%2?'ice-lance':'fireball',x+Math.cos(a)*reach*.78,y+Math.sin(a)*reach*.78,t+i,21,a);if(source==='meteor'||source==='starfall')spell(g,'rock-sling',x+Math.cos(a)*reach*.6,y+Math.sin(a)*reach*.6,t+i,7+i%3*2,a+t)}
   if(source==='supernova')for(let i=0;i<4;i++){const a=i*TAU/4;path(g,[[x,y],[x+Math.cos(a)*reach,y+Math.sin(a)*reach]],'#ffe5aa',false,4*(1-p)+1)}
  }else if(['capacitor','arcforge','forge','stormsentry'].includes(source)){
@@ -203,10 +210,11 @@ export function drawCombatEffect(g,fx,ox,oy,t){
   if(source==='arcforge'){g.strokeStyle='#f9dfa3';g.strokeRect(ex-6,ey-6,12,12)}g.restore();return true;
  }
  if(fx.type==='slash'){
-  g.save();g.globalAlpha=(1-p)*.8;const points=[],r=fx.r,a1=fx.a-fx.arc/2+fx.arc*p*.45,a2=fx.a+fx.arc/2;
-  for(let i=0;i<=24;i++){const a=a1+(a2-a1)*i/24;points.push([x+Math.cos(a)*r,y+Math.sin(a)*r*.82])}for(let i=24;i>=0;i--){const a=a1+(a2-a1)*i/24,inner=r-(8+Math.sin(i/24*Math.PI)*14)*(1-p);points.push([x+Math.cos(a)*inner,y+Math.sin(a)*inner*.82])}path(g,points,source==='solar'?'#f0b96c':color);
+  g.save();g.globalAlpha=(1-p)*.6;const points=[],r=fx.r,a1=fx.a-fx.arc/2+fx.arc*p*.45,a2=fx.a+fx.arc/2;
+  for(let i=0;i<=24;i++){const a=a1+(a2-a1)*i/24;points.push([x+Math.cos(a)*r,y+Math.sin(a)*r])}for(let i=24;i>=0;i--){const a=a1+(a2-a1)*i/24,inner=r-(4+Math.sin(i/24*Math.PI)*8)*(1-p);points.push([x+Math.cos(a)*inner,y+Math.sin(a)*inner])}path(g,points,source==='solar'?'#f0b96c':color);
   g.globalAlpha=1-p;path(g,points.slice(0,25),'#fff0cf',false,1);
-  const a=a1+(a2-a1)*.6;g.translate(x+Math.cos(a)*r*.65,y+Math.sin(a)*r*.65);g.rotate(a+Math.PI/2);dungeon(g,source==='solar'?'weapon_golden_sword':'weapon_knight_sword',-5,-23,10,35);g.restore();return true;
+  const a=a1+(a2-a1)*.6,axe=source==='axe'||source==='whirlwind';g.translate(x+Math.cos(a)*r*.65,y+Math.sin(a)*r*.65);g.rotate(a+Math.PI/2);
+  dungeon(g,({solar:'weapon_golden_sword',lance:'weapon_spear',execution:'weapon_spear',axe:'weapon_waraxe',whirlwind:'weapon_double_axe'}[source])||'weapon_knight_sword',axe?-9:-5,-23,axe?18:10,35);g.restore();return true;
  }
  return false;
 }

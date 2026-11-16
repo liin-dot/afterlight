@@ -13,15 +13,19 @@ export const NEW_WEAPONS = {
   shard:{name:'骸骨飞轮',evolution:'终焉·骨旋',rarity:'uncommon',color:'#d8cbb2',category:'投射物 / 跳弹',desc:'掷出骸骨飞轮，命中后弹向另一名敌人；同一飞轮不会重复命中同一目标。',upgrades:['飞轮在两名敌人间弹跳。','提高伤害与弹跳次数。','增加每轮飞轮数量。','提高弹跳伤害。','再次增加每轮飞轮数量。','进化：更多飞轮齐发，追逐更多目标。'],cooldown:2.6},
   meteor:{name:'陨星烛台',evolution:'终焉·流火',rarity:'rare',color:'#efa575',category:'火焰 / 延迟轰炸',desc:'标记敌人所在位置，短暂延迟后陨星坠落；需要预判移动，擅长击破密集敌群。',upgrades:['标记敌人位置，召来陨星。','提高轰炸伤害与范围。','增加每轮陨星落点。','缩短落地等待。','再次增加每轮陨星落点。','进化：陨星落地后留下燃烧区。'],cooldown:4.6},
   mine:{name:'墓灯雷匣',evolution:'终焉·雷葬',color:'#d6b87b',category:'机关 / 路径陷阱',desc:'在脚下布设墓灯，武装后被靠近的敌人引爆；未触发的墓灯会在到期时爆炸。',upgrades:['在脚边布下感应墓灯。','提高爆炸伤害与范围。','增加每轮墓灯数量。','延长留存时间。','再次增加每轮墓灯数量。','进化：大范围连环雷葬。'],cooldown:3.8},
-  tether:{name:'缚魂锁',evolution:'终焉·锁魂',rarity:'uncommon',color:'#a9c9db',category:'灵魂 / 牵引锁链',desc:'锁链跳向邻近敌人，牵引并短暂减速；重型首领的位移更小。',upgrades:['锁链牵引并减速敌人。','增加锁定目标、伤害与跳跃距离。','提高锁链伤害与范围。','增加锁定目标与减速持续时间。','强化锁链伤害与牵引。','进化：锁住整组敌人并震荡灵魂。'],cooldown:3.2},
+  tether:{name:'缚魂锁',evolution:'终焉·锁魂',rarity:'uncommon',color:'#a9c9db',category:'灵魂 / 禁锢锁链',desc:'锁链跳向邻近敌人，将其禁锢在原地并减速；首领禁锢时间较短。',upgrades:['锁链将敌人禁锢在原地并减速。','增加锁定目标、伤害与跳跃距离。','提高锁链伤害与范围。','增加锁定目标与禁锢持续时间。','强化锁链伤害与禁锢。','进化：原地禁锢整组敌人并震荡灵魂。'],cooldown:3.2},
   sentinel:{name:'守望石像',evolution:'终焉·守望者',rarity:'rare',color:'#b8cfab',category:'召唤 / 固定炮台',desc:'放置一座短暂存续的石像，自动向近敌发射石弹。新石像替换最旧的一座，最多同时存在两座。',upgrades:['石像自动发射石弹。','提高石弹伤害。','延长石像存续。','提高射速。','石弹穿透额外目标。','进化：双重石弹与更长守望。'],cooldown:6.2},
-  lance:{name:'破晓长枪',evolution:'终焉·贯日',color:'#e7d69b',category:'刃器 / 贯穿突刺',desc:'向最近的敌人刺出狭长枪芒，贯穿路径上的目标；攻击距离长，侧面覆盖较弱。',upgrades:['枪芒贯穿一条直线。','增加突刺伤害与距离。','枪芒变宽。','缩短攻击间隔。','进一步提高单体伤害。','进化：贯日枪芒附带第二次穿刺。'],cooldown:1.65},
+  lance:{name:'破晓长枪',evolution:'终焉·贯日',color:'#e7d69b',category:'近战 / 横扫与贯穿',desc:'先横扫身前敌群，再刺出宽阔枪芒；正面目标可承受两段伤害。进化后横扫全周，并从角色当前位置追刺近敌。',upgrades:['横扫身前，再贯穿正面敌群。','提高横扫与突刺伤害。','增加枪芒宽度与横扫范围。','攻击更快，突刺更远。','提高双段伤害与覆盖范围。','进化：全周横扫，追加随身追刺。'],cooldown:1.45},
+  axe:{name:'裂阵重斧',evolution:'终焉·断岳',color:'#d9b58e',category:'近战 / 重型横扫',desc:'向近敌挥出宽幅重斩；距离超过斩击半径 60% 的敌人受到斧刃重击，伤害提高 50%。进化后旋斩全周。',upgrades:['宽幅重斩，外圈斧刃伤害更高。','提高伤害与攻击距离。','扩大挥砍角度。','挥砍更快，斧刃覆盖更远。','提高重斩伤害与范围。','进化：全周断岳斩，保留外圈重击。'],cooldown:1.9},
+  hammer:{name:'震地战锤',evolution:'终焉·崩山',color:'#b9c5ce',category:'近战 / 震地击退',desc:'锤击脚下，震伤、击退并减速周围敌人；进化后从角色当前位置追加一次余震。',upgrades:['全周锤击，击退并减速敌人。','提高震击伤害与范围。','延长减速，扩大震击范围。','提高伤害，锤击更快。','进一步提高伤害与减速持续。','进化：追加一次随身余震。'],cooldown:2.3},
+  whirlwind:{name:'裂风双斧',fusion:true,maxLevel:3,color:'#dbd7ac',category:'融合 / 双重旋斩',desc:'连续两次全周旋斩，第二斩跟随角色移动；外圈斧刃伤害提高 50%，可在敌群边缘移动收割。',upgrades:['双重全周旋斩，外圈重击。','扩大双斧范围，提高伤害。','裂风极境：更快、更强的双重旋斩。'],cooldown:2.1},
+  quake:{name:'万钧震岳',fusion:true,maxLevel:3,color:'#d2c7ae',category:'融合 / 三重震击',desc:'全周重锤后连续追加两次随身余震，击退并减速周围敌人，为近战争取移动空间。',upgrades:['重锤加两次余震，每次跟随角色。','提高震击伤害与控制范围。','震岳极境：更强余震，更长减速。'],cooldown:2.65},
   starfall:{name:'焚星天幕',fusion:true,maxLevel:3,color:'#f2a36e',category:'融合 / 陨火与易伤',desc:'召来陨星雨，落地造成爆炸并留下燃烧区；命中的敌人短暂易伤。',upgrades:['陨星雨附加灼烧与易伤。','扩大火雨覆盖与持续时间。','天幕极境：更多陨星，更强燃烧。'],cooldown:4.4},
   bastion:{name:'不落堡垒',fusion:true,maxLevel:3,color:'#c1dab0',category:'融合 / 炮台与守护',desc:'部署穿透石弹堡垒；靠近堡垒时周期补充护盾。护盾有上限且不能叠加储存。',upgrades:['部署堡垒，近身获得护盾。','提高石弹与护盾强度。','堡垒极境：双重石弹与更长存续。'],cooldown:6.5},
   wintermine:{name:'永冻陵园',fusion:true,maxLevel:3,color:'#b2e4e5',category:'融合 / 陷阱与寒域',desc:'冰棺陷阱被触发后冻结敌人，留下持续减速的寒域；首领只被短暂冻结。',upgrades:['冰棺爆炸留下寒域。','增加冰棺数量与范围。','陵园极境：更长寒域与更强冻结。'],cooldown:4},
-  soulchain:{name:'冥河锁狱',fusion:true,maxLevel:3,color:'#b8c8e6',category:'融合 / 牵引与回声',desc:'灵魂锁链牵引多个目标，每个锁定点随后发生延迟震爆。',upgrades:['锁链命中后延迟震爆。','增加锁定目标与牵引。','锁狱极境：连锁震爆覆盖敌阵。'],cooldown:3.8},
+  soulchain:{name:'冥河锁狱',fusion:true,maxLevel:3,color:'#b8c8e6',category:'融合 / 禁锢与回声',desc:'灵魂锁链将多个目标禁锢在原地并减速，每个锁定点随后发生延迟震爆；首领禁锢时间较短。',upgrades:['锁链原地禁锢目标，随后延迟震爆。','增加锁定目标与震爆威力。','锁狱极境：连锁震爆覆盖敌阵。'],cooldown:3.8},
   ricochet:{name:'白骨风暴',fusion:true,maxLevel:3,color:'#e8d9bc',category:'融合 / 弹跳与碎片',desc:'骨轮连续弹跳，首次命中时分裂追踪骨片；骨片不会再次分裂。',upgrades:['弹跳骨轮分裂两枚追踪骨片。','增加骨轮数量与弹跳。','风暴极境：更强碎片与更多骨轮。'],cooldown:2.7},
-  execution:{name:'终焉裁决',fusion:true,maxLevel:3,color:'#efd99d',category:'融合 / 贯穿与处决',desc:'宽阔枪芒撕开直线上的敌人，对低生命目标造成额外伤害。首领受到的处决加成减半。',upgrades:['贯穿裁决，重创低血目标。','增加枪芒宽度与处决加成。','裁决极境：双重穿刺。'],cooldown:2.1},
+  execution:{name:'终焉裁决',fusion:true,maxLevel:3,color:'#efd99d',category:'融合 / 环扫与处决',desc:'全周环扫后连续两次贯穿近敌，追刺跟随角色并重新瞄准。所有斩刺对低生命目标增伤，首领处决加成减半。',upgrades:['环扫与双重追刺，重创低血目标。','增加枪芒宽度、环扫范围与处决加成。','裁决极境：更强环扫与双重追刺。'],cooldown:1.8},
   supernova:{name:'天陨熔炉',fusion:true,maxLevel:3,color:'#edb2b1',category:'融合 / 陨星与交叉光束',desc:'星核落地后炸裂，在落点释放四道交叉光束，轰炸和光束各自命中。',upgrades:['星核爆炸释放交叉光束。','增加星核数量与光束长度。','熔炉极境：更广爆炸与更强光束。'],cooldown:4.8},
   stormsentry:{name:'雷鸣哨戒',fusion:true,maxLevel:3,color:'#c9b6ee',category:'融合 / 炮台与传导',desc:'雷塔发射穿透电弹，每轮首发命中会向附近目标传导闪电；最多两座雷塔。',upgrades:['雷塔自动发射传导电弹。','增加传导目标并提高射速。','哨戒极境：双发电弹。'],cooldown:6.4},
   pestilence:{name:'腐生雷园',fusion:true,maxLevel:3,color:'#c6d889',category:'融合 / 陷阱与疫池',desc:'布下孢子雷，爆炸后留下传播侵蚀的疫池；疫池到期再引发一次毒爆。',upgrades:['孢子雷爆炸后形成疫池。','增加孢子雷与疫池持续。','雷园极境：双重毒爆。'],cooldown:4.2},
@@ -76,7 +80,7 @@ export const WEAPON_FAMILIES = {
   hailfire:['fire','cold','cast'],soulforge:['spirit','summon','projectile','cast'],
   shard:['projectile','cast'],meteor:['fire','cast'],mine:['blast','cast'],tether:['spirit','cast'],sentinel:['summon','projectile','cast'],lance:['melee','beam','cast'],
   starfall:['fire','cast'],bastion:['summon','projectile','cast'],wintermine:['cold','cast'],soulchain:['spirit','cast'],ricochet:['projectile','cast'],execution:['melee','beam','cast'],supernova:['fire','beam','cast'],stormsentry:['summon','projectile','lightning','cast'],pestilence:['poison','cast'],
-  blade:['melee','cast'], bolt:['projectile','cast'], orbit:['spirit'], storm:['lightning','cast'],
+  blade:['melee','cast'],axe:['melee','cast'],hammer:['melee','cast'],whirlwind:['melee','cast'],quake:['melee','cast'], bolt:['projectile','cast'], orbit:['spirit'], storm:['lightning','cast'],
   flame:['fire','projectile','cast'], frost:['cold','cast'], crescent:['melee','projectile','cast'],
   thorn:['poison','projectile','cast'], bell:['spirit','cast'], prism:['beam','cast'],
   solar:['melee','fire','cast'], thunderbolt:['projectile','lightning','cast'], glacier:['spirit','cold','cast'],
@@ -97,7 +101,7 @@ export const WEAPON_REFINEMENTS={
   pierce:{name:'穿行',label:'穿透 / 弹跳目标',values:[0,0,1,2],max:4,tags:['projectile'],fields:['pierce','bounces'],flat:true},
   critical:{name:'锐刃',label:'暴击率',values:[.01,.02,.03,.05],max:1,tags:['melee'],points:true},
   affliction:{name:'余灾',label:'灼烧 / 侵蚀 / 领域伤害',values:[.06,.10,.16,.24],tags:['fire','poison'],fields:['burnDamage','poisonDamage','fieldDamage']},
-  control:{name:'缚影',label:'减速 / 普通冻结 / 牵引',values:[.04,.07,.11,.16],max:1,tags:['cold','spirit'],fields:['slowDuration','freeze','pull','pullSpeed']},
+  control:{name:'缚影',label:'减速 / 普通冻结与禁锢 / 牵引',values:[.04,.07,.11,.16],max:1,tags:['cold','spirit','melee'],fields:['slowDuration','freeze','rootDuration','pull','pullSpeed']},
   anomaly:{name:'异变',label:'异常触发率',values:[.03,.05,.08,.12],max:1,tags:['fire','cold','poison','lightning'],points:true},
 };
 export const refinementGain=(key,value)=>WEAPON_REFINEMENTS[key].label+' +'+Number((value*(WEAPON_REFINEMENTS[key].flat?1:100)).toFixed(2))+(WEAPON_REFINEMENTS[key].flat?'':WEAPON_REFINEMENTS[key].points?' 个百分点':'%');
@@ -115,7 +119,7 @@ export const BUILD_TAGS={
 const EXTRA_TAGS={
   circuit:['lightning','projectile'],brine:['cold','spirit','control'],wake:['mobility','projectile'],souljar:['spirit','growth'],sundial:['versatile'],emberheart:['guard'],
   everseed:['growth'],
-  meteor:['area'],mine:['area'],tether:['control'],lance:['melee'],starfall:['area'],bastion:['guard'],wintermine:['area','control'],soulchain:['control','area'],supernova:['area'],pestilence:['area'],
+  meteor:['area'],mine:['area'],tether:['control'],lance:['area'],execution:['area'],axe:['area'],hammer:['area','control'],whirlwind:['area'],quake:['area','control'],starfall:['area'],bastion:['guard'],wintermine:['area','control'],soulchain:['control','area'],supernova:['area'],pestilence:['area'],
   orbit:['guard'],storm:['area'],flame:['area'],frost:['area','control'],thorn:['area'],bell:['area','control'],solar:['area'],glacier:['control','guard'],requiem:['area'],plague:['area'],bloodmoon:['guard'],absolute:['control','area'],hailfire:['area','control'],soulforge:['area'],
   power:['versatile'],haste:['versatile'],vitality:['guard'],speed:['mobility'],magnet:['growth'],armor:['guard'],regen:['guard'],luck:['critical'],area:['area'],duration:['fire','poison','control','summon'],amount:['projectile','spirit','lightning'],focus:['critical'],growth:['growth'],curse:['growth'],
   frostbrand:['cold','projectile','control'],venomfang:['poison','melee','projectile'],volatile:['fire','poison','area'],stormseal:['lightning','cold','control'],executioner:['melee','critical'],deadeye:['critical'],
@@ -250,7 +254,7 @@ export function compatibleWeapons(key,weapons,passives={},talents={},characterId
   const enabled=id=>!!passives[id]&&RELICS[id].families.some(tag=>tags.includes(tag));
   const fire=tags.includes('fire')||enabled('embercore')||!!passives.dashfire||!!talents.w_flame2;
   const poison=tags.includes('poison')||enabled('venomfang');
-  const cold=tags.includes('cold')||!!weapons.tether||!!weapons.soulchain||enabled('frostbrand')||enabled('brine')||!!talents.s_frost1||!!passives.hoarfrost||characterId==='mariner';
+  const cold=tags.includes('cold')||!!weapons.tether||!!weapons.soulchain||!!weapons.hammer||!!weapons.quake||enabled('frostbrand')||enabled('brine')||!!talents.s_frost1||!!passives.hoarfrost||characterId==='mariner';
   if(key==='bulwark'&&!passives.aegis&&!passives.emberheart&&!weapons.bastion&&!talents.s_scholar2&&!talents.f_guard1&&!talents.m_guard1&&characterId!=='warden'&&!(passives.stormcoil&&tags.includes('lightning')))return [];
   const refinedBurn=Object.keys(weapons).some(id=>weaponUpgrades[id]?.anomaly>0&&WEAPON_FAMILIES[id]?.includes('fire'));
   if(key==='rotclock'&&!poison&&!enabled('embercore')&&!talents.w_flame2&&!refinedBurn)return [];

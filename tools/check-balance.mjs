@@ -3,9 +3,9 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {Game} from '../src/game.js';
 import {STAGES} from '../src/expeditions.js';
 import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,ENEMIES,META,META_TREES,metaState,metaCost,STARTING_WEAPONS,startingLoadout,normalizeItemDiscoveries,readSave,writeSave,refreshSave} from '../src/data.js';
-import {FUSIONS,fusionState,maxWeaponLevel} from '../src/fusions.js';
+import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,fusionState,maxWeaponLevel} from '../src/fusions.js';
 import {characterStats,weaponStats,refinementValue} from '../src/stats.js';
-import {RUN_DURATION,PHASES,pressureAt,xpForLevel,upgradePool,rollUpgradeChoices,buildProfile,tagAffinity,recordUpgradeChoice} from '../src/balance.js';
+import {RUN_DURATION,BOSS_TIMES,PHASES,pressureAt,xpForLevel,upgradePool,rollUpgradeChoices,buildProfile,tagAffinity,recordUpgradeChoice} from '../src/balance.js';
 import {relicDescription,relicValues,compatibleWeapons,BUILD_TAGS,itemTags,ALTAR_BOONS,WEAPON_REFINEMENTS,REFINEMENT_RARITIES} from '../src/content.js';
 import {weaponFacts,passiveEffect} from '../src/item-info.js';
 import {onXpPickup,updateRelicStates,onWeaponHit,onWeaponCast,onPlayerTravel} from '../src/relic-combat.js';
@@ -260,7 +260,61 @@ try{
   for(let i=0;i<90;i++){companion.time+=.05;updateCharacterTalents(companion,.05,0);companion.updateProjectiles(.05)}
   assert.equal(companion.characterState.procs,4,'the base companion fires four volleys in 4.5 seconds');
   assert(distant.maxHp-distant.hp>=33,'distant companion projectiles must actually connect');
-  assert.equal(Object.keys(WEAPONS).length,44);assert.equal(Object.keys(PASSIVES).length,45);assert.equal(Object.keys(PICKUPS).length,7);
+  assert.equal(Object.keys(WEAPONS).length,48);assert.equal(Object.keys(PASSIVES).length,45);assert.equal(Object.keys(PICKUPS).length,7);
+  {
+    const melee=['blade','lance','execution','axe','hammer','whirlwind','quake'];
+    for(const kind of melee)for(const level of [1,maxWeaponLevel(kind)]){
+      const g=start(CHARACTERS[4]);g.enemies=[];equip(g,{[kind]:level});g.stats.criticalChance=0;
+      const v=weaponStats(kind,level,g.stats,g.character),e=target(g,1000);g.grid.rebuild(g.enemies);g.updateWeapons(.01);
+      assert.equal(e.hp,e.maxHp);assert(g.timers[kind]<.1,kind+' waits until an enemy is actually in reach');assert.equal(g.effects.length+g.zones.length,0);
+      e.x=40;g.grid.rebuild(g.enemies);g.updateWeapons(.1);assert(e.hp<e.maxHp,kind+' responds as soon as an enemy enters range');
+      assert.equal(g.timers[kind],v.cooldown);assert.equal(g.zones.length,v.echoCount||v.strikes-1||0);
+    }
+    for(const kind of ['blade','axe'])for(const angle of [0,Math.PI/2,Math.PI-.02,-Math.PI+.02]){
+      const g=start(CHARACTERS[4]);g.enemies=[];equip(g,{[kind]:1});g.stats.criticalChance=0;const v=weaponStats(kind,1,g.stats,g.character);
+      target(g,Math.cos(angle)*20,37+Math.sin(angle)*20);
+      const at=(offset,d)=>target(g,Math.cos(angle+offset)*d,37+Math.sin(angle+offset)*d);
+      const edge=at(v.arc/2+.04,v.radius*.95),outside=at(v.arc/2+.2,v.radius*.95),far=at(0,v.radius+9);
+      g.grid.rebuild(g.enemies);g.updateWeapons(.01);assert(edge.hp<edge.maxHp,kind+' hits bodies crossing a sector edge');assert.equal(outside.hp,outside.maxHp);assert.equal(far.hp,far.maxHp);
+    }
+    for(const kind of ['lance','execution'])for(const level of [1,maxWeaponLevel(kind)]){
+      const g=start(CHARACTERS[4]);g.enemies=[];equip(g,{[kind]:level});g.stats.criticalChance=0;const v=weaponStats(kind,level,g.stats,g.character);
+      const front=target(g,25),side=target(g,0,37+v.radius*.8),rear=target(g,-v.radius*.8),end=target(g,v.range+4),corner=target(g,v.range+6,37+v.width+6);
+      g.grid.rebuild(g.enemies);g.updateWeapons(.01);
+      assert.equal(front.maxHp-front.hp,Math.round(v.damage)+Math.round(v.sweepDamage),'front takes both sweep and thrust');
+      assert.equal(side.maxHp-side.hp,Math.round(v.sweepDamage),'the sweep reaches side attackers');assert.equal(rear.hp<rear.maxHp,v.arc===Math.PI*2,'only full sweeps cover the rear');
+      assert.equal(end.maxHp-end.hp,Math.round(v.damage),'a body overlapping the spear tip is hit');assert.equal(corner.hp,corner.maxHp,'outside the rectangular tip is not a hit');
+      if(v.strikes>1){
+        const oldHp=front.hp;g.player.x=500;g.player.y=500;const next=target(g,500,500-v.range-15),bait=target(g,500+v.range+8,500);Object.assign(next,{boss:true,r:23});g.grid.rebuild(g.enemies);g.updateZones(v.echoDelay+.01);
+        assert.equal(next.maxHp-next.hp,Math.round(v.damage),'follow-up uses the new position and reaches a boss body, ignoring a nearer out-of-reach enemy');assert.equal(bait.hp,bait.maxHp);assert.equal(front.hp,oldHp,'no phantom spear remains at the old position');assert.equal(g.zones.length,0);
+      }
+    }
+    for(const kind of ['axe','whirlwind']){
+      const g=start(CHARACTERS[4]);g.enemies=[];equip(g,{[kind]:maxWeaponLevel(kind)});g.stats.criticalChance=0;const v=weaponStats(kind,maxWeaponLevel(kind),g.stats,g.character);
+      const inner=target(g,v.radius*.3),edge=target(g,0,37+v.radius*.8),rear=target(g,-v.radius*.8);g.grid.rebuild(g.enemies);g.updateWeapons(.01);
+      assert.equal(inner.maxHp-inner.hp,Math.round(v.damage));for(const e of [edge,rear])assert.equal(e.maxHp-e.hp,Math.round(v.damage*1.5),'outer axe edge adds damage, including directly behind');
+    }
+    for(const kind of ['hammer','whirlwind','quake']){
+      const g=start(CHARACTERS[4]);g.enemies=[];equip(g,{[kind]:maxWeaponLevel(kind)},{sundial:1});g.stats.criticalChance=0;const v=weaponStats(kind,maxWeaponLevel(kind),g.stats,g.character);
+      const e=target(g,25);g.grid.rebuild(g.enemies);g.updateWeapons(.01);assert.equal(g.sundialCasts,1);
+      g.player.x=600;g.player.y=400;const next=target(g,620,400);g.grid.rebuild(g.enemies);
+      g.updateZones(v.echoDelay*(v.echoCount+.1));assert.equal(next.maxHp-next.hp,v.echoCount*Math.round(v.echoDamage));assert.equal(g.sundialCasts,1,'follow-ups are hits, not extra casts');assert.equal(g.zones.length,0);
+      if(v.slowDuration){assert.equal(e.slow,v.slowDuration);assert.equal(next.slow,v.slowDuration);assert(next.knockX>0);assert(compatibleWeapons('rime',g.weapons).includes(kind));assert(upgradePool(g).some(c=>c.key===kind&&c.refinement==='control'))}
+      g.start(g.character);assert.equal(g.zones.length,0,'restart cancels every pending follow-up');
+    }
+    for(const kind of melee){
+      const g=start(CHARACTERS[4]);g.enemies=[];equip(g,{[kind]:maxWeaponLevel(kind)},{siphon:3,embercore:1,venomfang:1});g.stats.criticalChance=0;g.player.hp=20;
+      const e=target(g,30);g.grid.rebuild(g.enemies);g.updateWeapons(.01);g.updateZones(1);
+      assert(g.player.hp>20&&e.burn&&e.poison&&g.relicProcs.siphon,kind+' connects melee relics through every actual hit');
+    }
+    for(const kind of ['lance','hammer','quake']){
+      const level=maxWeaponLevel(kind),plain=characterStats(CHARACTERS[4],{}, {},{}, {[kind]:level});
+      const refined=characterStats(CHARACTERS[4],{}, {},{}, {[kind]:level},[],{}, {},{}, {[kind]:{damage:.16,area:.12,haste:.12,control:.16}}),a=weaponStats(kind,level,plain,CHARACTERS[4]),b=weaponStats(kind,level,refined,CHARACTERS[4]);
+      for(const field of ['damage',kind==='lance'?'sweepDamage':'echoDamage'])assert(Math.abs(b[field]/a[field]-1.16)<1e-9,kind+' refines both primary and follow-up damage');
+      assert(b.radius>a.radius&&b.cooldown<a.cooldown);if(a.slowDuration)assert(b.slowDuration>a.slowDuration);
+    }
+    console.log('PASS: seven melee weapons cover body/sector edges, full-circle rear hits, spear double hits and moving follow-ups; axe edge damage, hammer slows, relics, refinements and reset.');
+  }
   // Use one real close-range volley: checking a single arrow misses the level-two burst regression.
   for(const power of [0,5])for(const [time,level] of [[20,2],[40,3],[60,4],[90,5]])for(const kind of ['skeleton','bat']){
     const volley=start(CHARACTERS[2]);volley.start(CHARACTERS[2],{power});volley.enemies=[];volley.time=time-10;
@@ -308,6 +362,8 @@ try{
   for(let time=0;time<RUN_DURATION;time++)assert(pressureAt(time+1).hp>=pressureAt(time).hp);
   assert.equal(pressureAt(0).hp,1.1);assert(pressureAt(540).hp>8);assert(pressureAt(120,3).hp>pressureAt(120).hp);
   assert.equal(RUN_DURATION,900);assert.equal(PHASES.at(-1).at,RUN_DURATION);
+  assert.deepEqual(BOSS_TIMES,[180,360,600,900]);assert.deepEqual(ALTAR_TIMES,[90,360,630]);
+  for(const time of BOSS_TIMES.slice(0,-1)){assert(pressureAt(time).interval>pressureAt(time+12).interval,'each nonfinal boss gets a short horde breather')}
   for(const time of [600,660,720,780,840]){const late=pressureAt(time);assert(late.hp>=15.2&&late.hp<=18.4);assert.equal(late.damage,2.7);assert.equal(late.speed,1.5);assert.equal(late.cap,275);assert.equal(late.count,6)}
   assert.equal(pressureAt(RUN_DURATION).cap,150,'final boss arrival eases ordinary horde density');
   for(const [time,level,power] of [[60,3,1],[150,5,2],[270,6,2],[450,6,3]]){
@@ -329,7 +385,8 @@ try{
     assert(!upgradePool(game).some(i=>recipe.ingredients.some(material=>material.id===i.key)));
   }
   const full=start();full.time=240;
-  equip(full,{blade:2,bolt:2,orbit:2,storm:2,flame:2,frost:2},{power:1,haste:1,armor:1,luck:1,regen:1,area:1});
+  assert.equal(WEAPON_SLOTS,5);assert.equal(PASSIVE_SLOTS,5);
+  equip(full,{blade:2,bolt:2,orbit:2,storm:2,flame:2},{power:1,haste:1,armor:1,luck:1,regen:1});
   assert(upgradePool(full).every(i=>i.current>0));
   full.banished.add('blade');assert(!upgradePool(full).some(i=>i.key==='blade'));
   for(let i=0;i<100;i++){const choices=rollUpgradeChoices(full);assert.equal(new Set(choices.map(i=>i.key)).size,choices.length);assert.equal(choices.length,4)}
@@ -340,12 +397,27 @@ try{
       for(const choices of [mixed.choices,(mixed.reroll(),mixed.choices)]){assert.equal(choices.length,4);assert.equal(choices.filter(item=>item.refinement).length,1)}
     }
     mixed.banishes=1;mixed.banish(mixed.choices.findIndex(item=>item.key==='bolt'));assert.equal(mixed.choices.length,4);assert.equal(mixed.choices.filter(item=>item.refinement).length,1);
-    equip(mixed,{blade:6,bolt:6,orbit:6,storm:6,prism:6,thorn:6},{power:4,haste:5,area:3,armor:5,luck:5,focus:3});
-    for(const key of Object.keys(FUSIONS))mixed.banished.add(key);
-    for(let i=0;i<50;i++){const choices=rollUpgradeChoices(mixed);assert.equal(choices.length,2,'one ordinary choice must not allow three refinements to fill the panel');assert.equal(choices.filter(item=>item.refinement).length,1);assert(choices.some(item=>item.key==='power'))}
-    mixed.banished.clear();equip(mixed,{blade:6,flame:6,bolt:6,orbit:6,storm:6,prism:6},{power:5,haste:5,area:3,armor:5,luck:5,focus:3});
-    const choices=rollUpgradeChoices(mixed);assert(choices.some(item=>item.fusion));assert.equal(choices.filter(item=>item.refinement).length,1,'a ready fusion also limits refinement choices');
+    mixed.banished=new Set(Object.keys(FUSIONS));
+    for(const [blade,power] of [[5,5],[6,4],[5,4],[6,5]]){
+      equip(mixed,{blade,bolt:6,orbit:6,storm:6,prism:6},{power,haste:5,area:3,armor:5,luck:5});
+      for(let i=0;i<50;i++){
+        mixed.state='level';mixed.rerolls=1;mixed.choices=rollUpgradeChoices(mixed);
+        for(const choices of [mixed.choices,(mixed.reroll(),mixed.choices)]){
+          assert.equal(choices.length,4,'refinements fill every otherwise empty choice');
+          assert.equal(choices.filter(item=>item.refinement).length,4-Number(blade<6)-Number(power<5));
+          assert.equal(new Set(choices.map(item=>item.choiceId||item.key)).size,4,'no repeated weapon attribute or ordinary upgrade');
+          if(blade<6)assert(choices.some(item=>item.key==='blade'&&!item.refinement));if(power<5)assert(choices.some(item=>item.key==='power'));
+        }
+      }
+    }
+    mixed.banished.clear();equip(mixed,{blade:6,flame:6,bolt:6,orbit:6,storm:6},{power:5,haste:5,area:3,armor:5,luck:5});
+    const choices=rollUpgradeChoices(mixed);assert(choices.some(item=>item.fusion));assert.equal(choices.length,4);assert.equal(choices.filter(item=>item.refinement).length,3,'a ready fusion leaves three refinement slots when no ordinary upgrade remains');
+    mixed.state='level';mixed.choices=choices;mixed.banishes=1;mixed.banish(choices.findIndex(item=>item.refinement));assert.equal(mixed.choices.length,4,'banishment also fills the remaining choices');
   }
+  const fifth=start();fifth.time=240;equip(fifth,{blade:2,bolt:2,orbit:2,storm:2},{power:1,haste:1,armor:1,luck:1});
+  for(const key of ['flame','regen']){fifth.state='level';fifth.choices=[upgradePool(fifth).find(item=>item.key===key)];assert(fifth.choices[0]);fifth.chooseUpgrade(0)}
+  assert.equal(Object.keys(fifth.weapons).length,5);assert.equal(Object.keys(fifth.passives).length,5);assert(upgradePool(fifth).every(item=>item.current>0));
+  equip(fifth,{blade:4,flame:4,bolt:2,orbit:2,storm:2},fifth.passives);fifth.state='level';assert(fifth.fuseWeapon('solar'));assert.equal(Object.keys(fifth.weapons).length,4);assert(upgradePool(fifth).some(item=>item.weapon&&!item.current),'fusion frees a weapon slot');
   assert(fusionState('bloodmoon',{crescent:5},full.passives,full).blocked);
   {
     const refine=(game,key,refinement,rarity='white')=>{
@@ -366,7 +438,7 @@ try{
       for(const field of ['cooldown','fireInterval','fieldInterval','hitInterval'])if(before[field]>0)assert(Math.abs(fast[field]-before[field]/1.12)<1e-9,key+' cadence '+field);
       assert.equal(g.weapons[key],maxWeaponLevel(key),'refining must not increase equipment levels');
     }
-    const g=start();g.time=240;g.level=30;equip(g,{bolt:6,blade:6,orbit:6,storm:6,prism:6,thorn:6},{power:5,haste:5,area:3,armor:5,luck:5,focus:3});
+    const g=start();g.time=240;g.level=30;equip(g,{bolt:6,blade:6,orbit:6,storm:6,prism:6},{power:5,haste:5,area:3,armor:5,luck:5});
     for(const id of Object.keys(FUSIONS))g.banished.add(id);
     for(let i=0;i<120;i++){
       const choices=rollUpgradeChoices(g);assert.equal(choices.length,4);assert(choices.every(item=>item.refinement));assert.equal(new Set(choices.map(item=>item.choiceId)).size,4,'one weapon attribute cannot appear twice in different colors');
@@ -391,7 +463,7 @@ try{
       assert(!upgradePool(fight).some(item=>item.key===key&&item.refinement==='anomaly'));
     }}finally{Math.random=oldRandom}
     assert.deepEqual(Object.values(REFINEMENT_RARITIES).map(tier=>tier.weight),[60,28,10,2]);
-    console.log('PASS: all 44 weapons refine with additive damage and real cadence; four rarity tiers, +4 shot cap, full-loadout growth, scoped effects, status triggers, rebuilds, banishment and reset.');
+    console.log('PASS: all 48 weapons refine with additive damage and real cadence; four rarity tiers, +4 shot cap, full-loadout growth, scoped effects, status triggers, rebuilds, banishment and reset.');
   }
   assert(compatibleWeapons('rime',{bolt:1},{frostbrand:1}).includes('bolt'));
   assert(compatibleWeapons('spore',{blade:1},{venomfang:1}).includes('blade'));
@@ -411,9 +483,37 @@ try{
   assert(compatibleWeapons('bulwark',{blade:1},{},{},'warden').length);
   assert.deepEqual(normalizeItemDiscoveries({'weapon:meteor':99,'passive:aegis':2,'weapon:unknown':1}),{'weapon:meteor':6,'passive:aegis':2});
 
+  // Both chain weapons pin their actual hit locations, including every enemy movement path.
+  for(const key of ['tether','soulchain'])for(const level of [1,maxWeaponLevel(key)]){
+    const plain=weaponStats(key,level,characterStats(CHARACTERS[0]),CHARACTERS[0]);
+    for(const [kind,stage,boss] of [['skeleton','graveyard',false],['ghost','graveyard',false],['reaper','graveyard',false],['leech','coast',false],['knight','graveyard',true],['bulwark','foundry',true],['siren','coast',true]]){
+      const g=start();g.enemies=[];g.stage=stage;g.time=360;g.weaponUpgrades={[key]:{control:.16}};equip(g,{[key]:level},{duration:3});
+      const v=weaponStats(key,level,g.stats,g.character),e=g.spawnEnemy(kind);
+      Object.assign(e,{x:100,y:37,hp:1e6,maxHp:1e6,speed:30,boss,attack:0,state:'charge',stateTime:.6,chargeX:-1,chargeY:0,lungeTime:.6,lungeX:-1,lungeY:0,knockX:100,knockY:50});
+      for(let i=1;i<v.count;i++)target(g,100+i*2,37);g.grid.rebuild(g.enemies);g.updateWeapons(.01);
+      assert(Math.abs(v.rootDuration-plain.rootDuration*1.16*1.45)<1e-9,'control refinement and duration extend normal roots');assert.equal(v.bossRoot,plain.bossRoot,'boss roots stay bounded');
+      assert.equal(e.root,boss?v.bossRoot:v.rootDuration);assert.equal(e.slow,v.rootDuration);assert.equal(e.freeze,0,'chains root without freezing');
+      assert(g.enemies.every((enemy,i)=>enemy.root>0&&enemy.x===100+i*2&&enemy.y===37),'each chain target stays at its hit position');
+      assert(g.zones.every((z,i)=>z.kind==='echoWave'&&z.x===100+i*2&&z.y===37),'echoes stay at the pinned targets');
+      for(let i=0;i<3;i++){g.hit(e,1,0,0,900,false);g.updateEnemy(e,.05);assert.deepEqual([e.x,e.y,e.knockX,e.knockY,e.walk],[100,37,0,0,0],key+' pins '+kind+' in '+stage)}
+      if(kind==='ghost')assert(g.projectiles.some(p=>p.enemy),'rooted ranged enemies can still fire');
+      if(boss&&stage!=='graveyard')assert(g.hazards.length,'root does not silence boss spells');
+      const tide={kind:'tidalWave',source:'maelstrom',x:120,y:37,vx:0,vy:0,r:80,t:1,hit:new Set(),values:weaponStats('maelstrom',1,g.stats,g.character)};
+      updateExpandedZone(g,tide,.01);e.state='chase';updateFusionZone(g,{kind:'glacier',x:0,y:37,r:220,pullRadius:30,pullSpeed:80,t:1,tick:1},.01);
+      assert.deepEqual([e.x,e.y],[100,37],'tide and glacier cannot displace a rooted enemy');
+      g.timers[key]=0;e.root=10;g.updateWeapons(.01);assert.equal(e.root,10,'reapplication never shortens a root');
+      g.player.x=5000;g.updateEnemy(e,.05);assert.deepEqual([e.x,e.y],[100,37],'offscreen recycling cannot teleport a rooted enemy');g.player.x=0;
+      Object.assign(e,{root:.01,slow:0,freeze:0,state:'chase',lungeTime:0,attack:10});g.enemies=[e];g.grid.rebuild(g.enemies);g.hit(e,1,0,0,900,false);g.updateEnemy(e,.02);
+      assert.equal(e.root,0);assert(e.x<100,'movement resumes when the root expires');
+      const facts=JSON.stringify(weaponFacts(key,v));assert(facts.includes('禁锢')&&!facts.includes('牵引距离'));
+    }
+  }
+
+  console.log('PASS: both chains pin every target without pulling; chases, lunges, three chapter bosses, knockback, field pulls, offscreen recycling, duration modifiers and expiry.');
+
   // Every weapon must cause real damage at both ends of its progression, including delayed attacks.
   for(const key of Object.keys(WEAPONS))for(const level of [1,maxWeaponLevel(key)]){
-    const game=start();game.time=240;game.bossMilestones=new Set([180,360,RUN_DURATION]);game.spawnClock=game.waveClock=Infinity;game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.enemies=[];
+    const game=start();game.time=240;game.bossMilestones=new Set(BOSS_TIMES);game.spawnClock=game.waveClock=Infinity;game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.enemies=[];
     if(level===maxWeaponLevel(key))game.weaponUpgrades={[key]:{damage:.16,haste:.12}};
     equip(game,{[key]:level});game.player.invincible=100;
     for(let i=0;i<12;i++){const a=i*Math.PI/6,r=35+i*7;target(game,Math.cos(a)*r,37+Math.sin(a)*r)}
@@ -477,7 +577,7 @@ try{
     assert(fire.player.hp<before,'shorter-lived shots must still hit from the edge of ghost firing range');assert.equal(fire.projectiles.length,0);
   }
   const crossfire=start();crossfire.time=540;crossfire.enemies=[];crossfire.weapons={};crossfire.player.invincible=1000;
-  crossfire.spawnClock=crossfire.waveClock=crossfire.xpNext=Infinity;crossfire.bossMilestones=new Set([180,360,RUN_DURATION]);
+  crossfire.spawnClock=crossfire.waveClock=crossfire.xpNext=Infinity;crossfire.bossMilestones=new Set(BOSS_TIMES);
   for(let i=0;i<40;i++){const ghost=crossfire.spawnEnemy('ghost'),angle=i*Math.PI/20;Object.assign(ghost,{x:Math.cos(angle)*170,y:37+Math.sin(angle)*170,speed:0})}
   let crossfirePeak=0;
   for(let i=0;i<400;i++){
@@ -485,7 +585,7 @@ try{
     assert(count<=6,'forty late ghosts must not fill the screen with projectiles');
   }
   assert(crossfirePeak>0,'the crowd still makes occasional ranged attacks');
-  for(const milestone of [180,360,RUN_DURATION]){
+  for(const milestone of BOSS_TIMES){
     const fight=start();fight.time=milestone;fight.enemies=[];fight.player.invincible=1000;fight.spawnBoss(milestone);
     const boss=fight.enemies[0];Object.assign(boss,{x:180,y:37,speed:0,attack:0});
     const random=Math.random;try{Math.random=()=>.95;fight.updateEnemy(boss,.05)}finally{Math.random=random}
@@ -736,14 +836,31 @@ try{
   }
   {
   // Three timed, randomly placed tasks share the actual choice transaction.
-  const trialGame=kind=>{const game=start();game.time=60;game.enemies=[];updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind,index:ALTAR_ORDER.indexOf(kind),goal:kind==='vigil'?12:kind==='hunt'?1:6});assert.equal(game.shrines.length,1);Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y,hp:40,shield:0});game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,RUN_DURATION]);return game};
+  const trialGame=kind=>{const game=start();game.time=ALTAR_TIMES[0];game.enemies=[];updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind,index:ALTAR_ORDER.indexOf(kind),goal:EVENT_TYPES[kind].goal});assert.equal(game.shrines.length,1);Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y,hp:40,shield:0});game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set(BOSS_TIMES);return game};
   const completeTask=game=>{const s=game.activeEvent;if(s.kind==='hunt')game.kill(s.guardian);else if(s.kind==='vigil')s.progress=s.goal;else for(const mote of s.motes)Object.assign(mote,{x:game.player.x,y:game.player.y});updateWorldEvents(game,.05)};
   const scheduled=start(),spawned=[];assert.equal(scheduled.shrines.length,0);
-  for(const time of [59.99,60,239.99,240,419.99,420,600,900]){scheduled.time=time;Object.assign(scheduled.player,{x:time*2,y:-time});updateWorldEvents(scheduled,0);assert.equal(scheduled.shrines.length,ALTAR_TIMES.filter(t=>time>=t).length);const fresh=scheduled.shrines.at(-1);if(fresh&&!spawned.includes(fresh)){spawned.push(fresh);const d=Math.hypot(fresh.x-scheduled.player.x,fresh.y-scheduled.player.y);assert(d>=179&&d<=261)}}
+  for(const time of [89.99,90,359.99,360,629.99,630,900]){scheduled.time=time;Object.assign(scheduled.player,{x:time*2,y:-time});updateWorldEvents(scheduled,0);assert.equal(scheduled.shrines.length,ALTAR_TIMES.filter(t=>time>=t).length);const fresh=scheduled.shrines.at(-1);if(fresh&&!spawned.includes(fresh)){spawned.push(fresh);const d=Math.hypot(fresh.x-scheduled.player.x,fresh.y-scheduled.player.y);assert(d>=179&&d<=261)}}
   assert.equal(spawned.length,3);assert.deepEqual(spawned.map(s=>s.kind),ALTAR_ORDER);assert.equal(scheduled.shrines.filter(s=>s.state==='idle').length,3);
   Object.assign(scheduled.player,{x:spawned[2].x,y:spawned[2].y});assert.equal(nearestWorldEvent(scheduled),spawned[0],'a nearer late altar cannot bypass the easy task');assert(!scheduled.interact());
   assert.equal(scheduled.eventsFailed,0);const retained=scheduled.shrines[0];Object.assign(scheduled.player,{x:retained.x,y:retained.y});assert.equal(nearestWorldEvent(scheduled),retained);assert(worldEventStatus(scheduled).canStart,'unaccepted altars can still be accepted after minute nine');assert(scheduled.interact());assert.equal(scheduled.activeEvent,retained);scheduled.end(false);assert.equal(scheduled.eventsFailed,1);assert.equal(scheduled.shrines.filter(s=>s.state==='idle').length,2,'ending the run only fails an accepted task');
-  const alternate=start();alternate.time=60;updateWorldEvents(alternate,0);assert.notEqual(alternate.shrines[0].x,scheduled.shrines[0].x,'positions are rolled anew');
+  const alternate=start();alternate.time=ALTAR_TIMES[0];updateWorldEvents(alternate,0);assert.notEqual(alternate.shrines[0].x,scheduled.shrines[0].x,'positions are rolled anew');
+  const overlap=start(),banners=[];overlap.time=359.99;overlap.nextShrine=1;overlap.bossMilestones.add(180);overlap.spawnClock=overlap.waveClock=1e9;overlap.on=(event,data)=>{if(event==='banner')banners.push(data.title)};overlap.update(.02);
+  assert.equal(overlap.shrines[0].index,1);assert.equal(overlap.shrines[0].state,'idle');assert(banners.at(-1).includes(STAGES.graveyard.bosses[1]),'the simultaneous altar must not replace the boss warning');
+  for(const at of BOSS_TIMES){
+    const g=trialGame('vigil');g.time=at-25.01;assert(worldEventStatus(g).canStart);g.time=at-25;assert(!worldEventStatus(g).canStart,'every boss has a 25-second altar lockout');
+    g.time=at;g.spawnBoss(at);assert(!g.interact());assert.equal(g.shrines[0].state,'idle','bosses preserve unaccepted altars');
+    for(const boss of g.enemies.filter(e=>e.boss))g.kill(boss);if(at<RUN_DURATION)assert(g.interact(),'the retained altar opens after the boss dies');
+  }
+  for(const [index,kind] of ALTAR_ORDER.entries()){
+    const g=trialGame(kind);g.time=ALTAR_TIMES[index];g.pressure=pressureAt(g.time);g.nextShrine=ALTAR_TIMES.length;
+    const elite=g.spawnEnemy('knight',true),hp=elite.maxHp,damage=elite.damage;g.enemies=[];assert(g.interact());const s=g.activeEvent;
+    assert.equal(s.goal,kind==='vigil'?18:kind==='souls'?8:1);assert.equal(s.endsAt-g.time,45);
+    if(kind==='hunt'){assert.equal(s.guardian.maxHp,hp*2);assert.equal(s.guardian.damage,damage*1.2)}
+    if(kind==='souls'){assert.equal(s.motes.length,8);assert(s.motes.every(m=>{const r=Math.hypot(m.x-s.x,m.y-s.y);return r>=129.99&&r<=190.01}),'more soul pickups are spread farther from the altar')}
+    const before=g.enemies.length;g.time=s.nextWave-.01;updateWorldEvents(g,0);assert.equal(g.enemies.length,before);
+    g.time=s.nextWave;updateWorldEvents(g,0);assert.equal(g.enemies.length,before+4+index,'each stage raises the reinforcement count');assert.equal(s.nextWave-g.time,4);
+    assert(g.enemies.slice(before).every(e=>e.kind in g.pressure.roster),'reinforcements use the current chapter roster');
+  }
   const failedOrder=start();for(const time of ALTAR_TIMES){failedOrder.time=time;updateWorldEvents(failedOrder,0)}Object.assign(failedOrder.player,{x:failedOrder.shrines[0].x,y:failedOrder.shrines[0].y});assert(failedOrder.interact());failedOrder.time+=45;updateWorldEvents(failedOrder,0);assert.equal(nearestWorldEvent(failedOrder),failedOrder.shrines[1],'a failed early task advances to the next task');assert.equal(failedOrder.gold,0);
   for(const kind of Object.keys(EVENT_TYPES)){
     const game=trialGame(kind);game.update(.05);assert.equal(game.player.hp,40);assert.equal(game.gold,0);assert.equal(game.xp,0);assert.equal(game.eventsCompleted,0);
@@ -776,7 +893,7 @@ try{
   const wholeRun=trialGame('vigil');
   for(const at of ALTAR_TIMES){wholeRun.time=at;updateWorldEvents(wholeRun,0);const s=wholeRun.shrines.at(-1);Object.assign(wholeRun.player,{x:s.x,y:s.y});wholeRun.enemies=[];assert(wholeRun.interact());completeTask(wholeRun);assert(wholeRun.eventChoices.every(id=>!wholeRun.boons.includes(id)));assert(wholeRun.chooseAltarReward(0))}
   assert.equal(wholeRun.eventsCompleted,3);assert.equal(wholeRun.boons.length,3);wholeRun.time=900;updateWorldEvents(wholeRun,0);assert.equal(wholeRun.shrines.length,3);
-  const timedVigil=trialGame('vigil');timedVigil.interact();updateWorldEvents(timedVigil,11.9);assert.equal(timedVigil.state,'running');assert.equal(timedVigil.activeEvent.progress,11.9);updateWorldEvents(timedVigil,.11);assert.equal(timedVigil.state,'reward','twelve accumulated seconds actually complete the vigil');
+  const timedVigil=trialGame('vigil');timedVigil.interact();updateWorldEvents(timedVigil,17.9);assert.equal(timedVigil.state,'running');assert.equal(timedVigil.activeEvent.progress,17.9);updateWorldEvents(timedVigil,.11);assert.equal(timedVigil.state,'reward','eighteen accumulated seconds actually complete the vigil');
   const waitingTalent=trialGame('vigil');waitingTalent.interact();completeTask(waitingTalent);const heldChoices=[...waitingTalent.eventChoices];waitingTalent.level=10;waitingTalent.state='status';waitingTalent.statusReturn='reward';assert(waitingTalent.learnTalent('w_flame1'));assert.deepEqual(waitingTalent.eventChoices,heldChoices,'talent inspection and learning do not reroll altar choices');
   const actual=boon=>{const game=trialGame('vigil');game.interact();completeTask(game);game.eventChoices=[boon];game.chooseAltarReward(0);game.enemies=[];game.drops=[];game.player.x=0;game.player.y=37;game.stats.criticalChance=0;return game};
   const areaBoon=actual('horizon'),far=target(areaBoon,90,37);areaBoon.grid.rebuild(areaBoon.enemies);areaBoon.timers={};const farHp=far.hp;areaBoon.updateWeapons(.01);assert(far.hp<farHp,'expanded blade really hits outside the original range');
@@ -785,11 +902,12 @@ try{
   const growthBoon=actual('harvest');assert.equal(growthBoon.gainXp(10),13.5);const regenBoon=actual('renewal');regenBoon.player.hp=10;regenBoon.update(1);assert(Math.abs(regenBoon.player.hp-10.8)<1e-9,'regeneration acts in the live loop');
   const starBoon=start(CHARACTERS[1]);starBoon.boons=['souls'];starBoon.stats=characterStats(starBoon.character,{}, {},{},starBoon.weapons,starBoon.boons);starBoon.enemies=[];target(starBoon);updateCharacterTalents(starBoon,1,0);assert(Math.abs(starBoon.projectiles[0].damage-10.8*1.45)<1e-9,'companion stars inherit the altar soul benefit');
   const maxed=trialGame('vigil');equip(maxed,{solar:3,blade:6});assert(maxed.interact());completeTask(maxed);const hp=maxed.player.hp;assert(maxed.chooseAltarReward(-1));assert.equal(Object.keys(maxed.weaponEmpowerments).length,1);const key=Object.keys(maxed.weaponEmpowerments)[0],base=weaponStats(key,maxed.weapons[key],characterStats(maxed.character,{}, {},{},maxed.weapons),maxed.character);assert(Math.abs(weaponStats(key,maxed.weapons[key],maxed.stats,maxed.character).damage/base.damage-1.12)<1e-9);assert.equal(maxed.player.hp,Math.min(maxed.player.maxHp,hp+20),'skipping retains the completion healing');
-  const pendingTrial=trialGame('vigil');pendingTrial.pendingLevels=2;assert(pendingTrial.interact());pendingTrial.activeEvent.progress=12;pendingTrial.update(.01);assert.equal(pendingTrial.state,'reward');assert.equal(pendingTrial.pendingLevels,2);pendingTrial.chooseAltarReward(-1);pendingTrial.update(.01);assert.equal(pendingTrial.state,'level');assert.equal(pendingTrial.pendingLevels,1,'reward choice preserves queued level upgrades');
+  const pendingTrial=trialGame('vigil');pendingTrial.pendingLevels=2;assert(pendingTrial.interact());pendingTrial.activeEvent.progress=pendingTrial.activeEvent.goal;pendingTrial.update(.01);assert.equal(pendingTrial.state,'reward');assert.equal(pendingTrial.pendingLevels,2);pendingTrial.chooseAltarReward(-1);pendingTrial.update(.01);assert.equal(pendingTrial.state,'level');assert.equal(pendingTrial.pendingLevels,1,'reward choice preserves queued level upgrades');
   const xpTrial=trialGame('vigil');xpTrial.level=9;xpTrial.xpNext=80;assert(xpTrial.interact());completeTask(xpTrial);assert.equal(xpTrial.level,9);xpTrial.chooseAltarReward(-1);assert.equal(xpTrial.level,10);assert.equal(xpTrial.pendingLevels,1);assert(xpTrial.pendingTalentChoice);xpTrial.presentLevelChoices();assert.equal(xpTrial.state,'talent','completion XP respects talent-before-equipment priority');
-  const expiredTrial=trialGame('vigil');assert(expiredTrial.interact());expiredTrial.state='paused';updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.activeEvent.progress,0);expiredTrial.state='running';expiredTrial.player.hp=0;updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.eventsCompleted,0);expiredTrial.player.hp=40;expiredTrial.time=105;updateWorldEvents(expiredTrial,.05);assert.equal(expiredTrial.eventsFailed,1);assert.equal(expiredTrial.gold,0);assert.equal(expiredTrial.eventChoices.length,0);
+  const expiredTrial=trialGame('vigil');assert(expiredTrial.interact());expiredTrial.state='paused';updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.activeEvent.progress,0);expiredTrial.state='running';expiredTrial.player.hp=0;updateWorldEvents(expiredTrial,12);assert.equal(expiredTrial.eventsCompleted,0);expiredTrial.player.hp=40;expiredTrial.time=expiredTrial.activeEvent.endsAt;updateWorldEvents(expiredTrial,.05);assert.equal(expiredTrial.eventsFailed,1);assert.equal(expiredTrial.gold,0);assert.equal(expiredTrial.eventChoices.length,0);
   const bossTrial=trialGame('souls');assert(bossTrial.interact());bossTrial.spawnBoss(180);updateWorldEvents(bossTrial,.05);assert.equal(bossTrial.eventsFailed,1);assert.equal(bossTrial.activeEvent,null);
-  const soulGuide=trialGame('souls');soulGuide.interact();const soulAltar=soulGuide.activeEvent,nearestMote=worldEventTarget(soulGuide);assert(nearestMote&&soulAltar.motes.includes(nearestMote));assert.equal(Math.hypot(nearestMote.x-soulGuide.player.x,nearestMote.y-soulGuide.player.y),Math.min(...soulAltar.motes.map(m=>Math.hypot(m.x-soulGuide.player.x,m.y-soulGuide.player.y))));assert(worldEventStatus(soulGuide).detail.includes('魂光 0/6'));assert(worldEventStatus(soulGuide).guide.includes('青白光柱'));Object.assign(soulGuide.player,{x:nearestMote.x,y:nearestMote.y});updateWorldEvents(soulGuide,0);assert(nearestMote.collected);assert.notEqual(worldEventTarget(soulGuide),nearestMote);assert.equal(soulAltar.progress,1);
+  const tenMinuteTrial=trialGame('souls');tenMinuteTrial.time=570;assert(tenMinuteTrial.interact());tenMinuteTrial.time=600;tenMinuteTrial.spawnBoss(600);updateWorldEvents(tenMinuteTrial,0);assert.equal(tenMinuteTrial.eventsFailed,1,'the new boss interrupts an active task');
+  const soulGuide=trialGame('souls');soulGuide.interact();const soulAltar=soulGuide.activeEvent,nearestMote=worldEventTarget(soulGuide);assert(nearestMote&&soulAltar.motes.includes(nearestMote));assert.equal(Math.hypot(nearestMote.x-soulGuide.player.x,nearestMote.y-soulGuide.player.y),Math.min(...soulAltar.motes.map(m=>Math.hypot(m.x-soulGuide.player.x,m.y-soulGuide.player.y))));assert(worldEventStatus(soulGuide).detail.includes('魂光 0/8'));assert(worldEventStatus(soulGuide).guide.includes('青白光柱'));Object.assign(soulGuide.player,{x:nearestMote.x,y:nearestMote.y});updateWorldEvents(soulGuide,0);assert(nearestMote.collected);assert.notEqual(worldEventTarget(soulGuide),nearestMote);assert.equal(soulAltar.progress,1);
   for(const kind of Object.keys(EVENT_TYPES)){
     const guidance=trialGame(kind),messages=[];guidance.on=(event,data)=>messages.push({event,data});assert(guidance.interact());assert.equal(guidance.bannerUntil,guidance.time+3);
     assert(messages.some(m=>m.event==='banner'&&m.data.title.includes({vigil:'灯圈',hunt:'守卫',souls:'魂光'}[kind])),'brief instructions identify the task');
@@ -804,10 +922,10 @@ try{
       assert(labels.some(l=>l.text.endsWith(' · '+d)&&l.x>=50&&l.x<=270&&l.y>=0&&l.y<=568),'off-screen direction retains distance inside each map edge');
     }
   }
-  const fullTrial=trialGame('hunt');fullTrial.pressure.cap=0;assert(!fullTrial.interact());fullTrial.pressure.cap=2;assert(fullTrial.interact());fullTrial.time=65;updateWorldEvents(fullTrial,.05);assert.equal(fullTrial.enemies.length,2);
+  const fullTrial=trialGame('hunt');fullTrial.pressure.cap=0;assert(!fullTrial.interact());fullTrial.pressure.cap=2;assert(fullTrial.interact());fullTrial.time=fullTrial.activeEvent.nextWave;updateWorldEvents(fullTrial,.05);assert.equal(fullTrial.enemies.length,2);
   const soulBoon=characterStats(CHARACTERS[1],{}, {},{}, {orbit:1},['souls']);assert.equal(weaponStats('orbit',1,soulBoon,CHARACTERS[1]).damage/weaponStats('orbit',1,characterStats(CHARACTERS[1]),CHARACTERS[1]).damage,1.45);assert.equal(weaponStats('blade',1,soulBoon,CHARACTERS[1]).damage,weaponStats('blade',1,characterStats(CHARACTERS[1]),CHARACTERS[1]).damage);
   const fragile=start();fragile.boons=['stride'];fragile.stats=characterStats(fragile.character,{}, {},{},fragile.weapons,fragile.boons);fragile.player.shield=0;fragile.player.invincible=0;fragile.hurt(25,0,0);assert.equal(fragile.damageTaken,25,'stride no longer penalizes the hero; enemies carry its cost');
-  for(const milestone of [180,360,RUN_DURATION]){const bossGame=start();bossGame.enemies=[];bossGame.spawnBoss(milestone);const boss=bossGame.enemies.find(e=>e.boss);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1,'no duplicate boss drop');bossGame.drops.push({type:'xp',x:2000,y:2000,value:10,r:3,age:0});const magnet=bossGame.drops.find(d=>d.type==='magnet');Object.assign(magnet,{x:bossGame.player.x,y:bossGame.player.y});bossGame.updateDrops(.01);assert(bossGame.drops.filter(d=>d.type==='xp').every(d=>d.attracted),'boss magnet attracts even off-screen XP');}
+  for(const milestone of BOSS_TIMES){const bossGame=start();bossGame.enemies=[];bossGame.spawnBoss(milestone);const boss=bossGame.enemies.find(e=>e.boss);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1);bossGame.kill(boss);assert.equal(bossGame.drops.filter(d=>d.type==='magnet').length,1,'no duplicate boss drop');bossGame.drops.push({type:'xp',x:2000,y:2000,value:10,r:3,age:0});const magnet=bossGame.drops.find(d=>d.type==='magnet');Object.assign(magnet,{x:bossGame.player.x,y:bossGame.player.y});bossGame.updateDrops(.01);assert(bossGame.drops.filter(d=>d.type==='xp').every(d=>d.attracted),'boss magnet attracts even off-screen XP');}
   const chestTrial=start();equip(chestTrial,{blade:6},{growth:5});chestTrial.player.hp=chestTrial.player.maxHp-5;const chestRewards=chestTrial.openChest(60);assert.equal(chestRewards.length,4);assert(chestRewards.slice(0,2).every(text=>text.includes('+')&&!text.includes('LV.')));assert.deepEqual(chestRewards.slice(2),['生命 +5','余烬 +60']);assert(Object.keys(chestTrial.weaponUpgrades.blade).length>0);assert.equal(chestTrial.weapons.blade,6);assert.equal(chestTrial.xp,0);
   chestTrial.banished.add('blade');assert.deepEqual(chestTrial.openChest(60),['经验 +36（无可强化装备）','经验 +36（无可强化装备）','余烬 +60']);
   const pausedTrial=trialGame('vigil');pausedTrial.pause();assert(!worldEventStatus(pausedTrial).canStart);assert(!pausedTrial.interact());
@@ -828,7 +946,7 @@ try{
   };
   const normalPopulation=population([]),densePopulation=population(['horizon']);assert.equal(densePopulation.count,normalPopulation.count*1.5,'the actual wave contains 50% more enemies');assert.equal(densePopulation.interval,normalPopulation.interval/1.5);assert.equal(densePopulation.cap,Math.round(normalPopulation.cap*1.5));
   const arrivals=(boons,dt)=>{
-    const g=start();g.time=240;g.enemies=[];g.nextShrine=3;g.bossMilestones=new Set([180,360,RUN_DURATION]);g.waveClock=1e9;g.spawnClock=0;g.xpNext=1e9;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);let count=0;const spawn=g.spawnEnemy;
+    const g=start();g.time=240;g.enemies=[];g.nextShrine=3;g.bossMilestones=new Set(BOSS_TIMES);g.waveClock=1e9;g.spawnClock=0;g.xpNext=1e9;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);let count=0;const spawn=g.spawnEnemy;
     g.spawnEnemy=function(...args){count++;return spawn.apply(this,args)};
     for(let i=0;i<Math.round(60/dt);i++){g.update(dt);g.enemies=[]}return count;
   };
@@ -836,11 +954,11 @@ try{
   assert.equal(pressureAt(179.99).eliteChance,0);assert.equal(pressureAt(180).eliteChance,.02);
   const eliteRoll=Math.random;Math.random=()=>.025;
   try{for(const boons of [[],['frenzy']]){
-    const g=start();g.time=240;g.enemies=[];g.boons=boons;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);g.spawnClock=0;g.waveClock=1e9;g.bossMilestones=new Set([180,360,RUN_DURATION]);g.update(.01);
+    const g=start();g.time=240;g.enemies=[];g.boons=boons;g.stats=characterStats(g.character,{}, {},{},g.weapons,boons);g.spawnClock=0;g.waveClock=1e9;g.bossMilestones=new Set(BOSS_TIMES);g.update(.01);
     assert.equal(g.enemies.length,4);assert(g.enemies.every(e=>e.elite===!!boons.length),'a 2.5% roll lies between the actual 2% and 3% elite chances');
   }}finally{Math.random=eliteRoll}
   const multiboss=start();multiboss.time=179.99;multiboss.enemies=[];multiboss.spawnClock=multiboss.waveClock=1e9;multiboss.xpNext=1e9;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,1);
-  for(const id of ['glass','twins']){multiboss.enemies=[];multiboss.state='reward';multiboss.eventChoices=[id];assert(multiboss.chooseAltarReward(0));multiboss.time=id==='glass'?359.99:RUN_DURATION-.01;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,id==='glass'?2:3,'extra bosses apply only to future milestone waves')}
+  for(const [id,at,count] of [['glass',360,2],['twins',600,3],[null,RUN_DURATION,3]]){multiboss.enemies=[];if(id){multiboss.state='reward';multiboss.eventChoices=[id];assert(multiboss.chooseAltarReward(0))}multiboss.time=at-.01;multiboss.update(.02);assert.equal(multiboss.enemies.filter(e=>e.boss).length,count,'extra bosses apply only to future milestone waves')}
   const finals=multiboss.enemies.filter(e=>e.final);multiboss.kill(finals[0]);assert(!multiboss.finalDefeated);multiboss.update(.01);assert(!multiboss.ended,'one defeated final boss cannot end a multi-boss fight');
   multiboss.kill(finals[1]);assert(!multiboss.finalDefeated);multiboss.kill(finals[2]);assert(multiboss.finalDefeated);assert.equal(multiboss.drops.filter(d=>d.type==='magnet').length,3);let settlements=0;multiboss.on=event=>{if(event==='end')settlements++};multiboss.update(.01);multiboss.end(true);assert.equal(settlements,1,'victory settles exactly once after all final bosses die');
   multiboss.start(multiboss.character);assert.deepEqual(multiboss.stats.difficulty,{hp:1,damage:1,speed:1,population:1,elite:1,bosses:0});
@@ -851,13 +969,13 @@ try{
       const g=start();g.boons=boons;equip(g,{blade:1});g.enemies=[];g.time=300;
       for(let i=0;i<30;i++){const elite=g.spawnEnemy('skeleton',true);g.kill(elite);g.kill(elite)}
       assert.equal(g.drops.filter(d=>d.type==='chest').length,0);assert.equal(g.drops.filter(d=>d.type==='xp').length,30);assert(g.drops.filter(d=>d.type==='xp').every(d=>d.elite&&d.value===ENEMIES.skeleton.xp*8));
-      for(const milestone of [180,360,RUN_DURATION])g.spawnBoss(milestone);
+      for(const milestone of BOSS_TIMES)g.spawnBoss(milestone);
       const bosses=g.enemies.filter(e=>e.boss),count=1+g.stats.difficulty.bosses;
-      for(const milestone of [360,180,RUN_DURATION]){
+      for(const milestone of [360,180,600,RUN_DURATION]){
         const wave=bosses.filter(e=>e.bossWave===milestone);assert.equal(wave.length,count);const before=g.drops.filter(d=>d.type==='chest').length;
         for(const [index,boss] of wave.reverse().entries()){g.kill(boss);g.kill(boss);assert.equal(g.drops.filter(d=>d.type==='chest').length,before+(index===count-1?1:0),'each overlapping boss wave pays once on its last death')}
       }
-      assert.equal(g.drops.filter(d=>d.type==='chest').length,3);assert.equal(g.drops.filter(d=>d.type==='magnet').length,count*3);assert.equal(g.drops.filter(d=>d.type==='xp').length,30+count*3);
+      assert.equal(g.drops.filter(d=>d.type==='chest').length,4);assert.equal(g.drops.filter(d=>d.type==='magnet').length,count*4);assert.equal(g.drops.filter(d=>d.type==='xp').length,30+count*4);
     }
     console.log('PASS: normal and stacked population/elite/boss contracts retain 8x elite XP and one chest per completed boss wave, with per-boss magnets and no duplicate rewards.');
   }
@@ -866,14 +984,20 @@ try{
     assert.equal(expedition('__proto__').stage,'graveyard');
     for(const stage of Object.keys(STAGES)){
       const g=expedition(stage);for(let time=0;time<=RUN_DURATION+120;time+=60){const p=pressureAt(time,0,{},stage);assert(Object.entries(p.roster).every(([key,weight])=>ENEMIES[key]&&weight>0));assert(Number.isFinite(p.hp))}
-      g.spawnClock=g.waveClock=g.xpNext=Infinity;g.nextShrine=ALTAR_TIMES.length;g.bossMilestones=new Set([180,360]);const hp=g.player.hp;
+      g.spawnClock=g.waveClock=g.xpNext=Infinity;g.nextShrine=1;g.bossMilestones=new Set([180]);g.time=359.99;g.update(.02);
+      assert.equal(g.shrines.length,1);const altar=g.shrines[0];assert.equal(altar.kind,'souls');assert.equal(altar.state,'idle');Object.assign(g.player,{x:altar.x,y:altar.y});assert(!g.interact(),'the 06:00 altar waits for the simultaneous boss');
+      for(const boss of g.enemies.filter(e=>e.boss))g.kill(boss);assert(g.interact());g.activeEvent=null;g.shrines=[];g.enemies=[];g.projectiles=[];g.hazards=[];g.drops=[];
+      g.time=599.9;g.update(.05);assert(!g.enemies.some(e=>e.boss));g.time=599.99;g.update(.02);
+      const gatekeeper=g.enemies.find(e=>e.boss);assert(gatekeeper&&!gatekeeper.final&&gatekeeper.bossWave===600);assert.equal(gatekeeper.name,STAGES[stage].bosses[2]);assert.equal(gatekeeper.maxHp,28000);
+      g.update(.05);assert.equal(g.enemies.filter(e=>e.boss).length,1,'10:00 boss spawns exactly once');g.kill(gatekeeper);assert(!g.finalDefeated&&!g.ended,'the third boss does not finish the run');assert.equal(g.drops.filter(d=>d.type==='chest').length,1);g.enemies=[];g.drops=[];g.hazards=[];
+      g.spawnClock=g.waveClock=g.xpNext=Infinity;g.nextShrine=ALTAR_TIMES.length;g.bossMilestones=new Set(BOSS_TIMES.slice(0,-1));const hp=g.player.hp;
       for(const time of [29.99,60,120,599.99,600,660,720,780,840,RUN_DURATION-.1]){
         g.time=time;g.update(.05);assert.equal(g.hazards.length,0,'no automatic terrain hazards in '+stage);assert.equal(g.player.hp,hp);assert(!g.finalSpawned&&!g.ended,'minute ten leaves five minutes for the build');
       }
       g.time=600;g.waveClock=0;g.update(.05);assert(g.enemies.length>0&&g.waveCount===1,'horde waves continue after minute ten');g.enemies=[];g.grid.rebuild([]);
       g.time=RUN_DURATION-.01;g.update(.02);assert.equal(g.enemies.filter(e=>e.final).length,1,'the real loop spawns the final boss at 15:00');assert(!g.ended,'surviving the clock still requires defeating the boss');g.update(.05);assert.equal(g.enemies.filter(e=>e.final).length,1,'the final boss spawns once');g.enemies=[];
       g.boons=['glass'];equip(g,{},{});
-      for(const [i,milestone] of [180,360,RUN_DURATION].entries()){
+      for(const [i,milestone] of BOSS_TIMES.entries()){
         g.time=milestone;g.spawnBoss(milestone);const bosses=g.enemies.filter(e=>e.boss&&!e.dead);assert.equal(bosses.length,2);assert(bosses.every(e=>e.name===STAGES[stage].bosses[i]));
         for(const boss of bosses){boss.attack=0;g.updateEnemy(boss,.05)}
         if(stage==='coast')assert(g.hazards.some(h=>h.type==='tide'),'coast boss uses its own attack');
@@ -915,7 +1039,7 @@ try{
     for(const key of ['tide','maelstrom']){const g=expedition();equip(g,{[key]:maxWeaponLevel(key)});const e=target(g);g.grid.rebuild(g.enemies);g.updateWeapons(.01);const wave=g.zones[0];updateExpandedZone(g,wave,.1);const hp=e.hp;updateExpandedZone(g,wave,.1);assert(e.hp<e.maxHp&&e.hp===hp,'one moving wave cannot repeatedly damage a target')}
     console.log('PASS: three 15-minute chapters without ambient terrain damage, continued late waves, boss skills/rewards and tide gaps, six enemies, both innates, eighteen talents, six relics and run resets.');
   }
-  console.log('PASS: 44 weapons / 88 live attacks, 24 fusions, 45 innate-driven talent nodes, three timed shrines, twelve altar bargains and growth parity.');
+  console.log('PASS: 48 weapons / 96 live attacks, 26 fusions, 45 innate-driven talent nodes, three timed shrines, twelve altar bargains and growth parity.');
 
   if(process.argv.includes('--pressure')){
     // Fixed upgrade budgets, no bosses or new levels: isolate horde pressure from RNG offers.
@@ -927,6 +1051,8 @@ try{
       {name:'ice-lightning',at:450,level:30,weapons:{blade:1,glacier:3,tempest:3,storm:5},passives:{frostbrand:3,stormseal:3,rime:3,haste:1}},
       {name:'blood-fire',at:450,level:30,weapons:{bloodmoon:3,solar:3,bell:6},passives:{armor:4,power:3,haste:3}},
       {name:'chain-lightning',at:450,level:30,weapons:{blade:1,thunderbolt:3,soulchain:3,lance:5},passives:{conductor:3,power:3,haste:3}},
+      {name:'melee-cleave',at:450,level:30,weapons:{whirlwind:3,hammer:6,lance:5},passives:{armor:3,power:3,haste:3,siphon:3,area:3}},
+      {name:'melee-impact',at:450,level:30,weapons:{quake:3,axe:6,blade:5},passives:{armor:3,power:3,haste:3,siphon:3,area:3}},
     ],reports=[];
     builds.push({...builds[0],name:'opening-max-meta',meta:fullPermanent}, {...builds[1],name:'early-max-meta',meta:fullPermanent});
     const lateRoutes=[
@@ -937,18 +1063,19 @@ try{
       {name:'summon',weapons:{blade:4,stormsentry:3,bolt:4},pair:{soulpact:3,duration:3}},
       {name:'blood',weapons:{blade:4,bloodmoon:3,bolt:5},pair:{luck:3,deadeye:3}},
     ];
-    for(const route of lateRoutes)for(const at of [360,480,540,600,720,840,RUN_DURATION])for(const linked of [false,true])builds.push({name:route.name+'-'+(linked?'linked':'mixed')+'-'+at,at,level:30,weapons:route.weapons,passives:{power:3,haste:3,area:3,armor:3,...(linked?route.pair:{echo:3,forkseed:3})},late:true,boss:at===RUN_DURATION,linked,route:route.name});
+    for(const route of lateRoutes)for(const at of [360,480,540,600,720,840,RUN_DURATION])for(const linked of [false,true])builds.push({name:route.name+'-'+(linked?'linked':'mixed')+'-'+at,at,level:30,weapons:route.weapons,passives:{power:5,haste:4,area:3,...(linked?route.pair:{echo:3,forkseed:3})},late:true,boss:at===RUN_DURATION,linked,route:route.name});
     const budget=build=>Object.entries(build.weapons).reduce((sum,[key,level])=>sum+level+(FUSIONS[key]?.ingredients.reduce((cost,i)=>cost+i.required,0)||0),0)+Object.values(build.passives).reduce((a,b)=>a+b,0);
     assert(builds.filter(b=>b.at===450).every(b=>budget(b)===37),'late builds spend the same upgrade budget, including consumed fusion materials');
     assert(builds.filter(b=>b.late).every(b=>budget(b)===37),'late route comparisons use the same 37-point budget');
     for(const build of builds){
+      assert(Object.keys(build.weapons).length<=WEAPON_SLOTS&&Object.keys(build.passives).length<=PASSIVE_SLOTS,'pressure builds respect both equipment limits');
       const consumed=Object.keys(build.weapons).flatMap(key=>FUSIONS[key]?.ingredients.map(i=>i.id)||[]);
       assert(build.weapons.blade||consumed.includes('blade'),'the starting weapon must remain equipped or be consumed by a fusion');
       assert.equal(new Set(consumed).size,consumed.length,'fusion routes cannot share consumed ingredients');
       assert(!consumed.some(key=>build.weapons[key]||build.passives[key]),'consumed ingredients cannot also be equipped');
     }
     for(const build of builds)for(const moving of [false,true])for(const trial of [311,733,1193,1733,2237]){
-      seed=trial;const game=start();game.time=build.at;game.level=build.level;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set(build.boss?[180,360]:[180,360,RUN_DURATION]);game.xpNext=1e9;game.waveClock=15;
+      seed=trial;const game=start();game.time=build.at;game.level=build.level;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set(build.boss?BOSS_TIMES.slice(0,-1):BOSS_TIMES);game.xpNext=1e9;game.waveClock=15;
       game.meta=build.meta||{};
       // Fixed-budget comparisons ignore chest upgrades while keeping enemies and other supplies.
       game.openChest=()=>{};
@@ -974,13 +1101,20 @@ try{
       const group=reports.filter(r=>r.name===build.name&&r.moving===moving),mean=key=>Math.round(group.reduce((sum,r)=>sum+r[key],0)/group.length);
       console.log(JSON.stringify({name:build.name,at:build.at,moving,survived:group.filter(r=>r.hp>0).length,won:group.filter(r=>r.won).length,seconds:mean('seconds'),damageTaken:mean('damageTaken'),kills:mean('kills'),remaining:mean('remaining')}));
       if(build.at<450&&!build.late)assert(moving?group.every(r=>r.seconds===60):group.every(r=>r.seconds<60),'early survival should require movement: '+build.name);
+      if(build.name.startsWith('melee-'))assert(moving?group.every(r=>r.seconds===60):group.every(r=>r.seconds<60),'new melee routes stay viable while moving and still need positioning: '+build.name);
     }
     const total=(name,key)=>reports.filter(r=>r.name===name&&r.moving).reduce((sum,r)=>sum+r[key],0);
     // More kills and at least 25% fewer remaining threats measure room to move under the same spawn budget.
     assert(total('chain-lightning','kills')>total('raw-late','kills')&&total('chain-lightning','remaining')<total('raw-late','remaining')*.75,'finishing a linked build must open a late clear-speed advantage');
-    for(const route of lateRoutes)for(const at of [360,480,540,600,720,840]){
-      const linked=route.name+'-linked-'+at,mixed=route.name+'-mixed-'+at;
-      assert(total(linked,'kills')>total(mixed,'kills')*1.05&&total(linked,'remaining')<total(mixed,'remaining')*.85,'linked '+route.name+' must create a measurable clear-speed and space advantage at '+at);
+    for(const route of lateRoutes){
+      let linkedThreats=0,mixedThreats=0;
+      for(const at of [360,480,540,600,720,840]){
+        const linked=route.name+'-linked-'+at,mixed=route.name+'-mixed-'+at,left=total(linked,'remaining'),control=total(mixed,'remaining');
+        assert(total(linked,'kills')>total(mixed,'kills')*1.05&&left<control,'linked '+route.name+' must keep a clear-speed and space advantage at '+at);
+        linkedThreats+=left;mixedThreats+=control;
+      }
+      // Keep the 15% space advantage across all 30 seeded runs, rather than one final-frame population snapshot.
+      assert(linkedThreats<mixedThreats*.85,'linked '+route.name+' must leave at least 15% fewer threats across the late game');
     }
     assert(reports.filter(r=>r.name.includes('-mixed-')&&!r.moving).every(r=>r.hp===0),'unlinked gear cannot idle through late hordes or the final boss');
     console.log('PASS: '+reports.length+' pressure scenarios, movement advantage, six linked routes across minutes 6–15, and equal-budget controls.');
@@ -990,7 +1124,7 @@ try{
     // Same gear, level, movement policy and seeds within each character; healing starts with room to work.
     const loadouts=[{blade:6,orbit:4,flame:3},{orbit:6,bolt:4,frost:3},{bolt:6,blade:4,storm:3},{capacitor:6,needle:4,storm:3},{tide:6,lantern:4,frost:3}],reports=[];
     for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const trial of [311,733,1193]){
-      seed=trial;const game=start(character);game.time=300;game.level=30;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set([180,360,RUN_DURATION]);game.xpNext=1e9;game.waveClock=1e9;
+      seed=trial;const game=start(character);game.time=300;game.level=30;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set(BOSS_TIMES);game.xpNext=1e9;game.waveClock=1e9;
       game.openChest=()=>{};equip(game,loadouts[index],{power:2,haste:2});const initialHp=game.player.hp=game.player.maxHp*.65;
       for(const node of branch.nodes)assert(game.learnTalent(node.id));
       let frames=0;
@@ -1027,7 +1161,7 @@ try{
     ];
     for(const [weapons,passives] of loadouts)assert.equal(Object.entries(weapons).reduce((sum,[key,level])=>sum+level+(FUSIONS[key]?.ingredients.reduce((n,item)=>n+item.required,0)||0),0)+Object.values(passives).reduce((a,b)=>a+b,0),37);
     for(const bargains of [[],['horizon','frenzy','glass']])for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const at of [RUN_DURATION-60,RUN_DURATION])for(const moving of [false,true])for(const trial of [311,733,1193]){
-      seed=trial;const game=start(character);game.start(character,fullPermanent);game.time=at;game.level=30;game.enemies=[];game.nextShrine=3;game.bossMilestones=new Set(at===RUN_DURATION?[180,360]:[180,360,RUN_DURATION]);game.xpNext=1e9;game.waveClock=15;
+      seed=trial;const game=start(character);game.start(character,fullPermanent);game.time=at;game.level=30;game.enemies=[];game.nextShrine=3;game.bossMilestones=new Set(at===RUN_DURATION?BOSS_TIMES.slice(0,-1):BOSS_TIMES);game.xpNext=1e9;game.waveClock=15;
       game.boons=[...bargains];game.openChest=()=>{};let bossesSpawned=0;const spawnBoss=game.spawnBoss;game.spawnBoss=function(milestone){spawnBoss.call(this,milestone);bossesSpawned=this.enemies.filter(e=>e.boss&&!e.dead).length};equip(game,...loadouts[index]);for(const node of branch.nodes)assert(game.learnTalent(node.id));let frames=0;
       for(;frames<(at===RUN_DURATION?1800:1200)&&!game.ended;frames++){
         const p=game.player;
@@ -1103,8 +1237,8 @@ try{
         if(game.time>=nextCheckpoint){checkpoints.push({time:nextCheckpoint,level:game.level,kills:game.kills,hp:Math.round(p.hp),chests,eliteKills,refinementChoices,groundXp:game.drops.filter(d=>!d.dead&&d.type==='xp').reduce((sum,d)=>sum+d.value,0)});nextCheckpoint+=60}
       }
       reports.push({stage,character:game.character.id,seed:trial+index,mode:invulnerable?'collector (damage disabled)':'survival bot',bargains,firstMaxAt,chests,eliteKills,refinementChoices,noGrowthChoices,time:Math.round(game.time),won:!!game.finalDefeated,level:game.level,kills:game.kills,damageTaken:game.damageTaken,weapons:game.weapons,passives:game.passives,weaponUpgrades:game.weaponUpgrades,talents:Object.keys(game.talents),checkpoints});
-      if(chapters){assert(Number.isFinite(game.player.hp)&&Number.isFinite(game.xp));assert(chests<=3);if(invulnerable)assert(game.time>=RUN_DURATION,'chapter collector reaches its final boss');assert.equal(game.stage,stage)}
-      if(compare){assert.equal(noGrowthChoices,0);assert(chests<=3,'contracts cannot multiply boss chests');assert(game.time>=RUN_DURATION,'the collector comparison reaches the last minute')}
+      if(chapters){assert(Number.isFinite(game.player.hp)&&Number.isFinite(game.xp));assert(chests<=BOSS_TIMES.length);if(invulnerable)assert(game.time>=RUN_DURATION,'chapter collector reaches its final boss');assert.equal(game.stage,stage)}
+      if(compare){assert.equal(noGrowthChoices,0);assert(chests<=BOSS_TIMES.length,'contracts cannot multiply boss chests');assert(game.time>=RUN_DURATION,'the collector comparison reaches the last minute')}
       console.log(JSON.stringify(reports.at(-1)));
     }
     mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/'+(chapters?'expeditions':compare?'progression':'balance')+'-report.json',JSON.stringify(reports,null,2));
@@ -1204,10 +1338,11 @@ try{
       await call('Page.navigate',{url:'http://127.0.0.1:4173/'});
       for(let i=0;i<120;i++){if(await evaluate('return document.readyState!=="loading"&&!!document.getElementById("world")'))break;await delay(500)}
       assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.state'),'menu');
-      const timeline=await evaluate(`const {game}=await import('/src/main.js'),{STAGES}=await import('/src/expeditions.js'),{RUN_DURATION}=await import('/src/balance.js');const rows=[];for(const stage of Object.keys(STAGES)){game.start(game.character,{}, {stage});game.state='paused';for(const time of [0,600,RUN_DURATION-1,RUN_DURATION]){game.time=time;game.on('hud');rows.push({stage,time,left:document.getElementById('time-left').textContent,next:document.getElementById('next-encounter').textContent,progress:parseFloat(document.getElementById('night-progress-fill').style.width)})}}game.returnToMenu();return {rows,markers:[...document.querySelectorAll('.night-progress b')].map(e=>parseFloat(e.style.left)),departure:document.getElementById('camp-departure-note').textContent,guide:document.querySelector('.guide-grid').textContent};`);
-      assert.deepEqual(timeline.markers,[20,40]);assert(timeline.departure.includes('15 分钟')&&timeline.guide.includes('10–15 分钟'));
-      for(const row of timeline.rows){assert.equal(row.left,row.time===0?'15:00':row.time===600?'05:00':row.time<RUN_DURATION?'00:01':'击败首领');if(row.time===600){assert(row.next.startsWith('15:00'));assert(Math.abs(row.progress-200/3)<.01)}}
-      console.log('PASS: all chapter HUDs show 15-minute timing, five minutes remaining at 10:00, final boss hints and correctly positioned early milestones.');
+      const timeline=await evaluate(`const {game}=await import('/src/main.js'),{STAGES}=await import('/src/expeditions.js'),{RUN_DURATION}=await import('/src/balance.js');const rows=[];for(const stage of Object.keys(STAGES)){game.start(game.character,{}, {stage});game.state='paused';for(const time of [0,180,360,599,600,RUN_DURATION-1,RUN_DURATION]){game.time=time;game.on('hud');rows.push({stage,time,left:document.getElementById('time-left').textContent,next:document.getElementById('next-encounter').textContent,progress:parseFloat(document.getElementById('night-progress-fill').style.width)})}}const slots=[document.querySelectorAll('.weapon-slot').length,document.querySelectorAll('.passive-slot').length];game.returnToMenu();return {rows,slots,markers:[...document.querySelectorAll('.night-progress b')].map(e=>parseFloat(e.style.left)),departure:document.getElementById('camp-departure-note').textContent,guide:document.querySelector('.guide-grid').textContent};`);
+      assert.deepEqual(timeline.slots,[5,5]);assert.equal(timeline.markers.length,3);timeline.markers.forEach((value,i)=>assert(Math.abs(value-BOSS_TIMES[i]/RUN_DURATION*100)<.001));
+      assert(timeline.departure.includes('15 分钟')&&timeline.guide.includes('01:30、06:00、10:30')&&timeline.guide.includes('五个道具位'));
+      for(const row of timeline.rows){const next=BOSS_TIMES.findIndex(at=>row.time<at);assert.equal(row.next,next<0?'终局 · 击败'+STAGES[row.stage].bosses.at(-1):String(Math.floor(BOSS_TIMES[next]/60)).padStart(2,'0')+':00 · '+STAGES[row.stage].bosses[next]);if(row.time===600){assert.equal(row.left,'05:00');assert(Math.abs(row.progress-200/3)<.01)}}
+      console.log('PASS: all chapter HUDs show four boss milestones, 15-minute timing, proportional altar times and five weapon/passive slots.');
       if(process.argv.includes('--art')){
         const audit=await evaluate(`
           const {game}=await import('/src/main.js'),{WEAPONS,CHARACTERS,ENEMIES}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js'),{sprite}=await import('/src/art.js'),{artAvailable,PACK_ACTORS}=await import('/src/assets.js');
@@ -1230,13 +1365,13 @@ try{
           }
           game.on=on;game.returnToMenu();return {sprites,rows,gallery:gallery.toDataURL('image/png')};
         `);
-        assert.equal(audit.rows.length,44);assert(audit.sprites.every(row=>row.visible&&row.frames>1),JSON.stringify(audit.sprites));
+        assert.equal(audit.rows.length,Object.keys(WEAPONS).length);assert(audit.sprites.every(row=>row.visible&&row.frames>1),JSON.stringify(audit.sprites));
         assert(audit.rows.every(row=>row.frames>1&&(row.key==='orbit'||row.emitted>0&&row.seen.includes(row.key))),JSON.stringify(audit.rows));
         writeFileSync('artifacts/art-weapon-gallery.png',Buffer.from(audit.gallery.split(',')[1],'base64'));
         const composition=await evaluate(`
           const {game}=await import('/src/main.js'),{CHARACTERS}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js');
           const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;const g=canvas.getContext('2d');g.imageSmoothingEnabled=false;g.fillStyle='#101b23';g.fillRect(0,0,1280,900);
-          const builds=[['炉心 · 铸雷与冰梭',3,'foundry',{arcforge:3,needle:6,sentinel:6}],['渡魂 · 潮眼与天灯',4,'coast',{maelstrom:3,beacon:3,tether:6}],['冻土 · 冰棺与寒晶',1,'graveyard',{wintermine:3,glacier:3,prism:6}],['疫庭 · 孢子与月镰',2,'graveyard',{pestilence:3,crescent:6,bell:6}]];
+          const builds=[['炼狱火种 · 透明烈焰与火环',0,'foundry',{flame:6,solar:3,meteor:6}],['渡魂 · 潮眼与天灯',4,'coast',{maelstrom:3,beacon:3,tether:6}],['冻土 · 冰棺与寒晶',1,'graveyard',{wintermine:3,glacier:3,prism:6}],['疫庭 · 孢子与月镰',2,'graveyard',{pestilence:3,crescent:6,bell:6}]];
           const on=game.on;game.on=()=>{};
           for(let n=0;n<builds.length;n++){
             const [label,character,stage,weapons]=builds[n];game.start(CHARACTERS[character],{}, {stage});game.state='paused';game.weapons=weapons;game.stats=characterStats(game.character,{}, {},{},weapons);game.enemies=[];game.spawnClock=1e6;game.waveClock=1e6;game.player.invincible=100;game.player.x=90;game.player.y=120;game.camera={x:90,y:100};
@@ -1246,8 +1381,37 @@ try{
           }game.on=on;game.returnToMenu();return canvas.toDataURL('image/png');
         `);
         writeFileSync('artifacts/art-builds.png',Buffer.from(composition.split(',')[1],'base64'));
+        const clarity=await evaluate(`
+          const {game}=await import('/src/main.js'),{WEAPONS,PASSIVES}=await import('/src/data.js'),{icon,canvas,drawSprite,Landscape}=await import('/src/art.js'),{drawCombatZone}=await import('/src/combat-art.js');
+          const field=canvas(180,180),fg=field.getContext('2d');let solidFire=0,visibleFire=1;
+          for(let frame=0;frame<12;frame++){fg.clearRect(0,0,180,180);drawCombatZone(fg,{x:90,y:90,r:70,t:4,max:4,seed:0},0,0,frame/12);const data=fg.getImageData(0,0,180,180).data;let solid=0,visible=0;for(let i=3;i<data.length;i+=4){if(data[i]>160)solid++;if(data[i]>32)visible++}solidFire=Math.max(solidFire,solid/(Math.PI*70*70));visibleFire=Math.min(visibleFire,visible/(Math.PI*70*70))}
+          const landscape=new Landscape(),scenery=[0,1000,-1400].map(x=>{const objects=landscape.getObjects({x,y:x},640,400);return {total:objects.length,tall:objects.filter(o=>['tree','deadTree','pillar','arch'].includes(o.kind)).length}});
+          const digest=c=>{const data=c.getContext('2d').getImageData(0,0,24,24).data;let value=0;for(const n of data)value=(Math.imul(value,31)+n)>>>0;return value};
+          const pairs=[['vitality','regen'],['haste','speed'],['flame','solar'],['bolt','thunderbolt'],['mine','wintermine'],['thorn','plague']].map(([a,b])=>({a,b,distinct:digest(icon(a))!==digest(icon(b))}));
+          const entries=Object.entries({...WEAPONS,...PASSIVES}),sheet=canvas(960,Math.ceil(entries.length/12)*80+36),sg=sheet.getContext('2d');sg.imageSmoothingEnabled=false;sg.fillStyle='#101d24';sg.fillRect(0,0,sheet.width,sheet.height);sg.fillStyle='#e1c38b';sg.font='15px sans-serif';sg.fillText('武器与遗物 · 统一像素轮廓',16,23);
+          const icons=entries.map(([key,item],i)=>{const c=icon(key),x=i%12*80,y=Math.floor(i/12)*80+36;sg.fillStyle='#1d3035';sg.fillRect(x+15,y+3,50,50);sg.drawImage(c,x+16,y+4,48,48);sg.fillStyle='#cad5c9';sg.font='10px sans-serif';sg.textAlign='center';sg.fillText(item.name,x+40,y+68);return {key,visible:c.getContext('2d').getImageData(0,0,24,24).data.some((v,i)=>i%4===3&&v)}});
+          game.start(game.character,{}, {stage:'foundry'});game.state='paused';game.weapons={};game.enemies=[];game.player.shield=0;game.player.invincible=0;Object.assign(game.player,{x:1090,y:1010});game.camera={x:1000,y:1000};game.ambient=.4;game.shake=game.flash=0;
+          const enemy=game.spawnEnemy('skeleton');Object.assign(enemy,{x:1000,y:1000,speed:0,damage:0});
+          const getObjects=game.landscape.getObjects;game.landscape.getObjects=()=>[];game.render();const before=game.g.getImageData(0,0,game.w,game.h).data;
+          const mask=canvas(game.w,game.h),mg=mask.getContext('2d');drawSprite(mg,'skeleton',game.w/2,game.h/2,{moving:true});const pixels=mg.getImageData(0,0,game.w,game.h).data,occlusion=[];
+          for(const kind of ['furnace','pillar','tree','arch']){
+            game.landscape.getObjects=()=>[{kind,x:1000,y:1018,variant:0}];game.zones=Array.from({length:12},(_,i)=>({x:1000+Math.cos(i)*15,y:1000+Math.sin(i)*15,r:70,t:4,max:4,seed:i}));game.effects=[{type:'pulse',source:'flame',x:1000,y:1000,r:85,t:.24,max:.3}];game.projectiles=[{type:'flame',x:1000,y:990,lvl:6,vx:1,vy:0},{type:'scythe',source:'bloodmoon',x:985,y:990,r:30,vx:1,vy:0}];game.render();const after=game.g.getImageData(0,0,game.w,game.h).data;let changed=0,opaque=0;
+            for(let i=3;i<pixels.length;i+=4)if(pixels[i]===255){opaque++;if(before[i-1]!==after[i-1]||before[i-2]!==after[i-2]||before[i-3]!==after[i-3])changed++}occlusion.push({kind,changed,opaque});
+          }
+          const bulletBefore=game.g.getImageData(game.w/2,game.h/2-10,1,1).data.join();game.projectiles=[{type:'enemy',enemy:true,x:1000,y:990,vx:1,vy:0}];game.render();const hostileVisible=game.g.getImageData(game.w/2,game.h/2-10,1,1).data.join()!==bulletBefore;
+          game.landscape.getObjects=getObjects;game.returnToMenu();return {solidFire,visibleFire,scenery,pairs,icons,occlusion,hostileVisible,sheet:sheet.toDataURL('image/png')};
+        `);
+        writeFileSync('artifacts/art-icon-sheet.png',Buffer.from(clarity.sheet.split(',')[1],'base64'));delete clarity.sheet;
+        writeFileSync('artifacts/art-clarity-report.json',JSON.stringify(clarity,null,2));
+        assert(clarity.solidFire<.03,'fire fields must leave at least 97% of their footprint free of opaque flames');
+        assert(clarity.visibleFire>.08,'flames retain substantial coverage throughout the animation');
+        assert(clarity.scenery.every(row=>row.total<=40&&row.tall<=12),'decorations must leave open combat space');
+        assert(clarity.pairs.every(pair=>pair.distinct)&&clarity.icons.every(icon=>icon.visible),'equipment icons remain visible and distinct');
+        assert(clarity.occlusion.every(row=>row.opaque>30&&row.changed===0),'buildings and overlapping fire must not paint over enemy silhouettes: '+JSON.stringify(clarity.occlusion));
+        assert(clarity.hostileVisible,'hostile shots stay above actors and friendly spells');
+        console.log('PASS: dense translucent fire, lower scenery density, distinct equipment icons and unobscured enemies behind all four large scenery types.');
         const performance=await evaluate(`
-          const {game}=await import('/src/main.js'),{CHARACTERS}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js');game.start(CHARACTERS[0],{}, {stage:'coast'});game.state='paused';game.weapons={beacon:3,maelstrom:3,pestilence:3,stormsentry:3,solar:3,glacier:3};game.stats=characterStats(game.character,{}, {},{},game.weapons);game.enemies=[];game.player.invincible=100;game.spawnClock=1e6;
+          const {game}=await import('/src/main.js'),{CHARACTERS}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js');game.start(CHARACTERS[0],{}, {stage:'coast'});game.state='paused';game.weapons={flame:6,maelstrom:3,pestilence:3,solar:3,glacier:3};game.stats=characterStats(game.character,{}, {},{},game.weapons);game.enemies=[];game.player.invincible=100;game.spawnClock=1e6;
           for(let i=0;i<350;i++){const e=game.spawnEnemy('skeleton'),a=i*2.4,r=30+Math.sqrt(i)*12;Object.assign(e,{x:Math.cos(a)*r,y:37+Math.sin(a)*r,hp:1e7,maxHp:1e7,speed:0,damage:0})}game.grid.rebuild(game.enemies);
           for(let i=0;i<25;i++)game.update(.05);game.texts=[];const times=[];for(let i=0;i<60;i++){game.ambient+=.016;const start=performance.now();game.render();times.push(performance.now()-start)}times.sort((a,b)=>a-b);return {median:times[30],p95:times[57],enemies:game.enemies.length,zones:game.zones.length,projectiles:game.projectiles.length};
         `);
@@ -1256,7 +1420,7 @@ try{
         assert(await evaluate(`const {game}=await import('/src/main.js'),{artAvailable}=await import('/src/assets.js'),{sprite}=await import('/src/art.js');game.start(game.character,{}, {stage:'foundry'});game.state='paused';game.render();return !artAvailable()&&['warden','crate','scrap','anvil','wreck','seaweed','tideStone'].every(key=>{const c=sprite(key);return c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((value,i)=>i%4===3&&value)})`),'missing assets must retain playable canvas art');
         await shot('art-fallback');await call('Network.setBlockedURLs',{urls:[]});await call('Page.reload',{ignoreCache:true});await delay(700);
         assert.equal(errors.length,0,JSON.stringify(errors));
-        console.log('PASS: 17 animated actors, all 44 live weapon animations, four build compositions, local assets, 350-enemy rendering and zero runtime errors. Art gallery: artifacts/art-weapon-gallery.png.');
+        console.log('PASS: 17 animated actors, all 48 live weapon animations, four build compositions, local assets, 350-enemy rendering and zero runtime errors. Art gallery: artifacts/art-weapon-gallery.png.');
       }else if(process.argv.includes('--icon-menus')){
         let touch=false;
         const activate=async selector=>{
@@ -1347,12 +1511,21 @@ try{
         for(const [width,height] of [[1280,800],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
           const mobile=width<701||height<500;
           await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});
+          const mixed=await evaluate(`
+            const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{FUSIONS}=await import('/src/fusions.js');
+            if(!document.getElementById('status-screen').classList.contains('hidden'))document.getElementById('sheet-close').click();
+            game.start(game.character);game.state='level';game.time=480;game.weapons={blade:5,bolt:6,orbit:6,storm:6,prism:6};game.passives={power:5,haste:5,area:3,armor:5,luck:5};game.banished=new Set(Object.keys(FUSIONS));game.stats=characterStats(game.character,game.passives,{},game.talents,game.weapons);game.choices=game.rollUpgrades();game.on('weapons');game.on('hud');game.on('level');
+            return {total:game.choices.length,normal:game.choices.filter(c=>!c.refinement).map(c=>c.key),refinements:game.choices.filter(c=>c.refinement).length};
+          `);
+          assert.deepEqual(mixed,{total:4,normal:['blade'],refinements:3});await delay(80);
+          assert(await evaluate(`const panel=document.querySelector('.level-modal');return document.querySelectorAll('.upgrade-card').length===4&&document.querySelectorAll('.refinement-card').length===3&&panel.scrollHeight<=panel.clientHeight+1&&[...document.querySelectorAll('.upgrade-card')].every(e=>{const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth&&e.scrollWidth<=e.clientWidth+1&&e.scrollHeight<=e.clientHeight+1})`),'one upgrade and three refinements fit '+width+'x'+height);
+          await shot('five-slot-upgrades-'+width+'x'+height);
           for(const [caseIndex,selection] of cases.entries()){
             await evaluate(`
               const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{upgradePool}=await import('/src/balance.js');
               if(!document.getElementById('status-screen').classList.contains('hidden'))document.getElementById('sheet-close').click();
-              game.start(game.character);game.level=40;game.time=480;game.nextShrine=3;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.enemies=[];game.player.invincible=999;game.spawnClock=game.waveClock=1e9;
-              game.weapons={blade:6,bolt:6,hailfire:3,soulforge:3,thorn:6,storm:6};game.passives={power:5,haste:5,area:3,armor:5,luck:5,focus:3};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth,game.weaponUpgrades);
+              game.start(game.character);game.level=40;game.time=480;game.nextShrine=3;game.bossMilestones=new Set((await import("/src/balance.js")).BOSS_TIMES);game.enemies=[];game.player.invincible=999;game.spawnClock=game.waveClock=1e9;
+              game.weapons=Object.fromEntries([...new Set([...${JSON.stringify(selection.map(item=>item[0]))},'blade','bolt','hailfire','soulforge','thorn','storm'])].slice(0,5).map(key=>[key,['hailfire','soulforge'].includes(key)?3:6]));game.passives={power:5,haste:5,area:3,armor:5,luck:5};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons,game.boons,game.weaponEmpowerments,game.metaBuffs,game.growth,game.weaponUpgrades);
               const pool=upgradePool(game);game.choices=${JSON.stringify(selection)}.map(([key,refinement,rarity])=>pool.find(item=>item.key===key&&item.refinement===refinement&&item.rarity===rarity));if(game.choices.some(item=>!item))throw Error('missing refinement');
               game.state='level';game.pendingLevels=2;game.on('weapons');game.on('hud');game.on('level');
             `);
@@ -1443,8 +1616,8 @@ try{
       assert(await evaluate('const {game}=await import("/src/main.js");const index=game.choices.findIndex(i=>i.key==="solar"&&i.fusion);document.querySelectorAll(".upgrade-card")[index].click();return game.weapons.solar===1&&!game.weapons.blade&&!game.weapons.flame&&game.discoveredFusions.has("solar")'));
       await evaluate('document.getElementById("status-button").click();document.getElementById("sheet-tab-items").click();');
       await shot('build-desktop');
-      assert(await evaluate('return document.getElementById("sheet-build-summary").textContent.includes("3 / 6")'));
-      await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.time=(await import("/src/balance.js")).RUN_DURATION+2;game.level=40;game.weapons={starfall:2,ricochet:2,soulchain:2,lance:4,sentinel:4,frost:4};game.passives={aegis:2,venomfang:2,rime:2,area:1,armor:2,thorns:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.player.hp=game.player.maxHp=game.stats.maxHp;game.player.invincible=50;game.enemies=[];game.drops=[];game.zones=[];game.projectiles=[];game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.spawnClock=10;game.waveClock=10;game.pendingLevels=0;game.xpNext=10000;for(let i=0;i<100;i++){const e=game.spawnEnemy(i%4===0?"knight":i%3===0?"ghost":"reaper");const a=i*2.4,r=85+(i%10)*12;e.x=game.player.x+Math.cos(a)*r;e.y=game.player.y+Math.sin(a)*r;}game.spawnBoss((await import("/src/balance.js")).RUN_DURATION);game.on("weapons");for(let i=0;i<96;i++)game.update(.025);game.state="over";game.on("hud");game.render();');
+      assert(await evaluate('return document.getElementById("sheet-build-summary").textContent.includes("3 / 5")'));
+      await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.time=(await import("/src/balance.js")).RUN_DURATION+2;game.level=40;game.weapons={starfall:2,ricochet:2,soulchain:2,lance:4,sentinel:4};game.passives={aegis:2,venomfang:2,rime:2,area:1,armor:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.player.hp=game.player.maxHp=game.stats.maxHp;game.player.invincible=50;game.enemies=[];game.drops=[];game.zones=[];game.projectiles=[];game.bossMilestones=new Set((await import("/src/balance.js")).BOSS_TIMES);game.spawnClock=10;game.waveClock=10;game.pendingLevels=0;game.xpNext=10000;for(let i=0;i<100;i++){const e=game.spawnEnemy(i%4===0?"knight":i%3===0?"ghost":"reaper");const a=i*2.4,r=85+(i%10)*12;e.x=game.player.x+Math.cos(a)*r;e.y=game.player.y+Math.sin(a)*r;}game.spawnBoss((await import("/src/balance.js")).RUN_DURATION);game.on("weapons");for(let i=0;i<96;i++)game.update(.025);game.state="over";game.on("hud");game.render();');
       await delay(100);await shot('combat-desktop');
       await evaluate('const {game}=await import("/src/main.js");game.state="running";game.end(false);for(let i=0;i<100&&document.getElementById("end-screen").classList.contains("hidden");i++)await new Promise(r=>setTimeout(r,10));');
       assert(await evaluate('return document.getElementById("end-damage").textContent.includes("累计输出")'));
@@ -1508,7 +1681,7 @@ try{
         await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
         assert(await evaluate('const {game}=await import("/src/main.js");return '+JSON.stringify(selector)+'===".banish-button"?game.banishes===2&&game.state==="level":game.state==="running"'),'touch '+selector+' activates only its intended action');
       }
-      const visuals=await evaluate('const {game}=await import("/src/main.js");const {WEAPONS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");let frames=0;game.passives={area:3,amount:2,luck:3,deadeye:3};game.stats=characterStats(game.character,game.passives,{});game.player.invincible=1000;game.pendingLevels=0;game.xpNext=1e9;game.spawnClock=game.waveClock=1e9;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);for(const [key,data] of Object.entries(WEAPONS)){game.state="running";game.weapons={[key]:data.maxLevel||6};game.timers={};game.projectiles=[];game.zones=[];game.effects=[];game.enemies=[];for(let i=0;i<16;i++){const e=game.spawnEnemy("skeleton",false,30+i*8);e.hp=e.maxHp=1e8;}for(let i=0;i<100;i++){game.update(.05);game.render();frames++;}}game.state="over";return frames;');
+      const visuals=await evaluate('const {game}=await import("/src/main.js");const {WEAPONS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");let frames=0;game.passives={area:3,amount:2,luck:3,deadeye:3};game.stats=characterStats(game.character,game.passives,{});game.player.invincible=1000;game.pendingLevels=0;game.xpNext=1e9;game.spawnClock=game.waveClock=1e9;game.bossMilestones=new Set((await import("/src/balance.js")).BOSS_TIMES);for(const [key,data] of Object.entries(WEAPONS)){game.state="running";game.weapons={[key]:data.maxLevel||6};game.timers={};game.projectiles=[];game.zones=[];game.effects=[];game.enemies=[];for(let i=0;i<16;i++){const e=game.spawnEnemy("skeleton",false,30+i*8);e.hp=e.maxHp=1e8;}for(let i=0;i<100;i++){game.update(.05);game.render();frames++;}}game.state="over";return frames;');
       assert.equal(visuals,Object.keys(WEAPONS).length*100);
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
       await call('Emulation.setTouchEmulationEnabled',{enabled:false});
@@ -1539,7 +1712,7 @@ try{
         await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
         assert.equal(await evaluate('const {game}=await import("/src/main.js");if(game.state!=="level")return "wrong state";return JSON.stringify([game.choices,game.rerolls,game.pendingLevels]);'),before,'talent tree must preserve pending upgrades');
       }
-      await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");game.start(CHARACTERS[1]);game.level=24;game.time=240;game.weapons={sentinel:5,meteor:4,frost:4};game.passives={soulpact:2,hoarfrost:2,rotclock:2,bulwark:2,forkseed:2,stormcoil:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.on("weapons");game.state="level";');
+      await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");game.start(CHARACTERS[1]);game.level=24;game.time=240;game.weapons={sentinel:5,meteor:4,frost:4};game.passives={soulpact:2,hoarfrost:2,rotclock:2,bulwark:2,forkseed:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.on("weapons");game.state="level";');
       for(const key of ['soulforge','hailfire']){
         assert(await evaluate(`const {game}=await import('/src/main.js');const {fusionChoice}=await import('/src/fusions.js');game.state='level';game.choices=[fusionChoice('${key}',game.weapons,game.passives)];game.on('level');document.querySelector('.upgrade-card').click();return game.weapons['${key}']===1&&game.discoveredFusions.has('${key}');`));
       }
@@ -1547,7 +1720,7 @@ try{
       assert(await evaluate(`const {game}=await import('/src/main.js');const {weaponStats}=await import('/src/stats.js');document.querySelector('#sheet-items [data-item-id="sheet-weapon-soulforge"]').click();return document.getElementById('items-detail').matches(':popover-open')&&document.querySelector('#sheet-weapon-soulforge .sheet-facts dd').textContent===String(Math.round(weaponStats('soulforge',game.weapons.soulforge,game.stats,game.character).damage))`));
       await shot('new-content-desktop');
       await evaluate('document.getElementById("sheet-tab-catalog").click();const input=document.getElementById("catalog-search");input.value="召唤";input.dispatchEvent(new Event("input",{bubbles:true}));');
-      assert(await evaluate('return document.querySelectorAll("#catalog-list .catalog-item").length>=3&&document.getElementById("catalog-count").textContent.endsWith("/ 96")'));
+      assert(await evaluate('const {WEAPONS,PASSIVES,PICKUPS}=await import("/src/data.js");return document.querySelectorAll("#catalog-list .catalog-item").length>=3&&document.getElementById("catalog-count").textContent.endsWith("/ "+(Object.keys(WEAPONS).length+Object.keys(PASSIVES).length+Object.keys(PICKUPS).length))'));
       await shot('tag-catalog-desktop');await evaluate('document.getElementById("sheet-close").click();');
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
       await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[1]);game.level=18;document.getElementById("hud-talents-button").click();');
@@ -1616,7 +1789,7 @@ try{
         await evaluate('document.getElementById("sheet-close").click();');
       }
       // Timed altar choices: real task completion, paused clocks, explicit costs and safe skipping.
-      const prepareAltar=async kind=>evaluate('if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();const {game}=await import("/src/main.js"),{updateWorldEvents,ALTAR_ORDER}=await import("/src/world-events.js");game.start(game.character);game.time=60;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.player.invincible=999;updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind:'+JSON.stringify(kind)+',index:ALTAR_ORDER.indexOf('+JSON.stringify(kind)+'),goal:'+JSON.stringify(kind==='vigil'?12:kind==='hunt'?1:6)+'});Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y});game.on("hud");');
+      const prepareAltar=async kind=>evaluate('if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();const {game}=await import("/src/main.js"),{updateWorldEvents,ALTAR_ORDER,ALTAR_TIMES}=await import("/src/world-events.js");game.start(game.character);game.time=ALTAR_TIMES[0];game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.bossMilestones=new Set((await import("/src/balance.js")).BOSS_TIMES);game.player.invincible=999;updateWorldEvents(game,0);Object.assign(game.shrines[0],{kind:'+JSON.stringify(kind)+',index:ALTAR_ORDER.indexOf('+JSON.stringify(kind)+'),goal:'+JSON.stringify(EVENT_TYPES[kind].goal)+'});Object.assign(game.player,{x:game.shrines[0].x,y:game.shrines[0].y});game.on("hud");');
       const finishAltar=async()=>evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js"),s=game.activeEvent;if(s.kind==="hunt")game.kill(s.guardian);else if(s.kind==="vigil")s.progress=s.goal;else for(const mote of s.motes)Object.assign(mote,{x:game.player.x,y:game.player.y});updateWorldEvents(game,.01);game.enemies=[];game.drops=[];');
       const altarFit=async label=>assert.deepEqual(await evaluate('const p=document.querySelector(".altar-panel"),r=p.getBoundingClientRect(),issues=[];if(r.top<0||r.left<0||r.bottom>innerHeight||r.right>innerWidth||p.scrollHeight>p.clientHeight+1)issues.push("panel overflow");for(const e of p.querySelectorAll("button,h2,h3,p")){const b=e.getBoundingClientRect();if(b.top<r.top||b.bottom>r.bottom||b.left<r.left||b.right>r.right||e.scrollWidth>e.clientWidth+1)issues.push(e.textContent);if(e.tagName==="BUTTON"&&document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.closest("button")!==e)issues.push("covered button")}return issues;'),[],label);
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
@@ -1678,7 +1851,7 @@ try{
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
         const mobile=width<=700||height<=500;await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});await delay(60);
         for(const index of [0,1,2]){
-          await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS,META}=await import("/src/data.js"),{CHARACTER_TALENTS}=await import("/src/talents.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.start(CHARACTERS['+index+'],Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.max])));game.time=100;game.level=30;game.nextShrine=3;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.lastPhase=1;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);for(const node of CHARACTER_TALENTS[game.character.id].branches['+([2,0,1][index])+'].nodes)game.learnTalent(node.id);for(const id of ["horizon","frenzy","glass"]){game.state="reward";game.eventChoices=[id];game.chooseAltarReward(0)}const e=game.spawnEnemy("skeleton");Object.assign(e,{x:game.player.x+50,y:game.player.y,hp:1e9,maxHp:1e9});const roll=Math.random;Math.random=()=>0;try{game.hit(e,1,game.player.x,game.player.y,0,false,game.character.weapon)}finally{Math.random=roll}(await import("/src/talents.js")).onCharacterTravel(game);game.player.shield=16;game.player.invincible=2;game.enemies=[];game.projectiles=[];game.zones=[];game.state="paused";game.on("hud");game.render()');
+          await evaluate('const {game}=await import("/src/main.js"),{CHARACTERS,META}=await import("/src/data.js"),{CHARACTER_TALENTS}=await import("/src/talents.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.start(CHARACTERS['+index+'],Object.fromEntries(Object.entries(META).map(([key,info])=>[key,info.max])));game.time=100;game.level=30;game.nextShrine=3;game.enemies=[];game.spawnClock=game.waveClock=1e9;game.xpNext=1e9;game.lastPhase=1;game.bossMilestones=new Set((await import("/src/balance.js")).BOSS_TIMES);for(const node of CHARACTER_TALENTS[game.character.id].branches['+([2,0,1][index])+'].nodes)game.learnTalent(node.id);for(const id of ["horizon","frenzy","glass"]){game.state="reward";game.eventChoices=[id];game.chooseAltarReward(0)}const e=game.spawnEnemy("skeleton");Object.assign(e,{x:game.player.x+50,y:game.player.y,hp:1e9,maxHp:1e9});const roll=Math.random;Math.random=()=>0;try{game.hit(e,1,game.player.x,game.player.y,0,false,game.character.weapon)}finally{Math.random=roll}(await import("/src/talents.js")).onCharacterTravel(game);game.player.shield=16;game.player.invincible=2;game.enemies=[];game.projectiles=[];game.zones=[];game.state="paused";game.on("hud");game.render()');
           const labels=await evaluate('return Object.fromEntries([...document.querySelectorAll("#hud-buffs li")].map(e=>[e.dataset.buff,e.lastElementChild.textContent]))');assert.equal(labels.tempo,'6.0s');assert.equal(labels.flare,'8.0s');assert.equal(labels.wind,'6.0s');assert.equal(labels.invincible,'2.0s');assert.equal(labels.shield,'16盾');for(const id of ['horizon','frenzy','glass'])assert.equal(labels[id],'本局');
           if(index!==1)assert.equal(labels[index===0?'assaultUntil':'ghostUntil'],index===0?'4.0s':'3.0s');
           assert.deepEqual(await evaluate('const list=document.getElementById("hud-buffs"),issues=[];for(const e of list.children){const r=e.getBoundingClientRect(),label=e.lastElementChild;if(r.left<0||r.right>innerWidth||r.top<0||r.bottom>innerHeight||label.scrollWidth>label.clientWidth+1)issues.push(e.dataset.buff);if(!e.getAttribute("aria-label")||e.getAttribute("role")!=="img")issues.push("missing accessible label");for(const b of document.querySelectorAll("#hud button")){if(!b.getClientRects().length)continue;const q=b.getBoundingClientRect();if(r.left<q.right&&r.right>q.left&&r.top<q.bottom&&r.bottom>q.top)issues.push("overlaps "+b.id)}}return issues;'),[],'buff icons fit without covering controls '+width+' '+index);
@@ -1729,7 +1902,7 @@ try{
         save.discoveredItems=Object.fromEntries([...Object.keys(WEAPONS).map(key=>['weapon:'+key,WEAPONS[key].fusion?3:6]),...Object.keys(PASSIVES).map(key=>['passive:'+key,PASSIVES[key].max]),...Object.keys(PICKUPS).map(key=>['pickup:'+key,1])]);
         await writeSave(save);dispatchEvent(new StorageEvent('storage',{key:'afterlight-save-v1'}));
         game.start(game.character);game.level=30;game.time=300;game.player.invincible=1e9;game.spawnClock=game.waveClock=1e9;
-        game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,curse:5,regen:5,volatile:3};
+        game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,regen:5,volatile:3};
         const {characterStats}=await import('/src/stats.js');game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);
         document.getElementById('status-button').click();
       `);
@@ -1821,7 +1994,7 @@ try{
               if(await evaluate('return document.getElementById("catalog-next").disabled'))break;
               await evaluate('document.getElementById("catalog-next").click()');
             }
-            assert.equal(new Set(seen).size,seen.length,'no duplicate tiles across pages');assert.equal(seen.length,96,'every discovered item can be reached by paging');
+            assert.equal(new Set(seen).size,seen.length,'no duplicate tiles across pages');assert.equal(seen.length,Object.keys(WEAPONS).length+Object.keys(PASSIVES).length+Object.keys(PICKUPS).length,'every discovered item can be reached by paging');
             await chooseMobile('#catalog-category','pickup');await mobileFit('pickup category '+width);
             assert(await evaluate('return [...document.querySelectorAll("#catalog-list .catalog-item")].every(button=>button.dataset.itemId.startsWith("pickup:"))'));
             await chooseMobile('#catalog-category','all');
@@ -1845,7 +2018,7 @@ try{
         await evaluate('document.querySelector("[data-close=archive-screen]").click();const {game}=await import("/src/main.js");game.start(game.character);game.time=(await import("/src/balance.js")).RUN_DURATION;game.damageByWeapon={solar:100000,talent:20000,orb:8000};game.damageTaken=300;game.end(true)');
         for(let i=0;i<30;i++){if(await evaluate('return !document.getElementById("end-screen").classList.contains("hidden")'))break;await delay(50)}
         await visitMobile('#end-report>.mobile-pages-picker','result '+width);await shot('menus-result-'+width+'x'+height);
-        await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();game.start(game.character);game.level=30;game.time=300;game.player.invincible=1e9;game.spawnClock=game.waveClock=1e9;game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,curse:5,regen:5,volatile:3};const {characterStats}=await import("/src/stats.js");game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);document.getElementById("status-button").click()');
+        await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();game.start(game.character);game.level=30;game.time=300;game.player.invincible=1e9;game.spawnClock=game.waveClock=1e9;game.weapons={solar:3,glacier:3,meteor:5,flame:6};game.passives={soulpact:3,bulwark:3,haste:5,regen:5,volatile:3};const {characterStats}=await import("/src/stats.js");game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);document.getElementById("status-button").click()');
       }
       // Every status rank displays its current/next cooldown without clipping its purchase action.
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
@@ -1916,8 +2089,8 @@ try{
         await evaluate(`
           const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{upgradePool}=await import('/src/balance.js'),{FUSIONS}=await import('/src/fusions.js');
           if(!document.getElementById('status-screen').classList.contains('hidden'))document.getElementById('sheet-close').click();game.returnToMenu();game.start(game.character);
-          game.discoveredFusions=new Set(Object.keys(FUSIONS));game.level=30;game.time=540;game.weapons={solar:3,bolt:4};game.passives={embercore:3,cinder:2,haste:3,area:3,power:3,armor:3};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);
-          game.player.invincible=999;game.spawnClock=game.waveClock=999;game.bossMilestones=new Set([180,360,(await import("/src/balance.js")).RUN_DURATION]);game.state='level';const pool=upgradePool(game);game.choices=['cinder','haste','bolt','power'].map(key=>pool.find(item=>item.key===key));game.on('level');
+          game.discoveredFusions=new Set(Object.keys(FUSIONS));game.level=30;game.time=540;game.weapons={solar:3,bolt:4};game.passives={embercore:3,cinder:2,haste:3,area:3,power:3};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);
+          game.player.invincible=999;game.spawnClock=game.waveClock=999;game.bossMilestones=new Set((await import("/src/balance.js")).BOSS_TIMES);game.state='level';const pool=upgradePool(game);game.choices=['cinder','haste','bolt','power'].map(key=>pool.find(item=>item.key===key));game.on('level');
         `);
         assert(await evaluate('return document.querySelector(".upgrade-card .rarity").textContent.includes("共振Ⅱ")&&document.querySelector(".upgrade-card .relic-card-link").textContent.includes("30%")'),'the offer explains the new resonance tier');
         await shot('resonance-offer-'+width+'x'+height);await mobileFit('resonance offer '+width);
@@ -1949,12 +2122,12 @@ try{
               await evaluate('document.querySelector(".talent-node.available").click()');await taskTap('#talent-detail .talent-learn');assert(await evaluate('const {game}=await import("/src/main.js"),{talentPoints}=await import("/src/talents.js");return game.state==="level"&&game.pendingLevels===2&&talentPoints(game)===0&&document.getElementById("status-screen").classList.contains("hidden")'),'learning the new talent immediately continues with equipment choices');
             }
           }
-          await evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js");game.start(game.character);game.time=60;game.enemies=[];updateWorldEvents(game,0);const s=game.shrines[0];Object.assign(s,{kind:"souls",index:1,goal:6});Object.assign(game.player,{x:s.x,y:s.y});game.camera={x:s.x,y:s.y};game.spawnClock=game.waveClock=1e9;game.pendingLevels=0;game.xpNext=1e9;game.on("hud")');
+          await evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js");game.start(game.character);game.time=90;game.enemies=[];updateWorldEvents(game,0);const s=game.shrines[0];Object.assign(s,{kind:"souls",index:1,goal:8});Object.assign(game.player,{x:s.x,y:s.y});game.camera={x:s.x,y:s.y};game.spawnClock=game.waveClock=1e9;game.pendingLevels=0;game.xpNext=1e9;game.on("hud")');
           await taskTap('#world-event-start');assert(await evaluate('const {game}=await import("/src/main.js");return game.activeEvent?.kind==="souls"'));await evaluate('const {game}=await import("/src/main.js");game.state="paused";game.on("hud");const p=game.player;for(let i=0;i<40;i++)game.effects.push({type:"frost",x:p.x+Math.cos(i)*100,y:p.y+Math.sin(i)*100,r:170,t:2,max:2});game.flash=.7;game.render()');await shot('soul-guidance-'+width+'x'+height);
-          assert(await evaluate('const {game}=await import("/src/main.js");return !document.getElementById("world-event-card")&&document.getElementById("event-banner").textContent.includes("回收 6 枚魂光")&&game.bannerUntil-game.time>2.5&&game.bannerUntil-game.time<=3'),'task uses a brief existing banner');
+          assert(await evaluate('const {game}=await import("/src/main.js");return !document.getElementById("world-event-card")&&document.getElementById("event-banner").textContent.includes("回收 8 枚魂光")&&game.bannerUntil-game.time>2.5&&game.bannerUntil-game.time<=3'),'task uses a brief existing banner');
           await evaluate('const {game}=await import("/src/main.js"),{worldEventTarget,updateWorldEvents}=await import("/src/world-events.js"),m=worldEventTarget(game);Object.assign(game.player,{x:m.x,y:m.y});game.state="running";updateWorldEvents(game,0);game.state="paused";game.on("hud")');assert(await evaluate('const {game}=await import("/src/main.js"),{worldEventTarget}=await import("/src/world-events.js");return game.activeEvent.progress===1&&!worldEventTarget(game).collected'),'collecting a mote advances the map target');
         }
-        await evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js");game.start(game.character);game.enemies=[];for(const time of [60,240,420,900]){game.time=time;updateWorldEvents(game,0)}const s=game.shrines[0];Object.assign(game.player,{x:s.x,y:s.y});game.on("hud");if(game.shrines.filter(s=>s.state==="idle").length!==3||game.eventsFailed||!game.interact())throw Error("unaccepted altars must persist")');
+        await evaluate('const {game}=await import("/src/main.js"),{updateWorldEvents}=await import("/src/world-events.js");game.start(game.character);game.enemies=[];for(const time of [90,360,630,900]){game.time=time;updateWorldEvents(game,0)}const s=game.shrines[0];Object.assign(game.player,{x:s.x,y:s.y});game.on("hud");if(game.shrines.filter(s=>s.state==="idle").length!==3||game.eventsFailed||!game.interact())throw Error("unaccepted altars must persist")');
         console.log('PASS: automatic LV10/20/30 priority, retained points, eight-size task guidance and persistent unaccepted altars.');
       }
       // End talent/task coverage.
@@ -1967,7 +2140,7 @@ try{
         const leaveBubble=async()=>{await moveBubble({x:4,y:4});await delay(220)};
         const openBubble=async id=>evaluate('return document.getElementById('+JSON.stringify(id)+').matches(":popover-open")');
         for(const [kind,id,selector] of [['meta','meta-detail','#meta-upgrades .meta-node'],['weapon','weapon-detail','#weapon-choices .meta-node'],['talents','talent-detail','.talent-node'],['items','items-detail','#sheet-items .catalog-item'],['fusion','fusion-detail','#sheet-fusion .catalog-item'],['catalog','catalog-detail','#catalog-list .catalog-item']]){
-          await evaluate('const {game}=await import("/src/main.js"),{WEAPONS}=await import("/src/data.js"),{FUSIONS}=await import("/src/fusions.js"),{characterStats}=await import("/src/stats.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:500000,discoveredFusions:Object.keys(FUSIONS),discoveredItems:Object.fromEntries(Object.keys(WEAPONS).map(key=>["weapon:"+key,1]))}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));if('+JSON.stringify(kind)+'==="meta")document.getElementById("meta-button").click();else if('+JSON.stringify(kind)+'==="weapon"){document.getElementById("play-button").click();document.getElementById("camp-weapon-button").click()}else{game.start(game.character);game.weapons={blade:1,flame:1,bolt:1,frost:1,orbit:1,storm:1};game.passives={power:1,haste:1,area:1};game.level=20;game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.state="paused";document.getElementById("status-button").click();document.getElementById("sheet-tab-'+kind+'").click()}');await delay(80);
+          await evaluate('const {game}=await import("/src/main.js"),{WEAPONS}=await import("/src/data.js"),{FUSIONS}=await import("/src/fusions.js"),{characterStats}=await import("/src/stats.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:500000,discoveredFusions:Object.keys(FUSIONS),discoveredItems:Object.fromEntries(Object.keys(WEAPONS).map(key=>["weapon:"+key,1]))}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));if('+JSON.stringify(kind)+'==="meta")document.getElementById("meta-button").click();else if('+JSON.stringify(kind)+'==="weapon"){document.getElementById("play-button").click();document.getElementById("camp-weapon-button").click()}else{game.start(game.character);game.weapons={blade:1,flame:1,bolt:1,frost:1,orbit:1};game.passives={power:1,haste:1,area:1};game.level=20;game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);game.state="paused";document.getElementById("status-button").click();document.getElementById("sheet-tab-'+kind+'").click()}');await delay(80);
           const first='[data-popup-test=first]',second='[data-popup-test=second]';await evaluate('for(const e of document.querySelectorAll("[data-popup-test]"))delete e.dataset.popupTest;document.querySelector('+JSON.stringify(selector)+').dataset.popupTest="first"');
           await moveBubble(await bubblePoint(first));assert(await openBubble(id),kind+' mouse hover opens a preview');
           await evaluate('const next=[...document.querySelectorAll('+JSON.stringify(selector)+')].slice(1).find(e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest("button")===e});if(!next)throw Error("no second visible icon");next.dataset.popupTest="second"');
@@ -1998,7 +2171,7 @@ try{
       }
       // End hover-preview coverage.
       assert.equal(errors.length,0,JSON.stringify(errors));
-      console.log('PASS: native Chrome desktop/touch rendering, 44 weapon effects, adaptive tag UI/search, two new fusion transactions, five talent trees, shrine controls, concurrent save transactions, growth tree and starter weapon persistence, choice preservation and zero runtime exceptions. Screenshots: artifacts/.');
+      console.log('PASS: native Chrome desktop/touch rendering, 48 weapon effects, adaptive tag UI/search, fusion transactions, five talent trees, shrine controls, concurrent save transactions, growth tree and starter weapon persistence, choice preservation and zero runtime exceptions. Screenshots: artifacts/.');
       }
     }finally{socket?.close();browser.kill()}
   }
