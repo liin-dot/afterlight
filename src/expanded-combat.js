@@ -2,7 +2,7 @@ import {TAU,diamond,glow} from './art.js';
 import {WEAPONS} from './data.js';
 import {poisonEnemy,chainLightning,onWeaponCast} from './relic-combat.js';
 
-const KINDS=new Set(['crescent','thorn','bell','prism','eclipse','requiem','plague','bloodmoon','tempest','absolute','shard','meteor','mine','tether','sentinel','lance','starfall','bastion','wintermine','soulchain','ricochet','execution','supernova','stormsentry','pestilence','hailfire','soulforge']);
+const KINDS=new Set(['capacitor','arcforge','tide','maelstrom','needle','frostloom','lantern','beacon','crescent','thorn','bell','prism','eclipse','requiem','plague','bloodmoon','tempest','absolute','shard','meteor','mine','tether','sentinel','lance','starfall','bastion','wintermine','soulchain','ricochet','execution','supernova','stormsentry','pestilence','hailfire','soulforge']);
 const nearby=(game,x,y,r)=>game.grid.near(x,y,r+30).filter(e=>!e.dead&&Math.hypot(e.x-x,e.y-y)<r+e.r);
 function wave(game,kind,x,y,r,damage,freeze=0,bossFreeze=0,slowDuration=3.2) {
   const color=WEAPONS[kind].color;
@@ -48,6 +48,15 @@ export function updateExpandedWeapon(game,kind,v,dt) {
   if(!target&&!trap&&!turret){game.timers[kind]=.08;return true}
   game.timers[kind]=v.cooldown;
   const angle=target?Math.atan2(target.y-p.y,target.x-p.x):Math.atan2(p.lastY,p.lastX),before=game.projectiles.length;
+  if(kind==='capacitor'||kind==='arcforge'){
+    const used=new Set();let last=p;
+    for(let i=0;i<v.count;i++){const e=game.closest(last.x,last.y,i? v.chainRange:340,used);if(!e)break;used.add(e.id);game.effects.push({type:'lightning',x:last.x,y:last.y-8,tx:e.x,ty:e.y-8,t:.3,max:.3,seed:Math.random()*100,lvl:2});game.hit(e,v.damage,last.x,last.y,25,true,kind);last=e}
+    if(v.blastDamage&&last!==p)wave(game,kind,last.x,last.y,v.blastRadius,v.blastDamage);game.sound.play('storm');
+  }
+  if(kind==='tide'||kind==='maelstrom')for(let i=0;i<v.count;i++){const a=angle+(i-(v.count-1)/2)*.55;game.zones.push({kind:'tidalWave',source:kind,x:p.x,y:p.y,r:v.radius,vx:Math.cos(a)*100,vy:Math.sin(a)*100,t:v.duration,max:v.duration,values:v,hit:new Set()})}
+  if(['needle','frostloom','lantern','beacon'].includes(kind)){
+    for(let i=0;i<v.count;i++){const a=angle+(i-(v.count-1)/2)*.18,speed=kind==='needle'||kind==='frostloom'?290:170;game.projectiles.push({type:kind==='needle'||kind==='frostloom'?'needle':'soul',source:kind,x:p.x,y:p.y-8,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,r:4,t:2.6,damage:v.damage,pierce:v.pierce,homing:!!v.homing,slowDuration:v.slowDuration,freeze:v.freeze,bossFreeze:v.bossFreeze,blastDamage:v.blastDamage,blastRadius:v.blastRadius,hit:new Set(),trail:[]})}game.sound.play('shoot');
+  }
   if(kind==='shard'||kind==='ricochet'){
     for(let i=0;i<v.count;i++){const a=angle+(i-(v.count-1)/2)*.22;game.projectiles.push({type:'bone',source:kind,x:p.x,y:p.y-8,vx:Math.cos(a)*235,vy:Math.sin(a)*235,damage:v.damage,r:v.radius,t:4,hit:new Set(),trail:[],bounces:v.bounces,range:v.range,splitDamage:v.splitDamage})}
     game.sound.play('shoot');
@@ -176,6 +185,14 @@ export function updateExpandedProjectile(game,b,dt) {
 }
 
 export function updateExpandedZone(game,z,dt) {
+  if(z.kind==='tidalWave'){
+    z.t-=dt;if(z.t<=0)return true;z.x+=z.vx*dt;z.y+=z.vy*dt;const v=z.values;
+    for(const e of nearby(game,z.x,z.y,z.r))if(!z.hit.has(e.id)){
+      z.hit.add(e.id);e.slow=Math.max(e.slow,v.slowDuration);if(v.freeze)e.freeze=Math.max(e.freeze,e.boss?v.bossFreeze:v.freeze);
+      if(v.pull){const dx=z.x-e.x,dy=z.y-e.y,d=Math.hypot(dx,dy)||1,shift=Math.min(d,v.pull)*(e.boss?.15:1);e.x+=dx/d*shift;e.y+=dy/d*shift}
+      game.hit(e,v.damage,z.x-z.vx,z.y-z.vy,v.pull?0:90,true,z.source);
+    }return true;
+  }
   if(!['poison','echoWave','meteorStrike','mine','turret','aftermath','relicFire','lanceEcho'].includes(z.kind))return false;
   z.t-=dt;
   if(z.kind==='meteorStrike'){if(z.t<=0)detonate(game,z);return true}
@@ -229,6 +246,7 @@ export function updateExpandedZone(game,z,dt) {
 }
 
 export function drawExpandedProjectile(g,b,ox,oy,t) {
+  if(b.type==='needle'){const x=b.x+ox,y=b.y+oy,a=Math.atan2(b.vy,b.vx);g.strokeStyle='#c9ebf4';g.lineWidth=2;g.beginPath();g.moveTo(x-Math.cos(a)*9,y-Math.sin(a)*9);g.lineTo(x+Math.cos(a)*5,y+Math.sin(a)*5);g.stroke();diamond(g,x,y,3,'#8bc9de');return true}
   if(!['scythe','venom','refraction','soul','bone'].includes(b.type))return false;
   const x=Math.round(b.x+ox),y=Math.round(b.y+oy),color=WEAPONS[b.source]?.color||'#d7c5e8';
   if(b.type==='bone'){
@@ -248,6 +266,7 @@ export function drawExpandedProjectile(g,b,ox,oy,t) {
 }
 
 export function drawExpandedZone(g,z,ox,oy,t) {
+  if(z.kind==='tidalWave'){const x=z.x+ox,y=z.y+oy;g.strokeStyle=WEAPONS[z.source].color;g.lineWidth=2;g.beginPath();g.ellipse(x,y,z.r,z.r*.65,0,0,TAU);g.stroke();g.fillStyle=WEAPONS[z.source].color+'1c';g.fill();for(let i=0;i<6;i++){const a=t*3+i*TAU/6;diamond(g,x+Math.cos(a)*z.r,y+Math.sin(a)*z.r*.65,3,'#d0ece3')}return true}
   if(!['poison','echoWave','meteorStrike','mine','turret','aftermath','relicFire','lanceEcho'].includes(z.kind))return false;
   if(z.kind==='lanceEcho')return true;
   const x=z.x+ox,y=z.y+oy,color=WEAPONS[z.source]?.color||'#e6a875';

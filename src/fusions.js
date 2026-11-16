@@ -6,6 +6,10 @@ export const FUSION_TIME = 180;
 const weapon=(id,required=4)=>({id,type:'weapon',required});
 const relic=id=>({id,type:'passive',required:2});
 export const FUSIONS = {
+  arcforge:{id:'arcforge',ingredients:[weapon('capacitor'),weapon('sentinel')],motto:'以雷为薪，以心为炉。',effect:'跳跃电弧 + 连锁末端雷爆'},
+  maelstrom:{id:'maelstrom',ingredients:[weapon('tide'),weapon('tether')],motto:'所有归途，终将汇入潮眼。',effect:'移动潮眼 + 牵引与冻结'},
+  frostloom:{id:'frostloom',ingredients:[weapon('needle'),weapon('frost')],motto:'万针织雪，长夜无声。',effect:'追踪穿透冰针 + 首击碎冰'},
+  beacon:{id:'beacon',ingredients:[weapon('lantern'),weapon('bell')],motto:'彼岸不是终点，是千万盏归灯。',effect:'追踪魂灯群 + 首击范围共鸣'},
   hailfire:{id:'hailfire',ingredients:[weapon('meteor'),weapon('frost')],motto:'群星披雪，落地成灰。',effect:'冻结陨星 + 持续灼烧与减速寒域'},
   soulforge:{id:'soulforge',ingredients:[weapon('sentinel',5),relic('soulpact')],motto:'一座空龛，住满不愿远去的星。',effect:'穿透追魂齐射 + 灵龛消散震波'},
   solar:{id:'solar',ingredients:[weapon('blade'),weapon('flame')],motto:'刃为骨，火为魂。',effect:'360° 日轮斩 + 持续灼烧火环'},

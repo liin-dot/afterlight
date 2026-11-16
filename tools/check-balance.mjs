@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {Game} from '../src/game.js';
+import {STAGES,updateExpedition} from '../src/expeditions.js';
 import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,ENEMIES,META,META_TREES,metaState,metaCost,STARTING_WEAPONS,startingLoadout,normalizeItemDiscoveries,readSave,writeSave,refreshSave} from '../src/data.js';
 import {FUSIONS,fusionState,maxWeaponLevel} from '../src/fusions.js';
 import {characterStats,weaponStats,refinementValue} from '../src/stats.js';
@@ -125,7 +126,7 @@ try{
     game.start(character);assert.deepEqual(game.weapons,{[character.weapon]:1});assert.deepEqual(game.passives,{});
   }
   assert.deepEqual(startingLoadout(CHARACTERS[0],{selectedWeapon:'solar',weaponUnlocks:['solar']}).weapons,{blade:1});
-  console.log('PASS: three ordered permanent trees, locked/stale purchases, old research refunds, six starter unlocks and 18 character/weapon combinations.');
+  console.log('PASS: three ordered permanent trees, locked/stale purchases, old research refunds, ten starter unlocks and 50 character/weapon combinations.');
   {
     const expected={tempo:[20,15,10],flare:[24,12],conquest:[18],wind:[20,15,10],chill:[4,2],omen:[6],blood:[6,4.5,3],ward:[20,10]},roll=Math.random;Math.random=()=>0;
     try{
@@ -180,6 +181,8 @@ try{
         assert(compatibleWeapons('everseed',game.weapons,game.passives,game.talents,character.id).length);
         const base=game.stats.damageMultiplier;
         if(character.id==='warden')for(let i=0;i<5;i++){game.time=i*.4;game.hit(e,1,0,37,0,false,'blade')}
+        else if(character.id==='smith')for(let i=0;i<6;i++){game.time=i*.3;game.hit(e,1,0,37,0,false,'capacitor')}
+        else if(character.id==='mariner')updateCharacterTalents(game,1,90);
         else{
           if(character.id==='witch')updateCharacterTalents(game,.6,0);
           else{game.characterState.charge=80;onCharacterCast(game,'bolt')}
@@ -205,7 +208,7 @@ try{
       }
     }finally{Math.random=roll}
     assert.equal(PASSIVES.everseed.rarity,'rare');assert.equal(relicValues('everseed',1).chance,.03);assert.equal(relicValues('everseed',3).chance,.06);assert(itemTags('everseed').includes('growth'));
-    console.log('PASS: three real talent attack paths, rare growth chance without cooldowns, all three attributes, stat rebuild persistence, unlimited stacks and run reset.');
+    console.log('PASS: five real talent attack paths, rare growth chance without cooldowns, all three attributes, stat rebuild persistence, unlimited stacks and run reset.');
   }
   const stats=characterStats(CHARACTERS[0]);
   // Exercise the actual first swing, before upgrades, on both fresh and fully upgraded saves.
@@ -219,7 +222,7 @@ try{
     opening.updateWeapons(blade.cooldown+.01);assert(first.dead,'the second ordinary slash must finish the starting skeleton');
     for(let level=2;level<=5;level++){const previous=weaponStats('blade',level-1,opening.stats,opening.character),next=weaponStats('blade',level,opening.stats,opening.character);assert(next.damage>previous.damage&&next.damage<=previous.damage*1.4,'ordinary blade upgrades must not double damage')}
   }
-  for(const power of [0,5])for(const character of CHARACTERS.slice(1)){
+  for(const power of [0,5])for(const character of CHARACTERS.slice(1,3)){
     const opening=start(character);opening.start(character,{power});opening.stats.criticalChance=0;
     const first=opening.enemies[0];opening.enemies=[first];first.x=opening.player.x+43;first.y=opening.player.y;opening.grid.rebuild(opening.enemies);
     const values=weaponStats(character.weapon,1,opening.stats,character);
@@ -257,7 +260,7 @@ try{
   for(let i=0;i<90;i++){companion.time+=.05;updateCharacterTalents(companion,.05,0);companion.updateProjectiles(.05)}
   assert.equal(companion.characterState.procs,4,'the base companion fires four volleys in 4.5 seconds');
   assert(distant.maxHp-distant.hp>=33,'distant companion projectiles must actually connect');
-  assert.equal(Object.keys(WEAPONS).length,36);assert.equal(Object.keys(PASSIVES).length,39);assert.equal(Object.keys(PICKUPS).length,7);
+  assert.equal(Object.keys(WEAPONS).length,44);assert.equal(Object.keys(PASSIVES).length,45);assert.equal(Object.keys(PICKUPS).length,7);
   // Use one real close-range volley: checking a single arrow misses the level-two burst regression.
   for(const power of [0,5])for(const [time,level] of [[20,2],[40,3],[60,4],[90,5]])for(const kind of ['skeleton','bat']){
     const volley=start(CHARACTERS[2]);volley.start(CHARACTERS[2],{power});volley.enemies=[];volley.time=time-10;
@@ -386,7 +389,7 @@ try{
       assert(!upgradePool(fight).some(item=>item.key===key&&item.refinement==='anomaly'));
     }}finally{Math.random=oldRandom}
     assert.deepEqual(Object.values(REFINEMENT_RARITIES).map(tier=>tier.weight),[60,28,10,2]);
-    console.log('PASS: all 36 weapons refine with additive damage and real cadence; four rarity tiers, +4 shot cap, full-loadout growth, scoped effects, status triggers, rebuilds, banishment and reset.');
+    console.log('PASS: all 44 weapons refine with additive damage and real cadence; four rarity tiers, +4 shot cap, full-loadout growth, scoped effects, status triggers, rebuilds, banishment and reset.');
   }
   assert(compatibleWeapons('rime',{bolt:1},{frostbrand:1}).includes('bolt'));
   assert(compatibleWeapons('spore',{blade:1},{venomfang:1}).includes('blade'));
@@ -803,7 +806,58 @@ try{
     }
     console.log('PASS: normal and stacked population/elite/boss contracts retain 8x elite XP and one chest per completed boss wave, with per-boss magnets and no duplicate rewards.');
   }
-  console.log('PASS: 36 weapons / 72 live attacks, 20 fusions, 27 innate-driven talent nodes, three timed shrines, twelve altar bargains, boss magnets, lamp/wick gates, star XP collection, wind pursuit, tag weights and growth parity.');
+  {
+    const expedition=(stage='foundry',character=CHARACTERS[3])=>{const g=start(character);g.start(character,{}, {stage});g.enemies=[];g.stats.criticalChance=0;g.player.invincible=0;return g};
+    assert.equal(expedition('__proto__').stage,'graveyard');
+    for(const stage of Object.keys(STAGES)){
+      const g=expedition(stage);for(let time=0;time<=720;time+=60){const p=pressureAt(time,0,{},stage);assert(Object.entries(p.roster).every(([key,weight])=>ENEMIES[key]&&weight>0));assert(Number.isFinite(p.hp))}
+      g.time=30;updateExpedition(g);assert.equal(g.hazards.length,stage==='graveyard'?0:stage==='foundry'?3:1);
+      const first=g.hazards.length;updateExpedition(g);assert.equal(g.hazards.length,first,'hazards obey their schedule');
+      g.hazards=[];g.time=100;g.activeEvent={};updateExpedition(g);assert.equal(g.hazards.length,0,'no environment hazard during an altar challenge');g.activeEvent=null;
+      g.boons=['glass'];equip(g,{},{});
+      for(const [i,milestone] of [180,360,600].entries()){
+        g.time=milestone;g.spawnBoss(milestone);const bosses=g.enemies.filter(e=>e.boss&&!e.dead);assert.equal(bosses.length,2);assert(bosses.every(e=>e.name===STAGES[stage].bosses[i]));
+        for(const boss of bosses){boss.attack=0;g.updateEnemy(boss,.05)}
+        if(stage==='coast')assert(g.hazards.some(h=>h.type==='tide'),'coast boss uses its own attack');
+        if(stage==='foundry')assert(g.hazards.some(h=>h.type==='blast'),'foundry boss uses its own attack');
+        const before=g.drops.filter(d=>d.type==='chest').length;g.kill(bosses[0]);assert.equal(g.drops.filter(d=>d.type==='chest').length,before);g.kill(bosses[1]);assert.equal(g.drops.filter(d=>d.type==='chest').length,before+1);
+      }
+      assert(g.finalDefeated);g.end(true);assert.equal(g.result.stage,stage);assert.equal(g.reward-g.earnedEmbers,STAGES[stage].reward);
+    }
+    for(const [x,y,hit] of [[0,37,false],[30,37,false],[32,37,true],[90,37,true],[90,65,false],[270,37,false],[264,37,true]]){
+      const g=expedition('coast');g.player.x=x;g.player.y=y;const hp=g.player.hp;g.hazards=[{type:'tide',x:0,y:37,gap:0,r:260,t:1,max:1,damage:20}];g.updateHazards(.99);assert.equal(g.player.hp,hp,'warning does no damage');g.updateHazards(.02);assert.equal(g.player.hp<hp,hit,'tide collision '+x+','+y);assert.equal(g.hazards.length,0);
+    }
+    const guard=expedition(),iron=guard.spawnEnemy('bulwark');Object.assign(iron,{x:50,y:37,hp:1000,maxHp:1000,speed:0,guardAngle:Math.PI});guard.hit(iron,100,0,37,0,false);assert.equal(iron.hp,945);guard.hit(iron,100,100,37,0,false);assert.equal(iron.hp,845,'rear damage bypasses shield');guard.hit(iron,100,0,37,0,false,null,true);assert.equal(iron.hp,745,'status damage bypasses shield');guard.player.x=100;guard.updateEnemy(iron,.1);assert(Math.abs(iron.guardAngle-Math.PI)<.1,'guard cannot turn instantly');
+    const summon=expedition(),priest=summon.spawnEnemy('oracle');Object.assign(priest,{x:100,y:37,attack:0});summon.updateEnemy(priest,.05);const children=summon.enemies.filter(e=>e.summoned);assert.equal(children.length,2);const gold=summon.gold;for(const child of children)summon.kill(child);assert.equal(summon.gold,gold);assert.equal(summon.drops.length,0,'summons cannot farm supplies or zero-value XP');
+    for(const kind of ['siren','cinderling']){const g=expedition(),e=g.spawnEnemy(kind);Object.assign(e,{x:100,y:37,attack:0});g.updateEnemy(e,.05);assert(g.projectiles.some(b=>b.enemy&&b.damage>0),kind+' really shoots')}
+    const fuse=expedition(),bomber=fuse.spawnEnemy('bomber');Object.assign(bomber,{x:45,y:37,speed:0});fuse.updateEnemy(bomber,.05);assert(bomber.fuse>1);const before=fuse.player.hp;fuse.updateEnemy(bomber,1.4);assert(bomber.dead&&fuse.player.hp<before,'bomber waits then explodes');
+    const frozenBomb=expedition(),held=frozenBomb.spawnEnemy('bomber');Object.assign(held,{x:45,y:37,speed:0});frozenBomb.updateEnemy(held,.05);held.freeze=3;held.x=60;frozenBomb.updateEnemy(held,1);frozenBomb.updateHazards(1);assert.equal(frozenBomb.hazards[0].x,60);assert.equal(frozenBomb.hazards[0].t,1.35,'freeze retains the real fuse warning');frozenBomb.kill(held);frozenBomb.updateHazards(.01);assert.equal(frozenBomb.hazards.length,0,'killing the bomber cancels the warning');
+    const rush=expedition('coast'),leech=rush.spawnEnemy('leech');Object.assign(leech,{x:100,y:37,speed:0,attack:0});rush.updateEnemy(leech,.05);assert(leech.lungeWindup>0);rush.updateEnemy(leech,1.01);rush.updateEnemy(leech,.1);assert(leech.x<100,'leech lunges after its warning');
+    for(const character of CHARACTERS.slice(3))for(const branch of CHARACTER_TALENTS[character.id].branches){
+      const g=expedition('graveyard',character);g.level=30;equip(g,{[character.weapon]:1,bolt:1},{armor:3});g.player.hp=20;g.player.shield=0;const victims=Array.from({length:7},(_,i)=>target(g,32+i*5,37,1e7));g.grid.rebuild(g.enemies);
+      const charge=()=>{g.time+=4;if(character.id==='smith')for(let i=0;i<8;i++){g.time+=.3;g.hit(victims[0],1,0,37,0,false,'capacitor')}else updateCharacterTalents(g,1,90)};
+      charge();assert(g.characterState.procs>0&&g.damageByWeapon.talent>0,'unlearned innate deals damage');
+      for(const node of branch.nodes){assert(g.learnTalent(node.id));charge();assert(g.characterState.procs>1)}
+      if(branch===CHARACTER_TALENTS.smith.branches[0]){assert(victims.filter(e=>e.markUntil>g.time).length===6);assert(characterTalentSummary(g).includes('6 层'))}
+      if(branch===CHARACTER_TALENTS.smith.branches[1]){assert.equal(g.player.shield,34);assert(g.player.hp>20);assert(g.damageByWeapon.talent>0)}
+      if(branch===CHARACTER_TALENTS.mariner.branches[0])assert(victims.every(e=>e.freeze>=1));
+      if(branch===CHARACTER_TALENTS.mariner.branches[1]){assert.equal(g.player.shield,18);assert(g.player.hp>20);assert(victims.every(e=>e.markUntil>g.time))}
+      if(branch.nodes[0].id.includes('_guard'))assert(compatibleWeapons('bulwark',g.weapons,{},g.talents,g.character.id).length,'new shield talents enable shield-break relics');
+      if(branch.nodes[0].id.includes('_dash')){g.timers={[character.weapon]:5,bolt:5};g.player.dashCooldown=0;const damage=g.damageByWeapon.talent;g.dash();assert(g.damageByWeapon.talent>damage,'dash route adds actual damage');assert(g.timers[character.weapon]<5,'dash advances matching cooldown')}
+      assert(!/undefined|NaN/.test(characterTalentSummary(g)));g.start(character);assert.equal(g.characterState.procs,0);assert.equal(g.characterState.charge,0);
+    }
+    const circuit=expedition();equip(circuit,{capacitor:1},{circuit:3});const origin=target(circuit,40,37,1e7),other=target(circuit,70,37,1e7);circuit.grid.rebuild(circuit.enemies);for(let i=0;i<6;i++)circuit.hit(origin,1,0,37,0,false,'capacitor');assert.equal(circuit.relicProcs.circuit,1);assert(other.hp<other.maxHp);assert.equal(circuit.circuitCharge,0,'secondary arcs do not charge themselves');
+    const brine=expedition('coast');equip(brine,{tide:1},{brine:3});const salted=target(brine);brine.hit(salted,1,0,37,0,false,'tide');assert(salted.slow>2&&Math.abs(salted.marks.brine.multiplier-1.16)<1e-9);
+    assert.deepEqual(compatibleWeapons('rime',{blade:1},{},{},'mariner'),['blade']);assert.deepEqual(compatibleWeapons('bulwark',{bolt:1},{emberheart:1},{},'smith'),['bolt']);
+    const wake=expedition();equip(wake,{bolt:1},{wake:3});wake.player.lastX=1;wake.player.lastY=0;wake.dash();assert.equal(wake.projectiles.length,5);assert(wake.projectiles.every(b=>b.vx<0&&b.refracted));
+    const jar=expedition();equip(jar,{}, {souljar:3});for(let i=0;i<11;i++)jar.kill(target(jar));assert.equal(jar.projectiles.length,0);const child=target(jar);child.summoned=true;jar.kill(child);assert.equal(jar.projectiles.length,0);jar.kill(target(jar));assert.equal(jar.projectiles.length,3);assert.equal(jar.souljarCharge,0);
+    const dial=expedition();equip(dial,{bolt:1,capacitor:1},{sundial:3});dial.timers={bolt:2,capacitor:5};for(let i=0;i<5;i++)onWeaponCast(dial,'bolt');assert.equal(dial.timers.capacitor,3.5);assert.equal(dial.timers.bolt,2);
+    const heart=expedition();equip(heart,{}, {emberheart:3});heart.player.hp=30;heart.player.shield=0;const elite=target(heart);elite.elite=true;heart.kill(elite);assert.equal(heart.player.hp,38);assert.equal(heart.player.shield,16);heart.kill(elite);assert.equal(heart.player.hp,38,'a corpse cannot heal twice');
+    for(const g of [circuit,jar,dial]){g.start(g.character);assert.equal(g.circuitCharge,0);assert.equal(g.souljarCharge,0);assert.equal(g.sundialCasts,0)}
+    for(const key of ['tide','maelstrom']){const g=expedition();equip(g,{[key]:maxWeaponLevel(key)});const e=target(g);g.grid.rebuild(g.enemies);g.updateWeapons(.01);const wave=g.zones[0];updateExpandedZone(g,wave,.1);const hp=e.hp;updateExpandedZone(g,wave,.1);assert(e.hp<e.maxHp&&e.hp===hp,'one moving wave cannot repeatedly damage a target')}
+    console.log('PASS: all three chapters and six new enemies, boss attacks/rewards, tide safe-gap edges, finite shield turning, summon loot, both innates, eighteen talent nodes, six relics and run resets.');
+  }
+  console.log('PASS: 44 weapons / 88 live attacks, 24 fusions, 45 innate-driven talent nodes, three timed shrines, twelve altar bargains and growth parity.');
 
   if(process.argv.includes('--pressure')){
     // Fixed upgrade budgets, no bosses or new levels: isolate horde pressure from RNG offers.
@@ -876,7 +930,7 @@ try{
 
   if(process.argv.includes('--talents')){
     // Same gear, level, movement policy and seeds within each character; healing starts with room to work.
-    const loadouts=[{blade:6,orbit:4,flame:3},{orbit:6,bolt:4,frost:3},{bolt:6,blade:4,storm:3}],reports=[];
+    const loadouts=[{blade:6,orbit:4,flame:3},{orbit:6,bolt:4,frost:3},{bolt:6,blade:4,storm:3},{capacitor:6,needle:4,storm:3},{tide:6,lantern:4,frost:3}],reports=[];
     for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const trial of [311,733,1193]){
       seed=trial;const game=start(character);game.time=300;game.level=30;game.enemies=[];game.shrines=[];game.nextShrine=ALTAR_TIMES.length;game.bossMilestones=new Set([180,360,600]);game.xpNext=1e9;game.waveClock=1e9;
       game.openChest=()=>{};equip(game,loadouts[index],{power:2,haste:2});const initialHp=game.player.hp=game.player.maxHp*.65;
@@ -901,7 +955,7 @@ try{
       const group=reports.filter(r=>r.character===character.id&&r.branch===branch.name),mean=key=>Math.round(group.reduce((sum,r)=>sum+r[key],0)/group.length);
       console.log(JSON.stringify({character:character.id,branch:branch.name,survived:group.filter(r=>r.survived).length,kills:mean('kills'),talentDamage:mean('talentDamage'),procs:mean('procs'),hp:mean('hp'),shield:mean('shield'),wells:mean('wells'),hunts:mean('hunts'),coldBursts:mean('coldBursts'),starXp:mean('starXp')}));
     }
-    console.log('PASS: 27 live talent-branch trials with fixed gear and three seeds per specialization.');
+    console.log('PASS: 45 live talent-branch trials with fixed gear and three seeds per specialization.');
   }
 
   if(process.argv.includes('--difficulty')){
@@ -910,6 +964,8 @@ try{
       [{bloodmoon:3,solar:3,bell:6},{armor:4,power:3,haste:3}],
       [{blade:1,glacier:3,tempest:3,storm:5},{frostbrand:3,stormseal:3,rime:3,haste:1}],
       [{blade:1,thunderbolt:3,soulchain:3,lance:5},{conductor:3,power:3,haste:3}],
+      [{capacitor:1,arcforge:3,frostloom:3,storm:5},{circuit:3,power:3,haste:3}],
+      [{tide:1,maelstrom:3,beacon:3,frost:5},{brine:3,power:3,haste:3}],
     ];
     for(const [weapons,passives] of loadouts)assert.equal(Object.entries(weapons).reduce((sum,[key,level])=>sum+level+(FUSIONS[key]?.ingredients.reduce((n,item)=>n+item.required,0)||0),0)+Object.values(passives).reduce((a,b)=>a+b,0),37);
     for(const bargains of [[],['horizon','frenzy','glass']])for(const [index,character] of CHARACTERS.entries())for(const branch of CHARACTER_TALENTS[character.id].branches)for(const at of [540,600])for(const moving of [false,true])for(const trial of [311,733,1193]){
@@ -955,15 +1011,16 @@ try{
     for(const report of reports)console.log(JSON.stringify(report));
   }
 
-  if(process.argv.includes('--simulate')||process.argv.includes('--progression')){
-    const reports=[],compare=process.argv.includes('--progression');
-    for(const invulnerable of compare?[true]:[false,true])for(const index of compare?[0]:[0,1,2])for(const bargains of compare?[[],['horizon','frenzy','glass']]:[[]]){
+  if(process.argv.includes('--simulate')||process.argv.includes('--progression')||process.argv.includes('--expeditions')){
+    const reports=[],compare=process.argv.includes('--progression'),chapters=process.argv.includes('--expeditions');
+    for(const stage of chapters?['foundry','coast']:['graveyard'])for(const invulnerable of compare?[true]:[false,true])for(const index of compare?[0]:chapters?[3,4]:[0,1,2,3,4])for(const bargains of compare?[[],['horizon','frenzy','glass']]:[[]]){
       seed=137+index;const game=start(CHARACTERS[index]),checkpoints=[];
       if(compare){game.start(CHARACTERS[index],fullPermanent);game.nextShrine=ALTAR_TIMES.length}
+      if(chapters)game.start(CHARACTERS[index],{}, {stage});
       let firstMaxAt=null,refinementChoices=0,chests=0,eliteKills=0,noGrowthChoices=0;
       const openChest=game.openChest.bind(game);game.openChest=value=>{chests++;return openChest(value)};
       const kill=game.kill.bind(game);game.kill=enemy=>{if(!enemy.dead&&enemy.elite&&!enemy.boss)eliteKills++;return kill(enemy)};
-      const preferred=[['blade','flame','lance','meteor','power','haste','embercore','cinder','armor','aegis'],['orbit','frost','tether','bell','rime','power','area','haste','aegis','regen'],['bolt','storm','shard','sentinel','conductor','lens','power','haste','luck','focus']][index];
+      const preferred=[['blade','flame','lance','meteor','power','haste','embercore','cinder','armor','aegis'],['orbit','frost','tether','bell','rime','power','area','haste','aegis','regen'],['bolt','storm','shard','sentinel','conductor','lens','power','haste','luck','focus'],['capacitor','sentinel','needle','frost','storm','power','haste','circuit','conductor','armor','aegis'],['tide','tether','lantern','bell','needle','frost','brine','soulpact','power','haste','armor','aegis']][index];
       let nextCheckpoint=60;
       for(let frame=0;frame<14400&&!game.ended;frame++){
         if(game.state==='running')for(const [i,id] of bargains.entries())if(game.time>=ALTAR_TIMES[i]&&!game.boons.includes(id)){game.state='reward';game.eventChoices=[id];game.chooseAltarReward(0)}
@@ -982,16 +1039,17 @@ try{
         let nearest=Infinity;const avoid=game.time<100&&index===1?75:65;
         for(const e of game.enemies){if(e.dead)continue;const x=p.x-e.x,y=p.y-e.y,d=Math.hypot(x,y)||1;nearest=Math.min(nearest,d-e.r);if(d<avoid){const weight=(avoid-d)/avoid*2.8;dx+=x/d*weight;dy+=y/d*weight}}
         for(const b of game.projectiles)if(b.enemy){const x=p.x-b.x,y=p.y-9-b.y,d=Math.hypot(x,y)||1;if(d<45&&x*b.vx+y*b.vy>0){dx+=x/d*2;dy+=y/d*2}}
-        for(const h of game.hazards){if(h.type!=='blast')continue;const x=p.x-h.x,y=p.y-h.y,d=Math.hypot(x,y)||1;if(d<h.r+30){dx+=x/d*3;dy+=y/d*3}}
+        for(const h of game.hazards){if(h.type==='tide'){if(Math.abs(p.y-h.y)<45&&Math.abs(p.x-h.gap)>25){dx+=Math.sign(h.gap-p.x)*3;dy+=Math.sign(p.y-h.y||1)*2}continue}if(h.type!=='blast')continue;const x=p.x-h.x,y=p.y-h.y,d=Math.hypot(x,y)||1;if(d<h.r+30){dx+=x/d*3;dy+=y/d*3}}
         length=Math.hypot(dx,dy)||1;game.stick={x:dx/length,y:dy/length};if(nearest<24)game.dash();game.update(.05);
         if(firstMaxAt===null&&Object.entries(game.weapons).some(([key,level])=>level===maxWeaponLevel(key)))firstMaxAt=Math.round(game.time);
         if(game.time>=nextCheckpoint){checkpoints.push({time:nextCheckpoint,level:game.level,kills:game.kills,hp:Math.round(p.hp),chests,eliteKills,refinementChoices});nextCheckpoint+=60}
       }
-      reports.push({character:game.character.id,mode:invulnerable?'collector (damage disabled)':'survival bot',bargains,firstMaxAt,chests,eliteKills,refinementChoices,noGrowthChoices,time:Math.round(game.time),won:!!game.finalDefeated,level:game.level,kills:game.kills,damageTaken:game.damageTaken,weapons:game.weapons,passives:game.passives,weaponUpgrades:game.weaponUpgrades,talents:Object.keys(game.talents),checkpoints});
+      reports.push({stage,character:game.character.id,mode:invulnerable?'collector (damage disabled)':'survival bot',bargains,firstMaxAt,chests,eliteKills,refinementChoices,noGrowthChoices,time:Math.round(game.time),won:!!game.finalDefeated,level:game.level,kills:game.kills,damageTaken:game.damageTaken,weapons:game.weapons,passives:game.passives,weaponUpgrades:game.weaponUpgrades,talents:Object.keys(game.talents),checkpoints});
+      if(chapters){assert(Number.isFinite(game.player.hp)&&Number.isFinite(game.xp));assert(chests<=3);if(invulnerable)assert(game.time>=600,'chapter collector reaches its final boss');assert.equal(game.stage,stage)}
       if(compare){assert.equal(noGrowthChoices,0);assert(chests<=3,'contracts cannot multiply boss chests');assert(game.time>=600,'the collector comparison reaches the last minute')}
       console.log(JSON.stringify(reports.at(-1)));
     }
-    mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/'+(compare?'progression':'balance')+'-report.json',JSON.stringify(reports,null,2));
+    mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/'+(chapters?'expeditions':compare?'progression':'balance')+'-report.json',JSON.stringify(reports,null,2));
   }
   if(process.argv.includes('--opening')){
     const reports=[],times=[30,60,120,180],trials=[311,733,1193];
@@ -1054,7 +1112,7 @@ try{
       for(const band of hits){assert(band.skeleton.total>=20&&band.bat.total>=20,'one-shot limits need sufficient actual contacts');assert(band.skeleton.percent<=20&&band.bat.percent<=35,character.id+' '+meta+' primary attacks must not routinely erase healthy early enemies')}
       console.log(JSON.stringify({character:character.id,meta,mode:'collector',medianLevelTimes:Object.fromEntries([2,3,4].map(level=>[level,median(group.map(r=>r.levelTimes[level]))])),medianCheckpointLevels:times.map((time,i)=>({time,level:median(group.map(r=>r.checkpoints[i].level))})),hits}));
     }
-    console.log('PASS: 18 opening collectors meet upgrade pacing, three-minute growth and noncritical primary-hit limits; fresh and fully upgraded saves.');
+    console.log('PASS: 30 opening collectors meet upgrade pacing, three-minute growth and noncritical primary-hit limits; fresh and fully upgraded saves.');
   }
   if(process.argv.includes('--browser')){
     const {spawn}=await import('node:child_process');
@@ -1088,7 +1146,92 @@ try{
       await call('Page.navigate',{url:'http://127.0.0.1:4173/'});
       for(let i=0;i<120;i++){if(await evaluate('return document.readyState!=="loading"&&!!document.getElementById("world")'))break;await delay(500)}
       assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.state'),'menu');
-      if(process.argv.includes('--refinements')){
+      if(process.argv.includes('--icon-menus')){
+        let touch=false;
+        const activate=async selector=>{
+          const point=await evaluate(`const e=document.querySelector(${JSON.stringify(selector)}),r=e.getBoundingClientRect();if(!r.width||document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')!==e)throw Error('unreachable '+${JSON.stringify(selector)});return {x:r.x+r.width/2,y:r.y+r.height/2}`);
+          if(touch){await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}
+          else for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+        };
+        const fit=async(label,selector)=>{
+          const issues=await evaluate(`const root=document.querySelector(${JSON.stringify(selector)}),issues=[];for(const e of [root,...root.querySelectorAll('*')]){if(!e.getClientRects().length||e.closest('.detail-bubble'))continue;const r=e.getBoundingClientRect();if(r.top<0||r.left<0||r.right>innerWidth+1||r.bottom>innerHeight+1)issues.push((e.id||e.className)+' bounds');if(['auto','hidden','scroll'].includes(getComputedStyle(e).overflowY)&&e.scrollHeight>e.clientHeight+2)issues.push((e.id||e.className)+' scroll');if(e.matches('.icon-choice')&&(r.width<40||r.height<44))issues.push('small '+e.textContent)}return issues`);
+          if(issues.length)await shot('icon-menu-failure');assert.deepEqual(issues,[],label);
+        };
+        await evaluate(`const {WEAPONS,PASSIVES,PICKUPS}=await import('/src/data.js'),{FUSIONS}=await import('/src/fusions.js');localStorage.setItem('afterlight-save-v1',JSON.stringify({embers:50000,discoveredFusions:Object.keys(FUSIONS),discoveredItems:Object.fromEntries([...Object.keys(WEAPONS).map(key=>['weapon:'+key,6]),...Object.keys(PASSIVES).map(key=>['passive:'+key,5]),...Object.keys(PICKUPS).map(key=>['pickup:'+key,1])])}));dispatchEvent(new StorageEvent('storage',{key:'afterlight-save-v1'}));`);
+        for(const [width,height] of [[1280,800],[1024,600],[390,844],[320,568],[568,320],[667,375],[844,390]]){
+          touch=width<=700||height<=500;await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:touch});await call('Emulation.setTouchEmulationEnabled',{enabled:touch,maxTouchPoints:1});
+          await evaluate(`const {game}=await import('/src/main.js');game.returnToMenu();document.getElementById('play-button').click()`);
+          for(const key of Object.keys(STAGES)){await activate('#stage-choices [data-choice='+key+']');assert.equal(await evaluate('return document.querySelector("#stage-choices [aria-pressed=true]").dataset.choice'),key);await fit('prepare '+width+' '+key,'#camp-prepare')}
+          await shot('icon-maps-'+width+'x'+height);await activate('#start-button');assert.equal(await evaluate('const {game}=await import("/src/main.js");game.state="paused";return game.stage'),'coast');
+          await evaluate(`const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js'),{ALTAR_BOONS}=await import('/src/content.js');game.weapons={blade:1,storm:1};game.passives={power:1,circuit:1};game.boons=[Object.keys(ALTAR_BOONS)[0]];game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons,game.boons);document.getElementById('status-button').click()`);
+          assert.equal(await evaluate('return document.querySelectorAll("select,[role=combobox]").length'),0,'the whole game contains no dropdown controls');
+          if(touch){
+            for(const key of await evaluate('return [...document.querySelector("#sheet-attributes>.mobile-picker").children].map(b=>b.dataset.choice)')){await activate('#sheet-attributes>.mobile-picker [data-choice='+key+']');await fit('attributes '+width+' '+key,'.sheet-panel')}
+            await shot('icon-attributes-'+width+'x'+height);
+          }
+          for(const [tab,selector] of [['items','.collection-category'],['catalog','#catalog-category']]){
+            await activate('#sheet-tab-'+tab);
+            for(const key of await evaluate(`return [...document.querySelector(${JSON.stringify(selector)}).children].map(b=>b.dataset.choice)`)){
+              await activate(selector+' [data-choice='+key+']');assert.equal(await evaluate(`return document.querySelector(${JSON.stringify(selector+' [aria-pressed=true]')}).dataset.choice`),key);
+              assert(await evaluate(`const {catalogItem}=await import('/src/data.js'),key=${JSON.stringify(key)},tab=${JSON.stringify(tab)},tiles=[...document.querySelectorAll(tab==='catalog'?'#catalog-list .catalog-item':'#sheet-items .catalog-item')];return tiles.length>0&&tiles.every(b=>key==='all'||(tab==='catalog'?catalogItem(b.dataset.itemId).category:document.getElementById(b.dataset.itemId).dataset.category)===key)`),'category filters actual entries '+key);
+              if(touch)await fit(tab+' '+key+' '+width,'.sheet-panel');
+            }
+            await activate(selector+' [data-choice=all]');await shot('icon-'+tab+'-'+width+'x'+height);
+            if(tab==='catalog'&&touch)for(const id of await evaluate('return [...document.querySelectorAll("#catalog-list button")].map(b=>b.dataset.itemId)')){
+              await activate('#catalog-list [data-item-id="'+id+'"]');
+              const detail=await evaluate('const b=document.getElementById("catalog-detail"),r=b.getBoundingClientRect(),c=document.getElementById("catalog-detail-body"),a=document.querySelector("#catalog-list .selected").getBoundingClientRect();return {fits:r.top>=0&&r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,scroll:c.scrollHeight-c.clientHeight,overlap:r.left<a.right&&r.right>a.left&&r.top<a.bottom&&r.bottom>a.top}');
+              if(!detail.fits||detail.scroll>1||detail.overlap)await shot('icon-menu-failure');assert(detail.fits&&detail.scroll<=1&&!detail.overlap,'catalog bubble '+width+' '+id+': '+JSON.stringify(detail));await activate('#catalog-detail-close');
+            }
+          }
+          await activate('#sheet-close');await evaluate(`const {game}=await import('/src/main.js');game.returnToMenu();document.getElementById('archive-button').click()`);await fit('guide grid '+width,'.archive-panel');await shot('icon-guide-'+width+'x'+height);
+          for(let i=0;i<17;i++){
+            const selector='.guide-grid>.mobile-picker [data-choice="'+i+'"]';await activate(selector);assert.equal(await evaluate('return document.querySelectorAll(".guide-grid article.mobile-selected").length'),1);await fit('guide detail '+width+' '+i,'.archive-panel');
+            await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});assert.equal(await evaluate('return document.activeElement.dataset.choice'),String(i),'guide returns focus');
+          }
+          await activate('#archive-screen .close-button');
+          await evaluate(`const {game}=await import('/src/main.js');game.start(game.character);game.time=600;game.damageByWeapon={blade:25000,storm:5000};game.end(true);for(let i=0;i<100&&document.getElementById('end-screen').classList.contains('hidden');i++)await new Promise(r=>setTimeout(r,10))`);
+          if(touch){for(const key of ['summary','damage']){await activate('#end-report>.mobile-picker [data-choice='+key+']');await fit('result '+width+' '+key,'.end-panel')}await shot('icon-result-'+width+'x'+height)}
+        }
+        touch=false;await call('Emulation.setTouchEmulationEnabled',{enabled:false});await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await evaluate(`const {game}=await import('/src/main.js');game.returnToMenu();document.getElementById('play-button').click();document.querySelector('#stage-choices [data-choice=graveyard]').focus()`);
+        for(const [key,code,windowsVirtualKeyCode,text] of [['ArrowRight','ArrowRight',39],['Enter','Enter',13,'\r']]){await call('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode,...(text?{text}:{})});await call('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode})}
+        assert.equal(await evaluate('return document.querySelector("#stage-choices [aria-pressed=true]").dataset.choice'),'foundry');await activate('#start-button');assert.equal(await evaluate('const {game}=await import("/src/main.js");return game.stage'),'foundry');assert.equal(errors.length,0,JSON.stringify(errors));
+        console.log('PASS: no dropdowns; seven layouts cover map icons and real departures, all equipment/catalog categories, eight attribute groups, seventeen guide entries, result tabs, touch, keyboard selection, focus restoration and zero runtime exceptions.');
+      }else if(process.argv.includes('--expansion')){
+        const activate=async selector=>{
+          const point=await evaluate('const e=document.querySelector('+JSON.stringify(selector)+'),r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
+          for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+        };
+        for(const [width,height] of [[1280,800],[1024,600],[390,844],[320,568],[568,320],[667,375],[844,390]]){
+          const mobile=width<701||height<500;await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile});await call('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:1});
+          await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("play-button").click()');await delay(100);
+          const layout=await evaluate(`const menu=document.getElementById('menu'),controls=[...document.querySelectorAll('#camp-prepare button')],top=document.getElementById('masthead').getBoundingClientRect().bottom;return {size:[menu.clientWidth,menu.scrollWidth,menu.clientHeight,menu.scrollHeight],controls:controls.filter(e=>e.getClientRects().length).map(e=>{const r=e.getBoundingClientRect();return {name:e.id||e.textContent.trim(),w:r.width,h:r.height,fits:r.top>=top&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth}}),characters:document.querySelectorAll('.character-card').length,stages:document.querySelectorAll('#stage-choices button').length};`);
+          await shot('expansion-prepare-'+width+'x'+height);assert.equal(layout.characters,5);assert.equal(layout.stages,3);assert(layout.size[1]<=layout.size[0]+1&&layout.size[3]<=layout.size[2]+1,'prepare fits '+width+'x'+height+': '+JSON.stringify(layout));assert(layout.controls.every(c=>c.w>=44&&c.h>=44&&c.fits),'accessible controls '+width+'x'+height+': '+JSON.stringify(layout));
+          await activate('#camp-weapon-button');
+          for(const key of Object.keys(STARTING_WEAPONS)){
+            await evaluate('document.querySelector("[data-starter='+key+']").click()');
+            assert.deepEqual(await evaluate('const p=document.querySelector(".weapon-panel"),b=document.getElementById("weapon-detail"),issues=[];for(const e of [p,...p.querySelectorAll(".meta-heading,#weapon-choices,#weapon-feedback"),b,...b.querySelectorAll(".detail-bubble-copy,h3,p,button")]){const r=e.getBoundingClientRect();if(!r.width)continue;if(r.left<0||r.top<0||r.right>innerWidth+1||r.bottom>innerHeight+1||e!==b&&(e.scrollWidth>e.clientWidth+1||e.scrollHeight>e.clientHeight+1))issues.push(e.id||e.className)}return issues'),[],'expanded starter menu '+key+' '+width+'x'+height);
+          }
+          await shot('expansion-starters-'+width+'x'+height);await evaluate('document.getElementById("weapon-detail-close").click();document.querySelector("#weapon-screen [data-close]").click()');
+          for(const [index,stage] of [[3,'foundry'],[4,'coast']]){
+            const selector='#characters .character-card:nth-child('+(index+1)+')';
+            if(mobile){const point=await evaluate('const r=document.querySelector('+JSON.stringify(selector)+').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})}else await activate(selector);
+            await activate('#stage-choices [data-choice="'+stage+'"]');
+            await activate('#menu-talents-button');assert.equal(await evaluate('return document.querySelectorAll("#sheet-talents .talent-node:not(.innate)").length'),9);await shot('expansion-talents-'+index+'-'+width+'x'+height);await activate('#sheet-close');
+            await activate('#start-button');
+            const live=await evaluate('const {game}=await import("/src/main.js");game.state="paused";return {character:game.character.id,stage:game.stage,weapon:Object.keys(game.weapons)[0],label:document.getElementById("stage-label").textContent}');assert.equal(live.character,CHARACTERS[index].id);assert.equal(live.stage,stage);assert.equal(live.weapon,CHARACTERS[index].weapon);
+            await evaluate(`const {game}=await import('/src/main.js'),{characterStats}=await import('/src/stats.js');game.time=180;game.enemies=[];game.effects=[];game.level=30;game.talents={};game.weapons=${JSON.stringify(stage==='foundry'?{arcforge:3,needle:6}:{maelstrom:3,beacon:3})};game.passives={area:2,haste:2};game.stats=characterStats(game.character,game.passives,{},game.talents,game.weapons);const kinds=${JSON.stringify(stage==='foundry'?['cinderling','bomber','bulwark','oracle']:['siren','leech','oracle','ghost'])};for(let i=0;i<24;i++){const a=i*Math.PI/12,e=game.spawnEnemy(kinds[i%4]);e.x=game.player.x+Math.cos(a)*(65+i%4*20);e.y=game.player.y+Math.sin(a)*(65+i%4*20);e.hp=e.maxHp=1e6;e.speed=0}game.grid.rebuild(game.enemies);game.updateWeapons(.01);for(let i=0;i<3;i++){game.updateProjectiles(.05);game.updateZones(.05)}game.nextStageHazard=0;const {updateExpedition}=await import('/src/expeditions.js');updateExpedition(game);game.on('weapons');game.on('hud');game.render();`);
+            await shot('expansion-'+stage+'-'+width+'x'+height);assert(await evaluate('const {game}=await import("/src/main.js");return !Object.values(game.stats).some(v=>typeof v==="number"&&!Number.isFinite(v))'));assert.equal(errors.length,0,JSON.stringify(errors));
+            await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("play-button").click()');
+          }
+        }
+        await call('Emulation.setTouchEmulationEnabled',{enabled:false});await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+        await evaluate('const b=document.querySelector("#stage-choices [data-choice=graveyard]");b.click();b.focus()');
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});assert.equal(await evaluate('return document.querySelector("#stage-choices [aria-pressed=true]").dataset.choice'),'foundry');
+        await activate('#start-button');assert.equal(await evaluate('const {game}=await import("/src/main.js");game.pause();return game.stage'),'foundry');await activate('#restart-button');await delay(300);assert.equal(await evaluate('const {game}=await import("/src/main.js");game.pause();return game.stage'),'foundry','restart retains chosen stage');
+        await evaluate('const {game}=await import("/src/main.js");game.returnToMenu();document.getElementById("camp-library-button").click();document.getElementById("archive-button").click()');
+        const guide=await evaluate('return document.querySelector(".guide-grid").textContent');for(const name of ['焚星熔炉','沉钟海岸','裂隙司祭','裂潮兽'])assert(guide.includes(name));await shot('expansion-field-guide');
+        assert.equal(errors.length,0,JSON.stringify(errors));console.log('PASS: expansion character/stage selection, eighteen talent entries, chapter combat and sprites in seven desktop/phone layouts, real touch and keyboard controls, restart, field guide and zero runtime exceptions.');
+      }else if(process.argv.includes('--refinements')){
         const cases=[[['blade','damage','white'],['bolt','damage','green'],['hailfire','damage','purple'],['storm','damage','gold']],[['bolt','amount','purple'],['soulforge','amount','gold'],['hailfire','anomaly','purple'],['thorn','damage','gold']],[['hailfire','control','purple'],['thorn','duration','green'],['storm','haste','gold'],['bolt','damage','gold']]];
         for(const [width,height] of [[1280,800],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
           const mobile=width<701||height<500;
@@ -1255,7 +1398,7 @@ try{
         assert(await evaluate('const {game}=await import("/src/main.js");return '+JSON.stringify(selector)+'===".banish-button"?game.banishes===2&&game.state==="level":game.state==="running"'),'touch '+selector+' activates only its intended action');
       }
       const visuals=await evaluate('const {game}=await import("/src/main.js");const {WEAPONS}=await import("/src/data.js");const {characterStats}=await import("/src/stats.js");let frames=0;game.passives={area:3,amount:2,luck:3,deadeye:3};game.stats=characterStats(game.character,game.passives,{});game.player.invincible=1000;game.pendingLevels=0;game.xpNext=1e9;game.spawnClock=game.waveClock=1e9;game.bossMilestones=new Set([180,360,600]);for(const [key,data] of Object.entries(WEAPONS)){game.state="running";game.weapons={[key]:data.maxLevel||6};game.timers={};game.projectiles=[];game.zones=[];game.effects=[];game.enemies=[];for(let i=0;i<16;i++){const e=game.spawnEnemy("skeleton",false,30+i*8);e.hp=e.maxHp=1e8;}for(let i=0;i<100;i++){game.update(.05);game.render();frames++;}}game.state="over";return frames;');
-      assert.equal(visuals,3600);
+      assert.equal(visuals,Object.keys(WEAPONS).length*100);
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
       await call('Emulation.setTouchEmulationEnabled',{enabled:false});
       for(const character of CHARACTERS){
@@ -1293,7 +1436,7 @@ try{
       assert(await evaluate(`const {game}=await import('/src/main.js');const {weaponStats}=await import('/src/stats.js');document.querySelector('#sheet-items [data-item-id="sheet-weapon-soulforge"]').click();return document.getElementById('items-detail').matches(':popover-open')&&document.querySelector('#sheet-weapon-soulforge .sheet-facts dd').textContent===String(Math.round(weaponStats('soulforge',game.weapons.soulforge,game.stats,game.character).damage))`));
       await shot('new-content-desktop');
       await evaluate('document.getElementById("sheet-tab-catalog").click();const input=document.getElementById("catalog-search");input.value="召唤";input.dispatchEvent(new Event("input",{bubbles:true}));');
-      assert(await evaluate('return document.querySelectorAll("#catalog-list .catalog-item").length>=3&&document.getElementById("catalog-count").textContent.endsWith("/ 82")'));
+      assert(await evaluate('return document.querySelectorAll("#catalog-list .catalog-item").length>=3&&document.getElementById("catalog-count").textContent.endsWith("/ 96")'));
       await shot('tag-catalog-desktop');await evaluate('document.getElementById("sheet-close").click();');
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
       await evaluate('const {game}=await import("/src/main.js");const {CHARACTERS}=await import("/src/data.js");game.start(CHARACTERS[1]);game.level=18;document.getElementById("hud-talents-button").click();');
@@ -1310,7 +1453,7 @@ try{
       assert(await evaluate('const {game}=await import("/src/main.js");const cards=[...document.querySelector("#sheet-items .collection-cards").children];return document.getElementById("sheet-items-label").textContent==="装备预览"&&cards.length===1&&cards[0].id==="sheet-weapon-"+game.character.weapon'),'camp previews only the starting equipment');
       await evaluate('document.getElementById("sheet-close").click();const {game}=await import("/src/main.js");const {characterStats}=await import("/src/stats.js");game.start(game.character,{vitality:5,power:5,regen:5,magnet:5});game.passives={regen:2};game.stats=characterStats(game.character,game.passives,game.meta,game.talents,game.weapons);document.getElementById("status-button").click();');
       assert(await evaluate('const rows=[...document.querySelectorAll(".sheet-stat")];return rows.find(e=>e.textContent.includes("持续恢复")).textContent.includes("0.44")&&rows.find(e=>e.textContent.includes("避伤恢复")).textContent.includes("0.4")&&document.getElementById("sheet-stat-grid").textContent.includes("护盾受击也会打断")'));
-      await evaluate('const picker=document.querySelector("#sheet-attributes>.mobile-picker");picker.value="stats-4";picker.dispatchEvent(new Event("change"));');
+      await evaluate('document.querySelector("#sheet-attributes>.mobile-picker [data-choice=stats-4]").click();');
       await shot('recovery-mobile');
       await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});
       await evaluate('document.getElementById("sheet-tab-attributes").click();');await shot('recovery-desktop');
@@ -1492,9 +1635,9 @@ try{
         for(const bubble of panel.querySelectorAll('.detail-bubble:popover-open')){const r=bubble.getBoundingClientRect(),copy=bubble.querySelector('.detail-bubble-copy');if(r.top<0||r.left<0||r.right>innerWidth||r.bottom>innerHeight)issues.push('bubble outside viewport');if(copy.scrollHeight>copy.clientHeight+2)issues.push('bubble content overflow')}
         return issues;
       `),[],label);
-      const chooseMobile=async(selector,value)=>evaluate(`const picker=document.querySelector(${JSON.stringify(selector)});picker.value=${JSON.stringify(value)};picker.dispatchEvent(new Event('change'));`);
+      const chooseMobile=async(selector,value)=>evaluate(`const picker=document.querySelector(${JSON.stringify(selector)});if(picker.classList.contains('hidden'))picker.parentElement.querySelector('.mobile-page-back').click();[...picker.children].find(button=>button.dataset.choice===${JSON.stringify(value)}).click();`);
       const visitMobile=async(selector,label)=>{
-        const options=await evaluate(`const picker=document.querySelector(${JSON.stringify(selector)});return picker?[...picker.options].map(option=>option.value):[];`);
+        const options=await evaluate(`const picker=document.querySelector(${JSON.stringify(selector)});return picker?[...picker.children].map(button=>button.dataset.choice):[];`);
         for(const value of options){await chooseMobile(selector,value);await mobileFit(label+' / '+value)}
       };
       for(const [width,height] of [[370,665],[320,568],[390,844],[568,320],[667,375],[844,390]]){
@@ -1538,7 +1681,7 @@ try{
             }
             const expected=tab==='items'?await evaluate(`const {game}=await import('/src/main.js');return [...Object.keys(game.weapons).map(key=>'sheet-weapon-'+key),...Object.keys(game.passives).map(key=>'sheet-passive-'+key)]`):await evaluate(`return [...document.querySelector('${selector} .collection-cards').children].map(card=>card.id)`);
             assert.deepEqual([...seen].sort(),expected.sort(),'all equipment and known recipes remain reachable');
-            if(tab==='items')assert(await evaluate('return document.getElementById("sheet-items-label").textContent==="本局装备"&&![...document.querySelector("#sheet-items .collection-category").options].some(option=>option.value==="pickup")'),'the loadout does not duplicate the permanent pickup catalog');
+            if(tab==='items')assert(await evaluate('return document.getElementById("sheet-items-label").textContent==="本局装备"&&![...document.querySelector("#sheet-items .collection-category").children].some(button=>button.dataset.choice==="pickup")'),'the loadout does not duplicate the permanent pickup catalog');
             await evaluate(`document.querySelector('${selector} .catalog-item').click()`);
             await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
             assert(await evaluate(`const {game}=await import('/src/main.js');return game.state==='status'&&!document.querySelector('${selector} .detail-bubble').matches(':popover-open')`),'Escape returns to the icon grid');
@@ -1554,8 +1697,8 @@ try{
                 const parked=await evaluate('const r=[...document.querySelectorAll("#catalog-list button")].find(b=>b.dataset.itemId==="weapon:crescent").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}');
                 await call('Input.dispatchMouseEvent',{type:'mouseMoved',...parked});
                 assert(await evaluate('return document.getElementById("catalog-detail").matches(":popover-open")'),'mouse movement opens the hovered item');
-                await evaluate('[...document.querySelectorAll("#catalog-list button")].find(b=>b.dataset.itemId==="weapon:stormsentry").click();document.getElementById("catalog-detail-close").click()');await delay(60);
-                assert(await evaluate('return document.activeElement.dataset.itemId==="weapon:stormsentry"&&!document.getElementById("catalog-detail").matches(":popover-open")'),'uncovering a stationary pointer cannot reopen another item or steal keyboard focus');
+                const sibling=ids.find(id=>id!=='weapon:crescent');await evaluate('[...document.querySelectorAll("#catalog-list button")].find(b=>b.dataset.itemId==='+JSON.stringify(sibling)+').click();document.getElementById("catalog-detail-close").click()');await delay(60);
+                assert(await evaluate('return document.activeElement.dataset.itemId==='+JSON.stringify(sibling)+'&&!document.getElementById("catalog-detail").matches(":popover-open")'),'uncovering a stationary pointer cannot reopen another item or steal keyboard focus');
                 await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:0,y:0});
               }
               await mobileFit('catalog grid '+width+' '+page);
@@ -1568,7 +1711,7 @@ try{
               if(await evaluate('return document.getElementById("catalog-next").disabled'))break;
               await evaluate('document.getElementById("catalog-next").click()');
             }
-            assert.equal(new Set(seen).size,seen.length,'no duplicate tiles across pages');assert.equal(seen.length,82,'every discovered item can be reached by paging');
+            assert.equal(new Set(seen).size,seen.length,'no duplicate tiles across pages');assert.equal(seen.length,96,'every discovered item can be reached by paging');
             await chooseMobile('#catalog-category','pickup');await mobileFit('pickup category '+width);
             assert(await evaluate('return [...document.querySelectorAll("#catalog-list .catalog-item")].every(button=>button.dataset.itemId.startsWith("pickup:"))'));
             await chooseMobile('#catalog-category','all');
@@ -1580,7 +1723,7 @@ try{
           await mobileFit(tab+' '+width+'x'+height);await shot('menus-'+tab+'-'+width+'x'+height);
         }
         await evaluate(`
-          document.getElementById('sheet-tab-items').click();const picker=document.querySelector('#sheet-items .collection-category');picker.value='weapon';picker.dispatchEvent(new Event('change'));
+          document.getElementById('sheet-tab-items').click();document.querySelector('#sheet-items .collection-category [data-choice=weapon]').click();
           document.querySelector('#sheet-items [data-item-id="sheet-weapon-solar"]').click();
           [...document.querySelectorAll('#sheet-weapon-solar .sheet-recipe-link')].find(button=>button.textContent.includes('融合图谱')).click();
         `);
@@ -1610,7 +1753,7 @@ try{
       for(const [width,height] of [[1280,900],[800,600],[390,844],[370,665],[320,568],[568,320],[667,375],[844,390]]){
         await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<=700||height<=500});await delay(60);
         await evaluate('const {game}=await import("/src/main.js");if(!document.getElementById("status-screen").classList.contains("hidden"))document.getElementById("sheet-close").click();game.returnToMenu();localStorage.setItem("afterlight-save-v1",JSON.stringify({embers:30000}));dispatchEvent(new StorageEvent("storage",{key:"afterlight-save-v1"}));document.getElementById("play-button").click();document.getElementById("camp-weapon-button").click()');
-        assert.equal(await evaluate('return document.querySelectorAll("#weapon-choices [data-starter]").length'),7);
+        assert.equal(await evaluate('return document.querySelectorAll("#weapon-choices [data-starter]").length'),Object.keys(STARTING_WEAPONS).length+1);
         for(const key of ['default',...Object.keys(STARTING_WEAPONS)]){
           await evaluate('document.querySelector("[data-starter='+key+']").click()');
           assert.deepEqual(await evaluate('const p=document.querySelector(".weapon-panel"),b=document.getElementById("weapon-detail"),issues=[];for(const e of [p,...p.querySelectorAll(".meta-heading,#weapon-choices,#weapon-feedback"),b,...b.querySelectorAll(".detail-bubble-copy,h3,p,button")]){const r=e.getBoundingClientRect();if(!r.width)continue;if(r.left<0||r.top<0||r.right>innerWidth+1||r.bottom>innerHeight+1||e!==b&&(e.scrollWidth>e.clientWidth+1||e.scrollHeight>e.clientHeight+1))issues.push(e.id||e.className)}for(const e of b.querySelectorAll("button:not(:disabled)")){const r=e.getBoundingClientRect();if(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest("button")!==e)issues.push("covered "+e.id)}return issues'),[],'starter fits '+key+' '+width+'x'+height);
@@ -1745,7 +1888,7 @@ try{
       }
       // End hover-preview coverage.
       assert.equal(errors.length,0,JSON.stringify(errors));
-      console.log('PASS: native Chrome desktop/touch rendering, 36 weapon effects, adaptive tag UI/search, two new fusion transactions, three talent trees, shrine controls, concurrent save transactions, growth tree and starter weapon persistence, choice preservation and zero runtime exceptions. Screenshots: artifacts/.');
+      console.log('PASS: native Chrome desktop/touch rendering, 44 weapon effects, adaptive tag UI/search, two new fusion transactions, five talent trees, shrine controls, concurrent save transactions, growth tree and starter weapon persistence, choice preservation and zero runtime exceptions. Screenshots: artifacts/.');
       }
     }finally{socket?.close();browser.kill()}
   }

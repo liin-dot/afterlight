@@ -43,6 +43,8 @@ export function onWeaponHit(game,e,kind,critical=false,periodic=false,damage=0) 
   const tags=WEAPON_FAMILIES[kind]||[],p=game.passives;
   if(tags.includes('fire'))e.burningUntil=Math.max(e.burningUntil||0,game.time+2);
   if(periodic)return;
+  if(tags.length&&p.brine&&tags.some(tag=>tag==='cold'||tag==='spirit')){const v=relicValues('brine',p.brine,game.stats);e.slow=Math.max(e.slow,v.duration);game.markEnemy(e,'brine',v.multiplier,v.duration);readyProc(game,'brine')}
+  if(p.circuit&&tags.includes('lightning')){game.circuitCharge=(game.circuitCharge||0)+1;const v=relicValues('circuit',p.circuit,game.stats);if(game.circuitCharge>=v.hits){game.circuitCharge=0;chainLightning(game,e,v.damage,v.count,v.range);readyProc(game,'circuit')}}
   const upgrades=game.stats.weaponUpgrades?.[kind];
   if(upgrades?.anomaly&&Math.random()<Math.min(1,upgrades.anomaly)){
     if(tags.includes('fire')){e.burn={damage:Math.max(e.burn?.damage||0,damage*.15*(1+(upgrades.affliction||0))),until:Math.max(e.burn?.until||0,game.time+2),next:e.burn?.next??game.time+.5};e.burningUntil=Math.max(e.burningUntil||0,e.burn.until)}
@@ -149,6 +151,7 @@ export function onPlayerHurt(game,shieldBroke=false){
 }
 
 export function onPlayerDash(game){
+  if(game.passives.wake){const v=relicValues('wake',game.passives.wake,game.stats),p=game.player,a=Math.atan2(-p.dashY,-p.dashX);for(let i=0;i<v.count;i++){const angle=a+(i-(v.count-1)/2)*.25;game.projectiles.push({type:'soul',x:p.x,y:p.y-8,vx:Math.cos(angle)*220,vy:Math.sin(angle)*220,r:4,t:2,pierce:v.pierce,damage:v.damage,hit:new Set(),trail:[],refracted:true})}readyProc(game,'wake')}
   const p=game.player;
   if(game.passives.dashfire){
     const v=relicValues('dashfire',game.passives.dashfire,game.stats);
@@ -165,6 +168,8 @@ export function onPlayerDash(game){
 export function onXpPickup(game,amount,starLinked=false){if(game.passives.harvest)game.harvestCharge+=amount;onCharacterXp(game,amount,starLinked)}
 
 export function onEnemyKilled(game,e) {
+  if(!e.summoned&&game.passives.souljar){const v=relicValues('souljar',game.passives.souljar,game.stats);game.souljarCharge=(game.souljarCharge||0)+1;if(game.souljarCharge>=v.kills){game.souljarCharge=0;for(let i=0;i<v.count;i++){const a=i*Math.PI*2/v.count;game.projectiles.push({type:'soul',x:e.x,y:e.y-8,vx:Math.cos(a)*180,vy:Math.sin(a)*180,r:4,t:3,pierce:2,damage:v.damage,hit:new Set(),trail:[],homing:true,refracted:true})}readyProc(game,'souljar')}}
+  if(game.player.hp>0&&(e.boss||e.elite)&&game.passives.emberheart){const v=relicValues('emberheart',game.passives.emberheart,game.stats);game.player.hp=Math.min(game.player.maxHp,game.player.hp+v.heal);game.player.shield=Math.max(game.player.shield,v.shield);readyProc(game,'emberheart')}
   if(game.player.hp>0&&game.player.hp<game.player.maxHp&&metaProc(game,'blood',.1)){
     game.player.hp=Math.min(game.player.maxHp,game.player.hp+2);game.texts.push({x:game.player.x,y:game.player.y-30,text:'拾烬 +2',t:.9,max:.9,color:'#badd9a'});
   }
@@ -190,6 +195,7 @@ export function onEnemyKilled(game,e) {
 }
 
 export function onWeaponCast(game,kind,projectile) {
+  if(game.passives.sundial){game.sundialCasts=(game.sundialCasts||0)+1;const v=relicValues('sundial',game.passives.sundial,game.stats);if(game.sundialCasts>=v.casts){game.sundialCasts=0;const key=Object.keys(game.weapons).sort((a,b)=>(game.timers[b]||0)-(game.timers[a]||0))[0];if(key)game.timers[key]=Math.max(0,(game.timers[key]||0)-v.advance);readyProc(game,'sundial')}}
   onCharacterCast(game,kind);
   const p=game.passives;
   if(p.echo) {

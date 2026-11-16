@@ -1,3 +1,4 @@
+import {STAGES,updateExpedition,expeditionEnemy,drawExpeditionFloor,drawTideHazard} from './expeditions.js';
 import {TAU,palette,hash,lerp,clamp,canvas,Landscape,drawSprite,sprite,glow,fire,shadow,diamond,pixelText} from './art.js';
 import {CHARACTERS,WEAPONS,ENEMIES,startingLoadout} from './data.js';
 import {characterStats,weaponStats,refinementValue} from './stats.js';
@@ -64,19 +65,19 @@ export class Game{
  }
  start(character,meta={},preparation={}){
   this.keys.clear();this.stick={x:0,y:0};this.pauseReturn=null;this.pendingTalentChoice=false;
-  this.character=character;this.state='running';this.time=0;this.kills=0;this.gold=0;this.level=1;this.xp=0;this.xpNext=10;this.rerolls=3;this.pendingLevels=0;this.uid=0;this.meta={...meta};this.ended=false;this.enemies=[];this.projectiles=[];this.drops=[];this.effects=[];this.particles=[];this.texts=[];this.zones=[];this.hazards=[];this.afterimages=[];this.spawnClock=.4;this.waveClock=28;this.waveCount=0;this.bossMilestones=new Set();this.finalSpawned=false;this.finalDefeated=false;this.shake=0;this.hitstop=0;this.flash=0;this.orbitAngle=0;this.timers={};this.choices=[];this.camera={x:0,y:37};this.bannerUntil=0;this.toastUntil=0;
+  this.stage=Object.hasOwn(STAGES,preparation.stage)?preparation.stage:'graveyard';this.nextStageHazard=30;this.character=character;this.state='running';this.time=0;this.kills=0;this.gold=0;this.level=1;this.xp=0;this.xpNext=10;this.rerolls=3;this.pendingLevels=0;this.uid=0;this.meta={...meta};this.ended=false;this.enemies=[];this.projectiles=[];this.drops=[];this.effects=[];this.particles=[];this.texts=[];this.zones=[];this.hazards=[];this.afterimages=[];this.spawnClock=.4;this.waveClock=28;this.waveCount=0;this.bossMilestones=new Set();this.finalSpawned=false;this.finalDefeated=false;this.shake=0;this.hitstop=0;this.flash=0;this.orbitAngle=0;this.timers={};this.choices=[];this.camera={x:0,y:37};this.bannerUntil=0;this.toastUntil=0;
   this.fusions={};this.consumedWeapons=new Set();this.consumedPassives=new Set();this.notifiedFusions=new Set();this.trackedFusion=this.discoveredFusions?.has(this.plannedFusion)?this.plannedFusion:null;
   const loadout=startingLoadout(character,preparation);this.weapons=loadout.weapons;this.passives=loadout.passives;
   this.relicTimers={};this.relicProcs={};this.echoCasts=0;
-  this.choiceHistory=[];this.stormCharge=0;
-  this.xpNext=xpForLevel(1);this.waveClock=42;this.banished=new Set();this.banishes=3;this.lastHealDrop=-20;this.lastUtilityDrop=-30;this.lastHurt=-8;this.harvestCharge=0;this.damageByWeapon={};this.damageTaken=0;this.lastPhase=0;this.pressure=pressureAt(0);
+  this.choiceHistory=[];this.stormCharge=0;this.circuitCharge=0;this.souljarCharge=0;this.sundialCasts=0;
+  this.xpNext=xpForLevel(1);this.waveClock=42;this.banished=new Set();this.banishes=3;this.lastHealDrop=-20;this.lastUtilityDrop=-30;this.lastHurt=-8;this.harvestCharge=0;this.damageByWeapon={};this.damageTaken=0;this.lastPhase=0;this.pressure=pressureAt(0,0,{},this.stage);
   this.boons=[];this.weaponEmpowerments={};this.weaponUpgrades={};this.metaBuffs={};this.growth={};this.stats=characterStats(character,this.passives,this.meta,{},this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
   const maxHp=this.stats.maxHp;this.player={x:0,y:37,hp:maxHp,maxHp,r:7,flip:false,walk:0,moving:false,invincible:1,dashTime:0,dashCooldown:0,dashX:0,dashY:1,lastX:0,lastY:1,trailClock:0};
   this.player.shield=0;
   resetCharacterTalents(this);
   resetWorldEvents(this);
-  this.grid.rebuild([]);this.sound.init();this.on('startRun');this.on('weapons');this.on('hud');this.banner('最后一盏灯，为你而燃','SURVIVE UNTIL DAWN',3.5);this.toast('保持移动，武器会自动攻击。拾取绿色结晶来升级。',5);
-  for(let i=0;i<6;i++)this.spawnEnemy('skeleton',false,125+i*12);
+  this.grid.rebuild([]);this.sound.init();this.on('startRun');this.on('weapons');this.on('hud');this.banner(STAGES[this.stage].name,STAGES[this.stage].hint,4);this.toast('保持移动，武器会自动攻击。拾取绿色结晶来升级。',5);
+  for(let i=0;i<6;i++)this.spawnEnemy(this.stage==='foundry'?'cinderling':'skeleton',false,125+i*12);
  }
  loop(now){
   const raw=Math.min(.05,(now-(this.lastFrame||now))/1000);this.lastFrame=now;this.ambient+=raw;this.sound.update(this.state==='running'?Math.min(1,this.time/RUN_DURATION):0,this.state!=='running');
@@ -108,12 +109,12 @@ export class Game{
   if(p.dashTime>0){p.dashTime-=dt;p.x+=p.dashX*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.y+=p.dashY*this.moveSpeed*this.stats.dashSpeedMultiplier*dt;p.trailClock-=dt;if(p.trailClock<=0){p.trailClock=.028;this.afterimages.push({x:p.x,y:p.y,flip:p.flip,t:.27,max:.27})}}else{p.x+=dx*this.moveSpeed*dt;p.y+=dy*this.moveSpeed*dt}
   p.hp=Math.min(p.maxHp,p.hp+(this.stats.regeneration+(this.time-this.lastHurt>=4?this.stats.recovery:0))*dt);
   this.camera.x=lerp(this.camera.x,p.x,1-Math.exp(-dt*7));this.camera.y=lerp(this.camera.y,p.y-8,1-Math.exp(-dt*7));
-  this.pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty);
+  this.pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty,this.stage);
   if(this.pressure.index!==this.lastPhase){this.lastPhase=this.pressure.index;if(![3,6,10].includes(this.lastPhase))this.banner(this.pressure.name,this.pressure.hint,3);this.checkFusionReadiness()}
   this.spawnClock-=dt;if(this.spawnClock<=0){for(let i=0;i<this.pressure.count&&this.enemies.length<this.pressure.cap;i++)this.spawnEnemy(this.chooseEnemy(),Math.random()<this.pressure.eliteChance);this.spawnClock+=this.pressure.interval}
   this.waveClock-=dt;if(this.waveClock<=0&&this.time<RUN_DURATION){this.spawnWave();this.waveClock=48}
   for(const milestone of [180,360,RUN_DURATION])if(this.time>=milestone&&!this.bossMilestones.has(milestone)){this.bossMilestones.add(milestone);this.spawnBoss(milestone)}
-  for(const e of this.enemies)this.updateEnemy(e,dt);
+  updateExpedition(this);for(const e of [...this.enemies])this.updateEnemy(e,dt);
   this.grid.rebuild(this.enemies);updateRelicStates(this);updateCharacterTalents(this,dt,Math.hypot(p.x-oldX,p.y-oldY));this.updateWeapons(dt);this.updateProjectiles(dt);this.updateZones(dt);this.updateHazards(dt);this.updateDrops(dt);
   updateWorldEvents(this,dt);
   for(const a of this.afterimages)a.t-=dt;this.afterimages=this.afterimages.filter(a=>a.t>0);
@@ -129,22 +130,22 @@ export class Game{
  chooseEnemy(){return weightedPick(Object.entries(this.pressure.roster),item=>item[1])[0]}
  spawnEnemy(kind,elite=false,radius=0){
   const a=Math.random()*TAU;const edge=radius||(Math.max(this.w,this.h)*.56+35+Math.random()*70);let x=this.player.x+Math.cos(a)*edge,y=this.player.y+Math.sin(a)*edge;
-  const data=ENEMIES[kind],pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty),growth=pressure.hp;const e={id:++this.uid,kind,x,y,hp:data.hp*growth,maxHp:data.hp*growth,speed:data.speed*pressure.speed,damage:data.damage*pressure.damage,xp:data.xp,r:data.r,score:data.score,flip:false,walk:0,flash:0,slow:0,freeze:0,knockX:0,knockY:0,attack:1+Math.random()*3,orbitHit:0,dead:false,elite,boss:false,scale:elite?1.4:1,phase:Math.random()*TAU};
+  const data=ENEMIES[kind],pressure=pressureAt(this.time,this.stats.curse,this.stats.difficulty,this.stage),growth=pressure.hp;const e={id:++this.uid,kind,x,y,hp:data.hp*growth,maxHp:data.hp*growth,speed:data.speed*pressure.speed,damage:data.damage*pressure.damage,xp:data.xp,r:data.r,score:data.score,flip:false,walk:0,flash:0,slow:0,freeze:0,knockX:0,knockY:0,attack:1+Math.random()*3,orbitHit:0,dead:false,elite,boss:false,scale:elite?1.4:1,phase:Math.random()*TAU};
   if(elite){e.hp*=7;e.maxHp=e.hp;e.speed*=.85;e.xp*=8;e.r*=1.4;e.damage*=1.3;e.score*=8}this.enemies.push(e);return e;
  }
  spawnWave(){
   this.waveCount++;
-  const type=this.time<180?'bat':Math.random()<.5?'bat':'reaper';const total=Math.round(Math.min(38,12+Math.floor(this.time/23))*this.stats.difficulty.population);const angle=Math.random()*TAU,px=this.player.x,py=this.player.y,r=Math.max(this.w,this.h)*.6;
+  const type=STAGES[this.stage].wave||(this.time<180?'bat':Math.random()<.5?'bat':'reaper');const total=Math.round(Math.min(38,12+Math.floor(this.time/23))*this.stats.difficulty.population);const angle=Math.random()*TAU,px=this.player.x,py=this.player.y,r=Math.max(this.w,this.h)*.6;
   for(let i=0;i<total&&this.enemies.length<this.pressure.cap-1;i++){const e=this.spawnEnemy(type,Math.random()<this.pressure.eliteChance);e.x=px+Math.cos(angle)*r+Math.cos(angle+Math.PI/2)*(i-total/2)*17;e.y=py+Math.sin(angle)*r+Math.sin(angle+Math.PI/2)*(i-total/2)*17;e.speed*=1.08}
   if(this.waveCount%3===0&&this.enemies.length<this.pressure.cap){this.spawnEnemy('knight',true);this.banner('提灯精英 · 追猎开始','击败精英回收八倍经验结晶',2.7)}else this.banner('鸦群掠过长夜','寻找缺口，避开怪潮正面',2.7);
  }
  spawnBoss(milestone){
   const final=milestone===RUN_DURATION,difficulty=this.stats.difficulty,count=1+difficulty.bosses,angle=Math.random()*TAU;
   for(let i=0;i<count;i++){
-   const e=this.spawnEnemy(final?'reaper':'knight'),a=angle+i*TAU/count;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=final?'蚀月君王':milestone===360?'无名葬钟':'墓园看守';e.hp=(final?42000:milestone===360?16500:4800)*(1+(this.stats.curse||0)*.12)*difficulty.hp;e.maxHp=e.hp;e.speed=(final?45:30)*difficulty.speed;e.damage=(final?52:milestone===360?40:30)*difficulty.damage;e.xp=final?180:90;e.r=final?23:19;e.scale=final?2.7:2.25;e.score=100;e.attack=3+i*.7;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
+   const chapter=STAGES[this.stage],rank=final?2:milestone===360?1:0;const e=this.spawnEnemy(chapter.bossKinds[rank]),a=angle+i*TAU/count;e.x=this.player.x+Math.cos(a)*180;e.y=this.player.y+Math.sin(a)*180;e.boss=true;e.final=final;e.name=chapter.bosses[rank];e.hp=(final?42000:milestone===360?16500:4800)*(1+(this.stats.curse||0)*.12)*difficulty.hp;e.maxHp=e.hp;e.speed=(final?45:30)*difficulty.speed;e.damage=(final?52:milestone===360?40:30)*difficulty.damage;e.xp=final?180:90;e.r=final?23:19;e.scale=final?2.7:2.25;e.score=100;e.attack=3+i*.7;e.state='chase';e.stateTime=0;e.slamX=0;e.slamY=0;
    e.bossWave=milestone;this.effects.push({type:'pulse',x:e.x,y:e.y,r:100,t:1,max:1,color:'#d69a77'});this.burst(e.x,e.y-30,40,'#a78eaa',80);
   }
-  if(final)this.finalSpawned=true;this.sound.play('boss');this.shake=5;this.banner((final?'蚀月君王':milestone===360?'无名葬钟':'墓园看守')+' · '+count+' 位降临',final?'THE ECLIPSE SOVEREIGN':'GUARDIAN OF THE GRAVE',4);this.on('hud');
+  if(final)this.finalSpawned=true;this.sound.play('boss');this.shake=5;this.banner(STAGES[this.stage].bosses[final?2:milestone===360?1:0]+' · '+count+' 位降临',final?'THE ECLIPSE SOVEREIGN':'GUARDIAN OF THE GRAVE',4);this.on('hud');
  }
  updateEnemy(e,dt){
   if(e.dead)return;e.flash=Math.max(0,e.flash-dt);e.slow=Math.max(0,e.slow-dt);e.freeze=Math.max(0,e.freeze-dt);e.orbitHit=Math.max(0,e.orbitHit-dt);let dx=this.player.x-e.x,dy=this.player.y-e.y,d=Math.hypot(dx,dy)||1;
@@ -152,6 +153,7 @@ export class Game{
   e.flip=dx<0;e.walk+=dt*6*(e.slow>0?.5:1);e.attack-=dt;
   let speed=e.speed*(e.freeze>0?0:e.slow>0?.45:1);
   if(e.freeze>0){speed=0}
+  else if(e.boss&&this.stage!=='graveyard'){speed*=expeditionEnemy(this,e,dt,d,dx,dy)}
   else if(e.boss){
    if(e.state==='charge'){e.stateTime-=dt;e.x+=e.chargeX*200*dt;e.y+=e.chargeY*200*dt;if(e.stateTime<=0){e.state='chase';e.attack=2.5}speed=0}
    else if(e.state==='windup'){e.stateTime-=dt;speed=0;if(e.stateTime<=0){e.state='charge';e.stateTime=.65;let l=Math.hypot(e.slamX-e.x,e.slamY-e.y)||1;e.chargeX=(e.slamX-e.x)/l;e.chargeY=(e.slamY-e.y)/l;this.burst(e.x,e.y-12,18,'#c6a280',75)}}
@@ -167,7 +169,9 @@ export class Game{
    else if(e.lungeWindup>0){e.lungeWindup-=dt;speed=0;if(e.lungeWindup<=0)e.lungeTime=.4}
    else if(e.attack<=0&&d>35&&d<160){e.attack=5.5;e.lungeWindup=.8;e.lungeX=dx/d;e.lungeY=dy/d;speed=0;this.hazards.push({type:'line',x:e.x,y:e.y,tx:e.x+dx/d*72,ty:e.y+dy/d*72,t:.8,max:.8,visualOnly:true})}
   }
+  else if(['cinderling','bomber','bulwark','siren','leech','oracle'].includes(e.kind)){speed*=expeditionEnemy(this,e,dt,d,dx,dy)}
   else if(e.kind==='bat'){dx+=Math.sin(this.time*4+e.phase)*d*.22;dy+=Math.cos(this.time*4+e.phase)*d*.22;let l=Math.hypot(dx,dy)||1;dx=dx/l*d;dy=dy/l*d}
+  if(e.dead)return;
   if(d>e.r+this.player.r-2){e.x+=dx/d*speed*dt;e.y+=dy/d*speed*dt}
   // Light local separation keeps dense hordes readable without blocking the player.
   if(!e.boss&&e.freeze<=0){let contacts=0;for(const other of this.grid.near(e.x,e.y,24)){if(other.id===e.id||other.dead)continue;const sx=e.x-other.x,sy=e.y-other.y,sep=Math.hypot(sx,sy)||.1,desired=(e.r+other.r)*.76;if(sep<desired){const force=(desired-sep)*dt*3;e.x+=sx/sep*force;e.y+=sy/sep*force;if(++contacts>=7)break}}}
@@ -213,7 +217,7 @@ export class Game{
    for(const e of this.grid.near(b.x,b.y,36)){if(e.dead||b.hit.has(e.id))continue;
     // Sweep each projectile through its previous position to avoid tunnelling.
     const vx=b.x-oldX,vy=b.y-oldY,den=vx*vx+vy*vy||1,u=clamp(((e.x-oldX)*vx+(e.y-9-oldY)*vy)/den,0,1);const dd=Math.hypot(e.x-(oldX+vx*u),e.y-9-(oldY+vy*u));
-    if(dd<e.r+b.r){b.hit.add(e.id);const multiplier=onCharacterProjectileHit(this,b,e);this.hit(e,b.damage*multiplier,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!b.talent);chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
+    if(dd<e.r+b.r){b.hit.add(e.id);if(b.slowDuration)e.slow=Math.max(e.slow,b.slowDuration);if(b.freeze)e.freeze=Math.max(e.freeze,e.boss?b.bossFreeze:b.freeze);const multiplier=onCharacterProjectileHit(this,b,e);this.hit(e,b.damage*multiplier,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!b.talent);if(b.blastDamage&&!b.blastDone){b.blastDone=true;this.effects.push({type:'pulse',x:e.x,y:e.y-8,r:b.blastRadius,color:WEAPONS[b.source].color,t:.4,max:.4});for(const other of this.grid.near(e.x,e.y,b.blastRadius+25))if(!other.dead&&distance(e,other)<b.blastRadius+other.r)this.hit(other,b.blastDamage,e.x,e.y,20,false,b.source,true)}chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
    }
   }this.projectiles=this.projectiles.filter(b=>b.t>0);
  }
@@ -223,7 +227,7 @@ export class Game{
   // ponytail: retain the newest 128 fields to bound rendering; pool fields if future content routinely reaches this ceiling.
   this.zones=this.zones.filter(z=>z.t>0).slice(-128);
  }
- updateHazards(dt){for(const h of this.hazards){h.t-=dt;if(h.t<=0&&!h.visualOnly){this.effects.push({type:'enemyBlast',x:h.x,y:h.y,r:h.r,t:.5,max:.5});this.burst(h.x,h.y,18,'#b6756c',100);if(distance(h,this.player)<h.r+this.player.r)this.hurt(h.damage,h.x,h.y);this.shake=Math.max(this.shake,3)}}this.hazards=this.hazards.filter(h=>h.t>0)}
+ updateHazards(dt){for(const h of this.hazards){if(h.enemy){h.x=h.enemy.x;h.y=h.enemy.y;h.t=h.enemy.dead?0:h.enemy.fuse;continue}h.t-=dt;if(h.t<=0&&!h.visualOnly){this.effects.push({...h,type:h.type==='tide'?'tideBurst':'enemyBlast',t:.5,max:.5});this.burst(h.x,h.y,18,h.color||'#b6756c',100);if(h.type==='tide'?Math.abs(this.player.y-h.y)<20+this.player.r&&Math.abs(this.player.x-h.x)<h.r+this.player.r&&Math.abs(this.player.x-h.gap)>38-this.player.r:distance(h,this.player)<h.r+this.player.r)this.hurt(h.damage,h.x,h.y);this.shake=Math.max(this.shake,3)}}this.hazards=this.hazards.filter(h=>h.t>0)}
  markEnemy(e,source,multiplier,duration){
   e.marks??={};e.marks[source]={multiplier,until:this.time+duration};
   e.markUntil=Math.max(e.markUntil||0,this.time+duration);
@@ -232,7 +236,8 @@ export class Game{
   if(e.dead||e.hp<=0)return;const critical=!!source&&!periodic&&Math.random()<Math.min(1,this.stats.criticalChance+(this.stats.weaponUpgrades?.[source]?.critical||0));
   const execute=source&&!periodic&&this.passives.executioner&&e.hp/e.maxHp<=.3?1+this.passives.executioner*(e.boss?.1:.2):1;
   const marked=e.markUntil>this.time?Object.values(e.marks).reduce((best,mark)=>mark.until>this.time?Math.max(best,mark.multiplier):best,1):1;
-  const dmg=Math.max(1,Math.round(damage*(critical?this.stats.criticalMultiplier:1)*execute*marked*characterHitMultiplier(this,e,source,periodic)));
+  const facing=e.guardAngle??Math.atan2(this.player.y-e.y,this.player.x-e.x),guard=e.kind==='bulwark'&&!e.boss&&!periodic&&(fromX-e.x)*Math.cos(facing)+(fromY-e.y)*Math.sin(facing)>0;
+  const dmg=Math.max(1,Math.round(damage*(guard?.55:1)*(critical?this.stats.criticalMultiplier:1)*execute*marked*characterHitMultiplier(this,e,source,periodic)));
   this.damageByWeapon[source||'reaction']=(this.damageByWeapon[source||'reaction']||0)+Math.min(Math.max(0,e.hp),dmg);
   if(execute>1)this.relicProcs.executioner=(this.relicProcs.executioner||0)+1;
   e.hp-=dmg;e.flash=.11;const a=Math.atan2(e.y-fromY,e.x-fromX);e.knockX+=Math.cos(a)*knock*(e.boss?.15:1);e.knockY+=Math.sin(a)*knock*(e.boss?.15:1);
@@ -257,13 +262,13 @@ export class Game{
  kill(e){
   if(e.dead)return;e.dead=true;this.kills++;this.gold+=e.score;this.burst(e.x,e.y-10,8,e.kind==='ghost'?'#8db7a4':'#9e9c72',45);
   const starLinked=!!this.talents.s_scholar1&&e.starMarkedUntil>this.time;
-  this.drops.push({type:'xp',x:e.x,y:e.y,r:3,value:e.xp,elite:e.elite,age:0,vx:0,vy:0,attracted:starLinked,starLinked});
+  if(e.xp>0)this.drops.push({type:'xp',x:e.x,y:e.y,r:3,value:e.xp,elite:e.elite,age:0,vx:0,vy:0,attracted:starLinked,starLinked});
   if(e.boss)this.drops.push({type:'magnet',x:e.x-12,y:e.y,age:0,r:5,value:0});
   const low=this.player.hp<this.player.maxHp*.45,heals=this.drops.filter(d=>d.type==='heal'&&!d.dead).length;
-  if(heals<1&&this.time-this.lastHealDrop>=20&&(Math.random()<(low?.012:.004)||low&&this.time-this.lastHealDrop>=75)){
+  if(!e.summoned&&heals<1&&this.time-this.lastHealDrop>=20&&(Math.random()<(low?.012:.004)||low&&this.time-this.lastHealDrop>=75)){
    this.drops.push({type:'heal',x:e.x+6,y:e.y,age:0,r:5,value:12});this.lastHealDrop=this.time;
   }
-  if(!e.boss&&this.time-this.lastUtilityDrop>=30&&Math.random()<.004){
+  if(!e.boss&&!e.summoned&&this.time-this.lastUtilityDrop>=30&&Math.random()<.004){
    const type=weightedPick([{type:'magnet',weight:4},{type:'hourglass',weight:3},{type:'nova',weight:2},{type:'ward',weight:3}]).type;
    this.drops.push({type,x:e.x-5,y:e.y,age:0,r:5,value:0});this.lastUtilityDrop=this.time;
   }
@@ -421,7 +426,7 @@ export class Game{
   if(this.ended||!this.player||!['running','paused','level','reward'].includes(this.state))return;
   if(this.activeEvent){this.activeEvent.state='failed';this.activeEvent.used=true;this.activeEvent=null;this.eventsFailed++}
   this.ended=true;this.state='over';this.pauseReturn=null;this.keys.clear();this.stick={x:0,y:0};
-  this.reward=this.earnedEmbers+(won?250:0);this.result={won,abandoned,destination,time:this.time,kills:this.kills,level:this.level,reward:this.reward};
+  this.reward=this.earnedEmbers+(won?STAGES[this.stage].reward:0);this.result={won,abandoned,destination,stage:this.stage,time:this.time,kills:this.kills,level:this.level,reward:this.reward};
   this.sound.play(abandoned?'select':won?'win':'death');this.on('end',this.result);
  }
 
@@ -429,7 +434,7 @@ export class Game{
   const g=this.g,w=this.w,h=this.h,t=this.ambient;
   const menu=this.state==='menu'||(this.state==='status'&&this.statusReturn==='menu');if(menu){this.camera.x=lerp(this.camera.x,-w*.235,.025);this.camera.y=lerp(this.camera.y,-26,.025)}
   let sx=this.shake>0?(Math.random()-.5)*this.shake:0,sy=this.shake>0?(Math.random()-.5)*this.shake:0;const cam={x:Math.round(this.camera.x+sx),y:Math.round(this.camera.y+sy)};const ox=w/2-cam.x,oy=h/2-cam.y;
-  this.landscape.drawFloor(g,cam,w,h,t);const decor=this.landscape.getObjects(cam,w,h);
+  if(menu||this.stage==='graveyard')this.landscape.drawFloor(g,cam,w,h,t);else drawExpeditionFloor(this,g,cam,w,h);const decor=this.landscape.getObjects(cam,w,h).map(o=>!menu&&this.stage!=='graveyard'?{...o,kind:o.kind==='tree'||o.kind==='deadTree'?(this.stage==='foundry'?'furnace':'coral'):o.kind==='grave'||o.kind==='cross'?'pillar':o.kind}:o);
   // Subtle cool moonlight travels diagonally through the canopy.
   g.save();g.globalAlpha=.05;g.fillStyle='#b7c5a0';for(let i=0;i<3;i++){const x=w*.6+i*110+Math.sin(t*.08)*10;g.beginPath();g.moveTo(x,0);g.lineTo(x+70,0);g.lineTo(x-85,h);g.lineTo(x-160,h);g.closePath();g.fill()}g.restore();
   if(!menu){this.drawZones(g,ox,oy,t);this.drawHazards(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
@@ -471,7 +476,7 @@ export class Game{
   if(!menu){drawWorldEvents(this,g,ox,oy);this.drawCompass(g,cam,w,h)}
  }
  drawZones(g,ox,oy,t){for(const z of this.zones){if(drawExpandedZone(g,z,ox,oy,t))continue;if(z.kind){drawFusionZone(g,z,ox,oy,t);continue}const x=z.x+ox,y=z.y+oy;g.globalAlpha=Math.min(1,z.t)*.5;g.fillStyle='#b1703540';g.beginPath();g.ellipse(x,y,z.r,z.r*.8,0,0,TAU);g.fill();g.strokeStyle='#d8a35a55';g.stroke();g.globalAlpha=Math.min(1,z.t);for(let i=0;i<10;i++){let a=hash(i,z.seed)*TAU,r=hash(i+20,z.seed)*z.r,xx=x+Math.cos(a)*r,yy=y+Math.sin(a)*r,hh=3+(Math.sin(t*8+i)+1)*4;g.fillStyle=i%2?'#ce8c48':'#e3b361';g.fillRect(Math.round(xx),Math.round(yy-hh),2,hh);g.fillStyle='#eac88a';g.fillRect(Math.round(xx),Math.round(yy-3),1,3)}g.globalAlpha=1}}
- drawHazards(g,ox,oy,t){for(const z of this.hazards){let x=z.x+ox,y=z.y+oy;g.save();g.strokeStyle='#db9a7a';g.lineWidth=1;if(z.type==='line'){g.globalAlpha=.5;g.setLineDash([4,3]);g.beginPath();g.moveTo(x,y);let a=Math.atan2(z.ty-z.y,z.tx-z.x);g.lineTo(x+Math.cos(a)*150,y+Math.sin(a)*150);g.stroke()}else{g.fillStyle=`rgba(175,83,66,${.08+(1-z.t/z.max)*.2})`;g.beginPath();g.arc(x,y,z.r,0,TAU);g.fill();g.globalAlpha=.5+Math.sin(t*20)*.25;g.stroke();g.strokeStyle='#f3c597';g.beginPath();g.arc(x,y,z.r*(1-z.t/z.max),0,TAU);g.stroke();g.fillRect(x-2,y-2,4,4)}g.restore()}}
+ drawHazards(g,ox,oy,t){for(const z of this.hazards){let x=z.x+ox,y=z.y+oy;g.save();g.strokeStyle=z.color||'#db9a7a';g.lineWidth=1;if(z.type==='tide'){drawTideHazard(g,z,ox,oy)}else if(z.type==='line'){g.globalAlpha=.5;g.setLineDash([4,3]);g.beginPath();g.moveTo(x,y);let a=Math.atan2(z.ty-z.y,z.tx-z.x);g.lineTo(x+Math.cos(a)*150,y+Math.sin(a)*150);g.stroke()}else{g.fillStyle=`rgba(175,83,66,${.08+(1-z.t/z.max)*.2})`;g.beginPath();g.arc(x,y,z.r,0,TAU);g.fill();g.globalAlpha=.5+Math.sin(t*20)*.25;g.stroke();g.strokeStyle='#f3c597';g.beginPath();g.arc(x,y,z.r*(1-z.t/z.max),0,TAU);g.stroke();g.fillRect(x-2,y-2,4,4)}g.restore()}}
  drawDrops(g,ox,oy,t){for(const d of this.drops){const x=Math.round(d.x+ox),y=Math.round(d.y+oy);if(x<-20||x>this.w+20||y<-20||y>this.h+20)continue;const bob=Math.round(Math.sin(t*3+d.x)*1.5);shadow(g,x,y,4,.2);if(d.type==='xp'){const big=d.elite||d.value>=12;diamond(g,x,y-4+bob,big?5:3,big?'#e2cd89':d.value>=5?'#8fcabb':'#8cb16f');g.fillStyle=big?'#fae7b7':'#d2dfa2';g.fillRect(x-1,y-6+bob,1,2);if(big)glow(g,x,y,16,'#dec38712')}if(d.type==='heal'){g.fillStyle='#617d51';g.fillRect(x-2,y-9+bob,4,3);g.fillStyle='#b5c789';g.fillRect(x-4,y-6+bob,8,7);g.fillStyle='#e0e3b1';g.fillRect(x-2,y-5+bob,2,4)}if(d.type==='magnet'){diamond(g,x,y-7+bob,6,'#8bbccc');diamond(g,x,y-7+bob,3,'#daeee0');glow(g,x,y-7,22,'#8dc7d922')}if(['hourglass','nova','ward'].includes(d.type)){const color={hourglass:'#b4dbe7',nova:'#e8ae70',ward:'#c4dda8'}[d.type];glow(g,x,y-7,22,color+'33');diamond(g,x,y-7+bob,7,color);g.fillStyle='#eff2d2';if(d.type==='hourglass'){g.fillRect(x-4,y-12+bob,8,2);g.fillRect(x-4,y-4+bob,8,2)}else if(d.type==='nova'){g.fillRect(x-1,y-16+bob,2,17);g.fillRect(x-8,y-8+bob,17,2)}else diamond(g,x,y-8+bob,3,'#4f715c')}if(d.type==='chest'){glow(g,x,y-8,33,'#d7ac5d24');drawSprite(g,'chest',x,y+bob);for(let i=0;i<3;i++){g.fillStyle='#dec988';g.fillRect(x-12+i*11,y-12-Math.round((t*12+i*7)%19),1,2)}}}}
  drawWeapons(g,ox,oy,t){drawCharacterTalents(this,g,ox,oy);drawFusionWeapons(this,g,ox,oy);const p=this.player,lvl=this.weapons.orbit;if(p.shield>0){g.strokeStyle='#bfe4cc88';g.lineWidth=1;g.beginPath();g.arc(p.x+ox,p.y+oy-9,17,0,TAU);g.stroke()}if(!lvl)return;const v=weaponStats('orbit',lvl,this.stats,this.character),count=v.count;for(let i=0;i<count;i++){const dir=lvl===6&&i%2?-1:1,a=this.orbitAngle*dir+i*TAU/count,r=v.radius+(i%2?v.outerOffset:0),x=p.x+ox+Math.cos(a)*r,y=p.y+oy-8+Math.sin(a)*r;for(let j=4;j>0;j--){let aa=a-j*.09*dir;g.globalAlpha=.12+(4-j)*.09;g.fillStyle='#a6d7be';g.fillRect(Math.round(p.x+ox+Math.cos(aa)*r)-2,Math.round(p.y+oy-8+Math.sin(aa)*r)-2,4,4)}g.globalAlpha=1;glow(g,x,y,v.contactRadius,'#b5e7c323');diamond(g,Math.round(x),Math.round(y),lvl===6?7:5,'#78bcae');diamond(g,Math.round(x),Math.round(y)-1,3,'#d9edc6');g.fillStyle='#eff3d8';g.fillRect(Math.round(x)-1,Math.round(y)-2,2,3)}}
  drawProjectiles(g,ox,oy,t){for(const b of this.projectiles){let x=Math.round(b.x+ox),y=Math.round(b.y+oy);if(b.trail){for(let i=0;i<b.trail.length;i++){g.globalAlpha=i/b.trail.length*.45;g.fillStyle=b.type==='flame'?'#d29a55':b.fusionKind?'#c7b4ec':b.homing?'#d8c9a0':'#9fac80';g.fillRect(Math.round(b.trail[i].x+ox)-1,Math.round(b.trail[i].y+oy)-1,b.type==='flame'?4:2,b.type==='flame'?4:2)}g.globalAlpha=1}
@@ -482,6 +487,7 @@ export class Game{
  }}
  drawEffects(g,ox,oy,t){for(const fx of this.effects){const x=fx.x+ox,y=fx.y+oy,p=1-fx.t/fx.max;g.save();
   drawExpandedEffect(g,fx,ox,oy);
+  if(fx.type==='tideBurst'){g.globalAlpha=1-p;drawTideHazard(g,fx,ox,oy)}
   if(fx.type==='fusion'){
    g.globalAlpha=1-p;g.strokeStyle=fx.color;g.lineWidth=2;
    for(let j=0;j<2;j++){g.beginPath();g.arc(x,y,fx.r*(j?.85:1)*Math.sin(p*Math.PI/2),0,TAU);g.stroke()}

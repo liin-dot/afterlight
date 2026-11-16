@@ -1,6 +1,6 @@
 {
   "name": "afterlight",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "AFTERLIGHT — an original pixel-art survivor game",

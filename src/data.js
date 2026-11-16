@@ -4,6 +4,8 @@ export const CHARACTERS = [
  {id:'warden',name:'守灯人',english:'WARDEN',tag:'近战 · 灯火反击',weapon:'blade',hp:90,speed:88,damage:1.10,description:'<b>余烬长刃</b> 起手 · 伤害 +10% · 生命 90',lore:'背着最后一盏灯，走进无人归来的墓园。'},
  {id:'witch',name:'逐星者',english:'SEER',tag:'召唤 · 星轨法术',weapon:'orbit',hp:70,speed:91,damage:1,description:'<b>游魂灯</b> 起手 · 拾取范围 +35% · 生命 70',lore:'群星熄灭以后，她仍听得见灵魂的回声。'},
  {id:'ranger',name:'荒野客',english:'RANGER',tag:'游击 · 动量疾射',weapon:'bolt',hp:80,speed:102,damage:1,description:'<b>荆棘连弩</b> 起手 · 弩矢数量 +1 · 生命 80',lore:'比黑暗更安静，比死亡快一步。'},
+ {id:'smith',name:'铸雷师',english:'SMITH',tag:'蓄能 · 连锁放电',weapon:'capacitor',hp:100,speed:84,damage:1,description:'<b>鸣雷线圈</b> 起手 · 护甲 +1 · 生命 100',lore:'他把最后一道雷，锻进了不会熄灭的心脏。'},
+ {id:'mariner',name:'渡潮人',english:'MARINER',tag:'游走 · 潮汐控制',weapon:'tide',hp:78,speed:98,damage:1,description:'<b>回潮法印</b> 起手 · 冲刺冷却 −15% · 生命 78',lore:'海吞没了归途，她便把潮汐带上岸。'},
 ];
 export const WEAPONS = {
  ...NEW_WEAPONS,
@@ -64,6 +66,10 @@ export function metaState(meta,key){
  return {level,cost:metaCost(key,level),cooldown:info.cooldowns?.[level-1],nextCooldown:info.cooldowns?.[level],maxed:level>=info.max,prerequisite,available:level<info.max&&!prerequisite};
 }
 export const STARTING_WEAPONS={
+ capacitor:{cost:600,hint:'释放跳跃电弧，配合蓄电与雷电遗物。'},
+ tide:{cost:600,hint:'推出移动潮环，以减速与击退打开道路。'},
+ needle:{cost:600,hint:'扇形穿透寒针，适合移动拉扯。'},
+ lantern:{cost:600,hint:'放飞追踪魂灯，围绕灵魂联动成长。'},
  flame:{cost:600,hint:'投掷火种，用持续火焰控制追兵。'},
  frost:{cost:600,hint:'释放寒霜脉冲，以减速争取生存空间。'},
  prism:{cost:600,hint:'发射贯穿光束，从直线敌群中打开缺口。'},
@@ -85,6 +91,12 @@ export const PICKUPS = {
  ward:{name:'灯盾残片',color:'#c2d9b1',desc:'护盾补至 20 点，先于生命承受伤害；不与已有护盾相加。',source:'击败敌人时罕见掉落，与其他战术补给共享掉落间隔。'},
 };
 export const ENEMIES = {
+ cinderling:{name:'烬火侍从',hint:'中距离发射慢速火弹，保持横向移动。',hp:30,speed:31,damage:11,xp:2,r:7,score:1},
+ bomber:{name:'爆炉残骸',hint:'靠近后停下蓄爆，离开橙圈或提前击杀。',hp:48,speed:34,damage:14,xp:4,r:9,score:2},
+ bulwark:{name:'熔铁卫',hint:'正面减伤 45%，绕后或用领域与异常伤害。',hp:100,speed:20,damage:19,xp:6,r:11,score:3},
+ siren:{name:'沉钟歌妖',hint:'发射三向音弹，穿过弹幕间隙。',hp:42,speed:27,damage:13,xp:3,r:8,score:2},
+ leech:{name:'裂潮兽',hint:'直线蓄力后突进，向侧面闪避。',hp:29,speed:35,damage:10,xp:2,r:7,score:1},
+ oracle:{name:'裂隙司祭',hint:'召唤无奖励援兵，优先打断源头。',hp:78,speed:19,damage:15,xp:8,r:10,score:4},
  skeleton:{hp:32,speed:29,damage:12,xp:2,r:7,score:1},
  ghoul:{hp:50,speed:24,damage:15,xp:3,r:9,score:1},
  bat:{hp:26,speed:55,damage:9,xp:1,r:7,score:1},

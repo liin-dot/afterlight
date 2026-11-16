@@ -4,6 +4,13 @@ export function drawContentIcon(g,kind) {
   const gem=(c,x,y,r)=>{for(let row=-r;row<=r;row++){const width=r-Math.abs(row);box(c,x-width,y+row,width*2+1,1)}};
   const ring=(color,cx,cy,r)=>{for(let i=0;i<16;i++){const a=i*Math.PI/8;box(color,cx+Math.cos(a)*r,cy+Math.sin(a)*r,2,2)}};
   const slash=color=>{box('#776963',6,4,2,18);for(let i=0;i<13;i++){const a=-1.7+i*.22;box(color,10+Math.cos(a)*9,11+Math.sin(a)*9,3,3)}box('#f5ead4',15,4,4,2);box('#ac9a82',4,17,7,2)};
+  if(['capacitor','arcforge','circuit'].includes(kind)){box('#8b8e86',4,19,16,3);box('#798996',6,7,4,12);box('#798996',16,7,3,12);for(let i=0;i<4;i++)box('#e5bc78',5,7+i*3,15,1);gem('#f7dfac',12,4,3);if(kind==='arcforge')ring('#edce84',12,11,10);if(kind==='circuit'){box('#a9d4c8',3,4,5,2);box('#a9d4c8',3,4,2,10)}return true}
+  if(['tide','maelstrom','brine'].includes(kind)){for(let i=0;i<3;i++){ring(['#5a8f9f','#80c3d0','#c6e9db'][i],11+i,12-i,8-i*2)}gem('#d3eddf',17,5,3);if(kind==='maelstrom')gem('#e0e0b4',12,12,3);if(kind==='brine'){box('#a9c9bb',3,20,18,2);box('#c6e9db',18,11,2,10)}return true}
+  if(['needle','frostloom'].includes(kind)){for(let j=0;j<3;j++)for(let i=0;i<12;i++)box(j===1?'#e8f0df':'#89b8d0',2+i+j*3,18-i+j,2,2);if(kind==='frostloom'){ring('#adcee3',12,12,9);gem('#eff5e3',18,4,3)}return true}
+  if(['lantern','beacon','souljar'].includes(kind)){const c=kind==='beacon'?'#ebd995':'#a8d6b6';box('#70877c',8,3,8,2);box(c,5,7,14,11);box('#eef0c8',9,8,3,9);box('#729f89',5,18,14,2);box('#bfce9c',11,20,2,3);if(kind==='beacon'){gem('#f1e8b2',2,5,2);gem('#f1e8b2',21,5,2)}if(kind==='souljar'){box('#c2ccac',9,1,6,5);gem('#64988b',15,13,3)}return true}
+  if(kind==='wake'){box('#7499a5',5,5,7,13);box('#a6ccd1',5,17,15,4);for(let i=0;i<3;i++)box('#e5e2b5',14+i*2,4+i*3,6-i,2);return true}
+  if(kind==='sundial'){ring('#c6ae7e',12,13,9);box('#818f93',11,5,2,13);for(let i=0;i<8;i++)box('#e9dbad',11+i,13-i,2,2);gem('#f3e4ba',12,13,2);return true}
+  if(kind==='emberheart'){gem('#8d6857',12,12,10);gem('#d69868',12,11,7);gem('#efcd92',12,10,4);box('#563f40',11,6,2,5);box('#563f40',12,10,4,2);box('#563f40',14,11,2,7);return true}
   if(kind==='everseed'){ring('#9e925e',12,12,8);gem('#a6bc75',12,13,5);gem('#eed697',12,11,3);box('#6e9c63',11,15,2,7);box('#a3c481',6,17,5,2);box('#e8ca82',16,3,2,4);box('#e8ca82',15,4,4,2);return true}
   if(kind==='hailfire'){gem('#a8d8df',9,13,8);gem('#e69f6a',15,12,7);gem('#f1e5c1',12,12,3);box('#a8d8df',7,2,2,6);box('#e69f6a',16,2,2,6);return true}
   if(kind==='soulforge'){box('#7a9291',4,19,16,3);box('#a2c2ba',6,5,3,15);box('#a2c2ba',15,5,3,15);box('#b9d8cc',7,3,10,3);gem('#c7e9dd',12,12,5);gem('#f2f0c9',4,7,2);gem('#f2f0c9',21,7,2);return true}

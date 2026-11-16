@@ -17,7 +17,7 @@ export function characterStats(character, passives = {}, meta = {}, talents = {}
     moveSpeed: character.speed * (1 + (passives.speed || 0) * .06 + (meta.pace||0)*.02),
     pickupRadius: 42 * (character.id === 'witch' ? 1.35 : 1) * (1 + (passives.magnet || 0) * .35),
     xpMultiplier: 1 + (passives.growth || 0) * .10 + (meta.magnet || 0) * .03 + (passives.curse || 0) * .08,
-    armor: (passives.armor || 0) * 2,
+    armor: (passives.armor || 0) * 2 + (character.id==='smith'?1:0),
     regeneration: (passives.regen || 0) * .22,
     recovery: (meta.regen || 0) * .08,
     criticalChance: .05 + (passives.luck || 0) * .05,
@@ -26,7 +26,7 @@ export function characterStats(character, passives = {}, meta = {}, talents = {}
     durationMultiplier: 1 + (passives.duration || 0) * .15,
     amount: passives.amount || 0,
     curse: passives.curse || 0,
-    dashCooldown: 3 * (1 - (passives.speed || 0) * .06),
+    dashCooldown: 3 * (1 - (passives.speed || 0) * .06)*(character.id==='mariner'?.85:1),
     dashDuration: .22,
     dashInvincibility: .38,
     dashSpeedMultiplier: 4.7,
@@ -46,6 +46,14 @@ function baseWeaponStats(kind, level, stats, character) {
   const damage = base => base * stats.damageMultiplier*(1+(stats.empowerments?.[kind]||0)*.12)*((WEAPON_FAMILIES[kind]||[]).some(tag=>tag==='spirit'||tag==='summon')?stats.summonMultiplier:1);
   const common = {level, evolved, fusion:!!WEAPONS[kind].fusion, cooldown: WEAPONS[kind].cooldown * stats.haste * (1 - Math.min(.35, (level - 1) * (WEAPONS[kind].fusion ? .12 : .055)))};
   switch (kind) {
+    case 'capacitor': return {...common,damage:damage(12+level*5),count:2+Math.floor(level/2),chainRange:125+level*8,blastDamage:evolved?damage(65):0,blastRadius:48};
+    case 'arcforge': return {...common,damage:damage(70+level*28),count:5+level*2,chainRange:180,blastDamage:damage(85+level*40),blastRadius:65+level*8};
+    case 'tide': return {...common,damage:damage(15+level*7),count:evolved?3:level>=3?2:1,radius:25+level*4,duration:1.8,slowDuration:1.2+level*.2,freeze:evolved?.7:0,bossFreeze:.15};
+    case 'maelstrom': return {...common,damage:damage(80+level*35),count:2+level,radius:42+level*5,duration:2.2,slowDuration:2.4,freeze:1+level*.2,bossFreeze:.2,pull:30};
+    case 'needle': return {...common,damage:damage(9+level*5),count:evolved?6:2+Math.floor((level-1)/2),pierce:2+Math.floor(level/2),slowDuration:1.2,freeze:evolved?.4:0,bossFreeze:.12};
+    case 'frostloom': return {...common,damage:damage(30+level*14),count:4+level,pierce:3+level,homing:true,slowDuration:2,freeze:.5+level*.1,bossFreeze:.15,blastDamage:damage(30+level*15),blastRadius:35+level*5};
+    case 'lantern': return {...common,damage:damage(16+level*7),count:2+Math.floor((level-1)/2),pierce:level>=4?2:1,homing:true,blastDamage:evolved?damage(40):0,blastRadius:35};
+    case 'beacon': return {...common,damage:damage(45+level*20),count:4+level*2,pierce:3,homing:true,blastDamage:damage(45+level*20),blastRadius:45+level*5};
     case 'hailfire': return {...common,damage:damage(100+level*36),count:1+level,radius:49+level*7,delay:.8,duration:2.6+level*.4,fieldDamage:damage(14+level*7),hitInterval:.6,freeze:.65+level*.15,bossFreeze:.2,slowDuration:1.8};
     case 'soulforge': return {...common,damage:damage(20+level*12),count:1+level,duration:9+level,fireInterval:.85-level*.06,range:240,pierce:2,homing:true,blastDamage:damage(75+level*30),blastRadius:75+level*7};
     case 'shard': return {...common,damage:damage(18+level*9),count:evolved?4:1+Math.floor((level-1)/2),bounces:evolved?5:1+Math.floor(level/2),range:145,radius:5};

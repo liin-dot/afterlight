@@ -3,6 +3,46 @@ import {TAU,diamond,glow} from './art.js';
 
 export const TALENT_LEVELS=[10,20,30];
 export const CHARACTER_TALENTS={
+  smith:{name:'雷炉之心',color:'#e8b477',icon:'capacitor',style:'蓄电连锁 · 护甲与过载',
+    description:'雷电或投射物武器直接命中积蓄电荷，每 0.25 秒最多一层；8 层向附近 3 个敌人放电。放电最短间隔 3 秒，伤害随等级成长。自带 1 点护甲。',
+    loop:'雷电与弹道命中 → 电荷蓄满 → 连锁放电',hint:'持续命中为雷炉充能，让密集敌群成为放电目标。',families:['lightning','projectile'],items:['circuit','conductor','armor','stormcoil'],
+    branches:[
+      {name:'过载',role:'提前放电 → 强化电弧 → 连锁破甲',nodes:[
+        {id:'f_arc1',name:'快充',icon:'capacitor',description:'放电需求由 8 层降至 6 层；放电间隔继承攻击速度。'},
+        {id:'f_arc2',name:'熔弧',icon:'arcforge',description:'放电伤害 +40%，搜敌范围 +25%。'},
+        {id:'f_arc3',name:'天炉',icon:'stormcoil',description:'放电目标由 3 增至 6，命中附加 20% 易伤，持续 3 秒。'},
+      ]},
+      {name:'钢心',role:'放电造盾 → 修补生命 → 护甲增幅',nodes:[
+        {id:'f_guard1',name:'绝缘',icon:'aegis',description:'每次蓄满放电将护盾补至 10；每点护甲再增加 2，额外最多 12。'},
+        {id:'f_guard2',name:'淬火',icon:'emberheart',description:'蓄满放电时恢复 3 点生命。'},
+        {id:'f_guard3',name:'不熄炉',icon:'bulwark',description:'放电增加护甲 ×12 伤害；补充的护盾再增加 12。'},
+      ]},
+      {name:'行雷',role:'冲刺充能 → 移动放电 → 重置雷炉',nodes:[
+        {id:'f_dash1',name:'踏电',icon:'speed',description:'冲刺增加 4 层电荷，蓄满可正常放电。'},
+        {id:'f_dash2',name:'雷步',icon:'conductor',description:'冲刺额外释放一次 60% 伤害放电，不消耗电荷。'},
+        {id:'f_dash3',name:'疾铸',icon:'sundial',description:'冲刺使蓄满放电立即就绪，并推进雷电、投射物武器剩余施放冷却 1 秒。'},
+      ]},
+    ]},
+  mariner:{name:'归潮步履',color:'#94d9df',icon:'tide',style:'移动潮环 · 控场与续航',
+    description:'每移动 90 距离释放一次潮环，伤害随等级成长，并减速 55% 持续 1.5 秒。潮环最短间隔 2 秒，可在冷却期间蓄满。自带冲刺冷却 −15%。',
+    loop:'移动蓄潮 → 潮环减速 → 穿越缺口继续移动',hint:'用走位蓄起潮环，减速追兵后寻找下一处缺口。',families:['cold','area','spirit'],items:['brine','wake','speed','duration'],
+    branches:[
+      {name:'寒潮',role:'扩散潮环 → 强化浪涌 → 深寒冻结',nodes:[
+        {id:'m_tide1',name:'涨潮',icon:'area',description:'潮环范围 +35%，并继承范围与持续时间属性。'},
+        {id:'m_tide2',name:'怒涛',icon:'maelstrom',description:'潮环伤害 +50%，触发间隔继承攻击速度。'},
+        {id:'m_tide3',name:'冰海',icon:'frostloom',description:'潮环冻结普通敌人 1 秒、首领 0.2 秒，普通冻结继承持续时间。'},
+      ]},
+      {name:'归港',role:'潮环护盾 → 生命回流 → 安全港湾',nodes:[
+        {id:'m_guard1',name:'浮灯',icon:'lantern',description:'蓄满潮环时将护盾补至 8。'},
+        {id:'m_guard2',name:'回流',icon:'regen',description:'蓄满潮环恢复 2 点生命，最短每 4 秒一次。'},
+        {id:'m_guard3',name:'避风港',icon:'beacon',description:'潮环护盾提高至 18；潮环命中附加 15% 易伤，持续 3 秒。'},
+      ]},
+      {name:'远航',role:'缩短蓄潮 → 冲刺掀浪 → 加速返航',nodes:[
+        {id:'m_dash1',name:'顺流',icon:'speed',description:'蓄潮需求由 90 距离降至 65。'},
+        {id:'m_dash2',name:'破浪',icon:'wake',description:'冲刺起点立即释放 70% 伤害潮环，不消耗蓄潮、不补盾或回血。'},
+        {id:'m_dash3',name:'千帆',icon:'tide',description:'冲刺充满蓄潮并结束潮环冷却；推进寒霜、灵魂武器剩余施放冷却 0.8 秒。'},
+      ]},
+    ]},
   warden:{name:'守灯誓约',color:'#e8b578',icon:'aegis',style:'近身作战 · 灯火与护盾',
     description:'出征自带 8 点护盾。85 范围内的武器直接命中积蓄灯火；每 6 层释放震荡并将护盾补至 8。每 0.35 秒积蓄一层，震荡最短间隔 6 秒；冷却期间蓄满会在冷却结束自动释放。',
     loop:'近身命中 → 积蓄灯火 → 震荡清场、补充灯盾',
@@ -96,9 +136,13 @@ const windDamage=game=>(16+game.level)*game.stats.damageMultiplier*(game.talents
 const emberDamage=game=>((24+game.level*2)*(game.talents.w_flame1?1.4:1)+(game.talents.w_guard3?game.stats.armor*8:0))*game.stats.damageMultiplier;
 const emberRadius=game=>(game.talents.w_flame3?115:85)*(Object.keys(game.talents).length?game.stats.areaMultiplier:1);
 const nearby=(game,x,y,r)=>game.grid.near(x,y,r+30).filter(e=>!e.dead&&Math.hypot(e.x-x,e.y-y)<=r+e.r);
+const forgeLimit=t=>t.f_arc1?6:8;
+const tideLimit=t=>t.m_dash1?65:90;
+const forgeDamage=game=>((20+game.level*1.5)*(game.talents.f_arc2?1.4:1)+(game.talents.f_guard3?game.stats.armor*12:0))*game.stats.damageMultiplier;
+const tideDamage=game=>(18+game.level*1.2)*game.stats.damageMultiplier*(game.talents.m_tide2?1.5:1);
 export function onCharacterLearn(game){
   const s=game.characterState,t=game.talents;
-  s.charge=Math.min(s.charge,game.character.id==='warden'?emberLimit(t):windLimit(game));
+  s.charge=Math.min(s.charge,game.character.id==='smith'?forgeLimit(t):game.character.id==='mariner'?tideLimit(t):game.character.id==='warden'?emberLimit(t):windLimit(game));
   s.xp=Math.min(s.xp,wellLimit(t));
   s.nextWind=Math.min(s.nextWind,game.time+windInterval(game));s.starClock=Math.min(s.starClock,starInterval(game));
 }
@@ -136,9 +180,36 @@ function chargeEmber(game,amount){
   emberPulse(game,p.x,p.y);
 }
 
+function forgeDischarge(game,scale=1){
+  const p=game.player,t=game.talents,targets=nearby(game,p.x,p.y,t.f_arc2?300:240).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y)).slice(0,t.f_arc3?6:3);
+  for(const e of targets){if(t.f_arc3)game.markEnemy(e,'forge',1.2,3);game.effects.push({type:'lightning',x:p.x,y:p.y-8,tx:e.x,ty:e.y-8,t:.28,max:.28,seed:game.time,lvl:2});game.hit(e,forgeDamage(game)*scale,p.x,p.y,25,false,'talent',true)}
+  return targets.length>0;
+}
+function chargeForge(game,amount){
+  const s=game.characterState,t=game.talents,p=game.player;s.charge=Math.min(forgeLimit(t),s.charge+amount);
+  if(s.charge<forgeLimit(t)||game.time<s.nextPulse||!forgeDischarge(game))return;
+  s.charge=0;s.nextPulse=game.time+3*(t.f_arc1?game.stats.haste:1);s.procs++;
+  if(t.f_guard1)p.shield=Math.max(p.shield,10+Math.min(12,game.stats.armor*2)+(t.f_guard3?12:0));
+  if(t.f_guard2)p.hp=Math.min(p.maxHp,p.hp+3);
+}
+function tidePulse(game,scale=1){
+  const p=game.player,t=game.talents,r=65*(t.m_tide1?1.35*game.stats.areaMultiplier:1),duration=t.m_tide1?game.stats.durationMultiplier:1;
+  game.effects.push({type:'pulse',x:p.x,y:p.y-8,r,color:'#94d9df',t:.6,max:.6});
+  for(const e of nearby(game,p.x,p.y,r)){e.slow=Math.max(e.slow,1.5*duration);if(t.m_tide3)e.freeze=Math.max(e.freeze,e.boss?.2:duration);if(t.m_guard3)game.markEnemy(e,'harbor',1.15,3);game.hit(e,tideDamage(game)*scale,p.x,p.y,50,false,'talent',true)}
+}
+function chargeTide(game,moved){
+  const s=game.characterState,t=game.talents,p=game.player;s.charge=Math.min(tideLimit(t),s.charge+moved);
+  if(s.charge<tideLimit(t)||game.time<s.nextPulse)return;
+  s.charge=0;s.nextPulse=game.time+2*(t.m_tide2?game.stats.haste:1);s.procs++;tidePulse(game);
+  if(t.m_guard1)p.shield=Math.max(p.shield,t.m_guard3?18:8);
+  if(t.m_guard2&&game.time>=s.nextWell){p.hp=Math.min(p.maxHp,p.hp+2);s.nextWell=game.time+4}
+}
+
 export function updateCharacterTalents(game,dt,moved){
   const s=game.characterState,t=game.talents,p=game.player;
   if(game.character.id==='warden'&&p.hp>0)chargeEmber(game,0);
+  if(game.character.id==='smith'&&p.hp>0)chargeForge(game,0);
+  if(game.character.id==='mariner'&&p.hp>0)chargeTide(game,moved);
   if(game.character.id==='witch'){
     if(t.s_scholar2)onCharacterXp(game,0);
     s.starClock-=dt;
@@ -174,6 +245,7 @@ export function onCharacterHit(game,e,source,periodic,critical=false){
     chargeEmber(game,ready?(s.assaultUntil>game.time?2:1):0);
   }
   if(periodic)return;
+  if(game.character.id==='smith'&&(tags.includes('lightning')||tags.includes('projectile'))&&game.time>=s.nextCharge){s.nextCharge=game.time+.25;chargeForge(game,1)}
   if(t.s_scholar1&&(tags.includes('spirit')||tags.includes('summon')))e.starMarkedUntil=game.time+4;
   if(t.s_frost2&&(e.slow>0||e.freeze>0)&&e.hp>0&&!e.dead&&s.nextStar<=game.time){s.nextStar=game.time+.8;fireStar(game,p.x,p.y-8,Math.atan2(e.y-p.y,e.x-p.x))}
   if(t.r_shot2&&(tags.includes('projectile')||tags.includes('beam'))&&s.nextQuiver<=game.time){s.nextQuiver=game.time+.2;s.charge=Math.min(windLimit(game),s.charge+6)}
@@ -201,6 +273,12 @@ export function onCharacterProjectileHit(game,b,e){
 }
 export function onCharacterDash(game){
   const t=game.talents,s=game.characterState,p=game.player;
+  if(t.f_dash3)s.nextPulse=game.time;
+  if(t.f_dash1)chargeForge(game,4);
+  if(t.f_dash2)forgeDischarge(game,.6);
+  if(t.m_dash2)tidePulse(game,.7);
+  if(t.m_dash3){s.nextPulse=game.time;chargeTide(game,tideLimit(t))}
+  for(const kind of Object.keys(game.weapons)){const tags=WEAPON_FAMILIES[kind]||[];if(t.f_dash3&&tags.some(tag=>tag==='lightning'||tag==='projectile')||t.m_dash3&&tags.some(tag=>tag==='cold'||tag==='spirit'))game.timers[kind]=Math.max(0,(game.timers[kind]||0)-(t.f_dash3?1:.8))}
   if(t.w_dash3){s.assaultUntil=game.time+4;s.nextPulse=Math.min(s.nextPulse,game.time+2.5*game.stats.haste)}
   if(t.w_dash1)chargeEmber(game,3);
   if(t.w_dash2)emberPulse(game,p.x,p.y,.8);
@@ -229,6 +307,10 @@ export function onCharacterXp(game,amount,starLinked=false){
 
 export function characterTalentProgress(game){
   const s=game.characterState,t=game.talents;if(!s)return {value:0,max:1,label:'出征后激活',ready:false};
+  if(game.character.id==='smith'||game.character.id==='mariner'){
+    const forge=game.character.id==='smith',max=forge?forgeLimit(t):tideLimit(t),left=Math.max(0,s.nextPulse-game.time);
+    return {value:Math.min(max,s.charge),max,label:s.charge>=max?(left?'蓄满 · 冷却 '+left.toFixed(1)+'s':'蓄满 · 待发'):forge?'雷电与弹道命中蓄电':'移动积蓄归潮',ready:s.charge>=max&&!left};
+  }
   if(game.character.id==='witch'){
     if(t.s_scholar2)return {value:s.xp,max:wellLimit(t),label:s.xp>=wellLimit(t)?'灵泉冷却 '+Math.max(0,s.nextWell-game.time).toFixed(1)+'s':'引星经验 '+Math.floor(s.xp)+'/'+wellLimit(t),ready:s.xp>=wellLimit(t)&&s.nextWell<=game.time};
     const interval=starInterval(game);return {value:Math.min(interval,Math.max(0,interval-s.starClock)),max:interval,label:s.starClock<=0?'星火待敌':'星火齐射 '+s.starClock.toFixed(1)+'s',ready:s.starClock<=0};
@@ -238,12 +320,15 @@ export function characterTalentProgress(game){
 }
 export function characterTalentSummary(game){
   const t=game.talents,s=game.characterState;
+  if(game.character.id==='smith')return forgeLimit(t)+' 层电荷 · 放电 '+Math.round(forgeDamage(game))+' 伤害 ×'+(t.f_arc3?6:3)+' 目标 · 本局放电 '+s.procs+' 次';
+  if(game.character.id==='mariner')return tideLimit(t)+' 距离蓄潮 · 潮环 '+Math.round(tideDamage(game))+' 伤害 · 本局归潮 '+s.procs+' 次';
   if(game.character.id==='warden')return emberLimit(t)+' 层触发 · 震荡 '+Math.round(emberDamage(game))+' 伤害 / '+Math.round(emberRadius(game))+' 范围 · 灯盾 '+(t.w_guard1?16+Math.min(10,game.stats.armor):8)+' · 本局蓄满 '+s.procs+' 次';
   if(game.character.id==='witch')return starCount(game)+' 伴星 · 星火 '+Math.round(starDamage(game))+' 伤害 / '+Number(starInterval(game).toFixed(2))+' 秒 · '+(t.s_swarm2?2:1)+' 目标'+(t.s_scholar2?' · 灵泉 '+s.wells+' 次 / 引星回收 '+Math.round(s.starXp):t.s_frost3?' · 冰爆 '+s.coldBursts+' 次':' · 本局齐射 '+s.procs+' 次');
   return windLimit(game)+' 距离蓄满 · 风矢 '+Math.round(windDamage(game))+' 伤害 ×'+(t.r_shot3?3+Math.min(2,game.stats.amount):1)+' / '+Number(windInterval(game).toFixed(2))+' 秒 · 穿透 '+(t.r_shot2?3:2)+' 目标'+(t.r_sight2?' · 追猎 '+s.hunts+' 次':' · 本局疾射 '+s.procs+' 次');
 }
 export function characterTalentStatus(game){
   const s=game.characterState,t=game.talents;if(!s)return '';
+  if(game.character.id==='smith'||game.character.id==='mariner')return (game.character.id==='smith'?'电荷 ':'归潮 ')+Math.floor(s.charge)+'/'+(game.character.id==='smith'?forgeLimit(t):tideLimit(t))+(s.nextPulse>game.time?' · 冷却 '+(s.nextPulse-game.time).toFixed(1)+'s':' · 就绪');
   if(game.character.id==='warden')return '灯火 '+s.charge+'/'+emberLimit(t)+(s.nextPulse>game.time?' · 震荡 '+(s.nextPulse-game.time).toFixed(1)+'s':' · 震荡就绪')+(t.w_guard3?(s.revived?' · 灯芯已用':s.reviveReady?' · 灯芯已存':' · 灯芯待蓄'):'');
   if(game.character.id==='witch')return '伴星 ×'+starCount(game)+' · 星火 '+Math.round(starDamage(game))+' 伤害'+(t.s_scholar2?' · 引星 '+Math.floor(s.xp)+'/'+wellLimit(t):'');
   return '猎风 '+Math.floor(s.charge)+'/'+windLimit(game)+(s.nextWind>game.time?' · 疾射 '+(s.nextWind-game.time).toFixed(1)+'s':s.charge>=windLimit(game)?' · 疾射待发':' · 移动蓄势');

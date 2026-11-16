@@ -26,6 +26,11 @@ export function weaponFacts(kind, values) {
     const v = values;
     const facts = [[kind === 'flame' ? '火种直击' : ['orbit','glacier'].includes(kind) ? '接触伤害' : '单次伤害', damage(v.damage)]];
     if (kind !== 'orbit') facts.push(['施放冷却', seconds(v.cooldown)]);
+    if(['capacitor','arcforge'].includes(kind))facts.push(['连锁目标',v.count+' 个'],['连锁距离',v.chainRange+' 像素']);
+    if(['tide','maelstrom'].includes(kind))facts.push(['每轮潮环',v.count+' 道'],['潮环半径',v.radius+' 像素'],['行进持续',seconds(v.duration)],['命中规则','每道对每名敌人一次']);
+    if(['needle','frostloom','lantern','beacon'].includes(kind))facts.push(['每轮弹数',v.count+' 枚'],['每弹命中上限',v.pierce+' 个目标'],['追踪',v.homing?'自动转向':'直线飞行']);
+    if(['capacitor','arcforge','frostloom','lantern','beacon'].includes(kind)&&v.blastDamage)facts.push(['附带震荡伤害',damage(v.blastDamage)],['震荡半径',v.blastRadius+' 像素']);
+    if(['tide','maelstrom','needle','frostloom'].includes(kind)){facts.push(['减速 55%',seconds(v.slowDuration)]);if(v.freeze)facts.push(['普通敌人 / 首领冻结',seconds(v.freeze)+' / '+seconds(v.bossFreeze)])}
     if (kind === 'solar') facts.push(['全周斩击半径', v.radius + ' 像素'], ['灼烧伤害', `${damage(v.burnDamage)} / ${seconds(v.hitInterval)}`], ['火环范围', `${v.innerRadius}–${v.radius} 像素`], ['火环持续', seconds(v.duration)]);
     if (kind === 'thunderbolt') facts.push(['每轮追踪箭', v.count + ' 枚'], ['每矢最多命中', v.pierce + ' 个敌人'], ['每矢首次命中连锁', v.chainCount + ' 个其他目标'], ['连锁伤害', damage(v.chainDamage)], ['连锁搜索范围', v.chainRange + ' 像素']);
     if (kind === 'glacier') facts.push(['寒晶数量', v.count + ' 颗'], ['接触间隔', seconds(v.hitInterval)], ['环绕半径', v.radius + ' 像素'], ['寒域半径 / 持续', v.fieldRadius + ' 像素 / ' + seconds(v.fieldDuration)], ['寒域持续伤害', `${damage(v.fieldDamage)} / ${seconds(v.fieldInterval)}`], ['终结冰爆伤害', damage(v.blastDamage)], ['敌人 / 首领冻结', `${seconds(v.freeze)} / ${seconds(v.bossFreeze)}`], ['牵引与减速', '牵引至寒晶环 · 减速 55%']);

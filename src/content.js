@@ -1,5 +1,13 @@
 // All entries are local, original game content. Levels share the combat formulas in stats.js.
 export const NEW_WEAPONS = {
+  capacitor:{name:'鸣雷线圈',evolution:'终焉·电冕',color:'#e4c179',category:'雷电 / 跳跃放电',desc:'向近敌释放电弧，在不同目标间跳跃；进化后末端爆发雷环。',upgrades:['电弧跳向两个不同目标。','提高电弧伤害与连锁距离。','增加连锁目标。','提高伤害与放电频率。','再次增加连锁目标。','进化：连锁末端引发雷环。'],cooldown:1.1},
+  tide:{name:'回潮法印',evolution:'终焉·沧浪',color:'#91d9e0',category:'寒潮 / 移动波阵',desc:'向近敌推出缓慢前进的潮环，击退并减速沿途敌人；同一潮环只命中每名敌人一次。',upgrades:['推出击退与减速潮环。','提高潮环伤害与半径。','每轮推出两道潮环。','提高伤害与减速持续。','潮环覆盖更远。','进化：三道宽阔寒潮冻结敌人。'],cooldown:2.1},
+  needle:{name:'霜织飞梭',evolution:'终焉·千针雪',color:'#badfee',category:'投射 / 寒针穿透',desc:'发射高速寒针，穿透并减速；进化后命中附带短暂冻结。',upgrades:['发射两枚穿透寒针。','提高伤害与穿透。','增加一枚寒针。','提高伤害与射速。','增加寒针与穿透目标。','进化：六枚寒针冻结追兵。'],cooldown:1.8},
+  lantern:{name:'渡魂天灯',evolution:'终焉·千灯渡',color:'#c2e7bb',category:'灵魂 / 追踪灯火',desc:'放飞追踪魂灯，穿过敌群；进化后每枚魂灯首次命中引发魂光震荡。',upgrades:['放飞两枚追踪魂灯。','提高魂灯伤害。','增加魂灯数量。','提高伤害与穿透。','再次增加魂灯数量。','进化：魂灯首击引发范围震荡。'],cooldown:2.8},
+  arcforge:{name:'万雷熔心',fusion:true,maxLevel:3,color:'#f0c77d',category:'融合 / 电弧熔炉',desc:'密集电弧横穿敌群，末端引发大范围雷爆。',upgrades:['连续电弧与末端雷爆。','增加目标、雷爆范围与伤害。','熔心极境：更密集、更快的雷网。'],cooldown:2.4},
+  maelstrom:{name:'归墟潮眼',fusion:true,maxLevel:3,color:'#91e0dd',category:'融合 / 牵引寒潮',desc:'多道潮眼前进，牵引并冻结沿途敌人；每道对每个敌人命中一次。',upgrades:['推出三道牵引潮眼。','增加潮眼与冻结范围。','归墟极境：五道宽阔潮眼。'],cooldown:3.2},
+  frostloom:{name:'织冬星梭',fusion:true,maxLevel:3,color:'#d6e9f7',category:'融合 / 追踪冰针',desc:'追踪穿透冰针冻结敌人，首击展开碎冰震荡。',upgrades:['追踪冰针与首击冰爆。','增加穿透与碎冰伤害。','织冬极境：更密集的寒针风暴。'],cooldown:1.9},
+  beacon:{name:'彼岸万灯',fusion:true,maxLevel:3,color:'#e4e9af',category:'融合 / 追魂共鸣',desc:'放飞多枚追踪魂灯，每枚首次命中产生魂光震荡。',upgrades:['魂灯群与范围共鸣。','提高灯群数量与共鸣范围。','彼岸极境：更强的魂光奔流。'],cooldown:2.6},
   hailfire:{name:'烬雪天灾',fusion:true,maxLevel:3,color:'#dfbbb1',category:'融合 / 冻星与余火',desc:'降下冰火陨星，落地冻结敌人并留下持续燃烧、减速的余烬寒域。首领只会被短暂冻结。',upgrades:['冻星落地后留下冰火寒域。','增加冻星与寒域持续时间。','天灾极境：密集冻星与广域余火。'],cooldown:4.6},
   soulforge:{name:'群星灵龛',fusion:true,maxLevel:3,color:'#b4d9df',category:'融合 / 追魂召唤',desc:'部署发射多枚追踪魂火的灵龛，魂火可以穿透；灵龛到期或被替换时释放散魂震波，最多同时存在两座。',upgrades:['灵龛发射追踪魂火，消散时震荡。','增加魂火数量与散魂范围。','灵龛极境：更密集的追魂齐射。'],cooldown:6.5},
   shard:{name:'骸骨飞轮',evolution:'终焉·骨旋',rarity:'uncommon',color:'#d8cbb2',category:'投射物 / 跳弹',desc:'掷出骸骨飞轮，命中后弹向另一名敌人；同一飞轮不会重复命中同一目标。',upgrades:['飞轮在两名敌人间弹跳。','提高伤害与弹跳次数。','增加每轮飞轮数量。','提高弹跳伤害。','再次增加每轮飞轮数量。','进化：更多飞轮齐发，追逐更多目标。'],cooldown:2.6},
@@ -30,7 +38,13 @@ export const NEW_WEAPONS = {
 };
 
 export const RELICS = {
-  everseed:{name:'无尽薪种',color:'#e4cc82',max:3,relic:true,rarity:'rare',trigger:'学习天赋后，角色能力命中',families:['talent'],desc:'学会任一天赋后，灯火震荡、星火或风矢每次命中有 3% / 4.5% / 6% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2。本局累计无层数上限，无触发冷却；增加生命上限不治疗。',lore:'偶然拾到的微光，也能燃成无尽长夜。'},
+  circuit:{name:'过载铜环',color:'#e7c27d',max:3,relic:true,trigger:'雷电直接命中',families:['lightning'],desc:'每累计六次雷电命中，向附近目标放出额外电弧。',lore:'过载的余音，也能成为兵器。'},
+  brine:{name:'深盐结晶',color:'#9cdae0',max:3,relic:true,trigger:'寒霜、灵魂直接命中',families:['cold','spirit'],desc:'命中留下减速盐痕，并附加短暂易伤。',lore:'大海退去之后，伤口仍记得它。'},
+  wake:{name:'破浪罗盘',color:'#99d3df',max:3,relic:true,trigger:'主动冲刺',families:['dash'],desc:'冲刺时向身后放出扇形穿透魂矢。',lore:'归路永远指向你身后的潮声。'},
+  souljar:{name:'拾魂瓮',color:'#c4dcaa',max:3,relic:true,trigger:'击败敌人',families:['hit'],desc:'每击败十二个非召唤敌人，放出三枚追踪魂火。',lore:'没有一个灵魂愿意独自远行。'},
+  sundial:{name:'逆刻日晷',color:'#ddc69e',max:3,relic:true,trigger:'武器主动施放',families:['cast'],desc:'每施放五次武器，推进当前冷却最长的武器。',lore:'它不使时间倒流，只偷走等待。'},
+  emberheart:{name:'炉心余温',color:'#e4ac8c',max:3,relic:true,trigger:'击败精英、首领',families:['guard'],desc:'击败精英或首领后恢复生命，并补充护盾。',lore:'熄灭的炉膛，也能温暖归人。'},
+  everseed:{name:'无尽薪种',color:'#e4cc82',max:3,relic:true,rarity:'rare',trigger:'学习天赋后，角色能力命中',families:['talent'],desc:'学会任一天赋后，角色能力每次命中有 3% / 4.5% / 6% 概率随机获得伤害 +1%、范围 +1% 或最大生命 +2。本局累计无层数上限，无触发冷却；增加生命上限不治疗。',lore:'偶然拾到的微光，也能燃成无尽长夜。'},
   soulpact:{name:'牧魂契',color:'#acd3da',max:3,relic:true,catalyst:true,rarity:'uncommon',trigger:'灵魂与召唤武器',families:['spirit','summon'],desc:'强化灵魂与召唤武器的伤害，并加快石像的射击节奏。学习星群路线后，也强化角色伴星。',lore:'灯火有了守护灯火的人。'},
   hoarfrost:{name:'霜行石',color:'#b7dce2',max:3,relic:true,rarity:'uncommon',trigger:'主动冲刺',families:['dash'],desc:'冲刺起点爆发冰环，冻结并减速追兵；可为碎冰、雷霜反应提供寒冷状态。',lore:'踏过的地方，脚步仍留在冬天。'},
   rotclock:{name:'腐时沙漏',color:'#c6bd81',max:3,relic:true,rarity:'uncommon',trigger:'燃烧与侵蚀状态伤害',families:['fire','poison'],desc:'提高附着在敌人身上的燃烧与侵蚀伤害；地面火场、毒池的独立伤害不受影响。',lore:'流逝的不是沙，是尚未腐尽的时间。'},
@@ -58,6 +72,7 @@ export const RELICS = {
 };
 
 export const WEAPON_FAMILIES = {
+  capacitor:['lightning','cast'],arcforge:['lightning','area','cast'],tide:['cold','area','cast'],maelstrom:['cold','spirit','area','cast'],needle:['cold','projectile','cast'],frostloom:['cold','projectile','area','cast'],lantern:['spirit','projectile','cast'],beacon:['spirit','projectile','area','cast'],
   hailfire:['fire','cold','cast'],soulforge:['spirit','summon','projectile','cast'],
   shard:['projectile','cast'],meteor:['fire','cast'],mine:['blast','cast'],tether:['spirit','cast'],sentinel:['summon','projectile','cast'],lance:['melee','beam','cast'],
   starfall:['fire','cast'],bastion:['summon','projectile','cast'],wintermine:['cold','cast'],soulchain:['spirit','cast'],ricochet:['projectile','cast'],execution:['melee','beam','cast'],supernova:['fire','beam','cast'],stormsentry:['summon','projectile','lightning','cast'],pestilence:['poison','cast'],
@@ -98,6 +113,7 @@ export const BUILD_TAGS={
   mobility:{name:'游击',color:'#bfce9d'},growth:{name:'成长',color:'#bdd396'},versatile:{name:'通用',color:'#b8baa6'},
 };
 const EXTRA_TAGS={
+  circuit:['lightning','projectile'],brine:['cold','spirit','control'],wake:['mobility','projectile'],souljar:['spirit','growth'],sundial:['versatile'],emberheart:['guard'],
   everseed:['growth'],
   meteor:['area'],mine:['area'],tether:['control'],lance:['melee'],starfall:['area'],bastion:['guard'],wintermine:['area','control'],soulchain:['control','area'],supernova:['area'],pestilence:['area'],
   orbit:['guard'],storm:['area'],flame:['area'],frost:['area','control'],thorn:['area'],bell:['area','control'],solar:['area'],glacier:['control','guard'],requiem:['area'],plague:['area'],bloodmoon:['guard'],absolute:['control','area'],hailfire:['area','control'],soulforge:['area'],
@@ -112,6 +128,10 @@ export function itemTags(key){
 }
 
 export const SYNERGIES=[
+  {items:['circuit','stormcoil'],name:'双环过载',resonance:true,desc:'雷电积蓄电弧与护盾，连续命中形成连锁。'},
+  {items:['brine','rime'],name:'盐霜碎镜',resonance:true,desc:'盐痕制造寒冷易伤，后续命中引发碎冰。'},
+  {items:['wake','speed'],name:'逐浪归航',resonance:true,desc:'缩短冲刺间隔，让身后不断留下魂矢。'},
+  {items:['souljar','soulpact'],name:'万魂归瓮',desc:'召唤武器完成击杀，魂瓮追加追踪火力。'},
   {items:['hoarfrost','rime'],name:'踏雪碎镜',resonance:true,desc:'冲刺冻结追兵，后续武器命中触发碎冰。'},
   {items:['hoarfrost','stormseal'],name:'逐雷寒径',resonance:true,desc:'冲刺施加寒冷，再由雷电武器传导冻结。'},
   {items:['embercore','rotclock'],name:'迟燃余烬',resonance:true,desc:'燃芯提供附着灼烧，沙漏提高每次灼烧伤害。'},
@@ -136,6 +156,12 @@ export const SYNERGIES=[
 export function relicValues(key,level,stats) {
   const damage=base=>base*(stats?.damageMultiplier||1);
   switch(key) {
+    case 'circuit': return {hits:6,damage:damage(12+level*10),count:level+1,range:145};
+    case 'brine': return {duration:1+level*.4,multiplier:1.04+level*.04};
+    case 'wake': return {damage:damage(15+level*12),count:2+level,pierce:2};
+    case 'souljar': return {kills:12,count:3,damage:damage(16+level*12)};
+    case 'sundial': return {casts:5,advance:level*.5};
+    case 'emberheart': return {heal:2+level*2,shield:4+level*4};
     case 'everseed': return {chance:.015+level*.015};
     case 'soulpact': return {multiplier:1+level*.18,interval:1-level*.06};
     case 'hoarfrost': return {damage:damage(15+level*13),radius:65+level*9,freeze:.4+level*.2,bossFreeze:.15,slowDuration:2+level*.4};
@@ -167,7 +193,13 @@ export function relicValues(key,level,stats) {
 export function relicDescription(key,level,stats) {
   const v=relicValues(key,level,stats),d=n=>Math.round(n),s=n=>Number(n.toFixed(2));
   switch(key) {
-    case 'everseed': return '学会天赋后，灯火震荡／星火／风矢命中：'+s(v.chance*100)+'% 随机获得伤害 +1%、范围 +1% 或生命上限 +2；本局无限累加、无冷却，加生命不治疗。';
+    case 'circuit': return '每累计 6 次雷电直接命中，传导 '+v.count+' 个其他目标，各 '+d(v.damage)+' 伤害；追加电弧不递归触发。';
+    case 'brine': return '寒霜、灵魂武器直接命中减速 55%，并施加 '+d((v.multiplier-1)*100)+'% 易伤，持续 '+s(v.duration)+' 秒；同类刷新，易伤只取最高。';
+    case 'wake': return '每次冲刺向身后发射 '+v.count+' 枚魂矢，各 '+d(v.damage)+' 伤害，穿透 2 个目标；不触发命中遗物。';
+    case 'souljar': return '击败 12 个非召唤敌人，放出 3 枚追踪魂火，各 '+d(v.damage)+' 伤害；追加火力不触发命中遗物。';
+    case 'sundial': return '每施放 5 次武器，将剩余施放冷却最长的一件武器推进 '+s(v.advance)+' 秒；环绕接触不计数。';
+    case 'emberheart': return '击败精英或首领恢复 '+v.heal+' 生命，护盾补至 '+v.shield+'；不超过生命上限，不覆盖更高护盾。';
+    case 'everseed': return '学会天赋后，角色能力命中：'+s(v.chance*100)+'% 随机获得伤害 +1%、范围 +1% 或生命上限 +2；本局无限累加、无冷却，加生命不治疗。';
     case 'soulpact': return '灵魂、召唤武器伤害 +'+d((v.multiplier-1)*100)+'%；石像与灵龛射击间隔缩短 '+d((1-v.interval)*100)+'%。学习星群路线后，伴星继承上述两项加成。';
     case 'hoarfrost': return '冲刺起点爆发半径 '+v.radius+' 冰环，造成 '+d(v.damage)+' 伤害；冻结普通敌人 '+s(v.freeze)+' 秒、首领 '+v.bossFreeze+' 秒，再减速 55% 持续 '+s(v.slowDuration)+' 秒。';
     case 'rotclock': return '附着燃烧、侵蚀的每次状态伤害 +'+d((v.multiplier-1)*100)+'%；地面火场与毒池伤害不变。';
@@ -218,8 +250,8 @@ export function compatibleWeapons(key,weapons,passives={},talents={},characterId
   const enabled=id=>!!passives[id]&&RELICS[id].families.some(tag=>tags.includes(tag));
   const fire=tags.includes('fire')||enabled('embercore')||!!passives.dashfire||!!talents.w_flame2;
   const poison=tags.includes('poison')||enabled('venomfang');
-  const cold=tags.includes('cold')||!!weapons.tether||!!weapons.soulchain||enabled('frostbrand')||!!talents.s_frost1||!!passives.hoarfrost;
-  if(key==='bulwark'&&!passives.aegis&&!weapons.bastion&&!talents.s_scholar2&&characterId!=='warden'&&!(passives.stormcoil&&tags.includes('lightning')))return [];
+  const cold=tags.includes('cold')||!!weapons.tether||!!weapons.soulchain||enabled('frostbrand')||enabled('brine')||!!talents.s_frost1||!!passives.hoarfrost||characterId==='mariner';
+  if(key==='bulwark'&&!passives.aegis&&!passives.emberheart&&!weapons.bastion&&!talents.s_scholar2&&!talents.f_guard1&&!talents.m_guard1&&characterId!=='warden'&&!(passives.stormcoil&&tags.includes('lightning')))return [];
   const refinedBurn=Object.keys(weapons).some(id=>weaponUpgrades[id]?.anomaly>0&&WEAPON_FAMILIES[id]?.includes('fire'));
   if(key==='rotclock'&&!poison&&!enabled('embercore')&&!talents.w_flame2&&!refinedBurn)return [];
   if(key==='volatile'&&!(fire&&poison)||key==='stormseal'&&!cold)return [];

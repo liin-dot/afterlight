@@ -38,6 +38,8 @@ const humanoid = [
  '   oooo oooo     ',
 ];
 const charColors = {
+ smith:{o:'#211e20',c:'#77665d',h:'#c4a27c',s:'#d0ae8c',e:'#ffdf91',l:'#e6bc86',b:'#414954',g:'#f1c474',d:'#333c42'},
+ mariner:{o:'#14242b',c:'#447f91',h:'#8cc3cb',s:'#c3b49c',e:'#d2f0e0',l:'#e0dab7',b:'#284954',g:'#b1dccb',d:'#293d48'},
  warden:{o:'#131e1b',c:'#aa694c',h:'#d19569',s:'#b7a58b',e:'#f6d299',l:'#dec49a',b:'#343b32',g:'#d2a779',d:'#3e4838'},
  witch:{o:'#131e1d',c:'#76658c',h:'#b49dc5',s:'#b6b9b1',e:'#b8f2dd',l:'#d6e5ce',b:'#353c4d',g:'#85cbb6',d:'#3a3c46'},
  ranger:{o:'#101e1a',c:'#738659',h:'#a5b57d',s:'#c2af8c',e:'#e0e4a5',l:'#eee0ac',b:'#2a4332',g:'#be995f',d:'#3b4731'},
@@ -52,6 +54,24 @@ export function sprite(kind,frame=0,variant=0){
    if(kind==='warden'){rect(g,'#272a24',25,16,2,15);rect(g,'#777d6b',26,13,2,13);rect(g,'#dcdabc',26,14,1,11);rect(g,'#bd935b',23,25,6,2);rect(g,'#755238',26,27,2,4);rect(g,'#eee0b1',27,13,1,2)}
    if(kind==='witch'){rect(g,'#584636',26,14,2,18);rect(g,'#b79b71',26,16,1,14);rect(g,'#52776b',24,11,6,6);rect(g,'#a1e1c7',25,10,4,5);rect(g,'#e7f5d8',26,10,2,2);rect(g,'#6d5b88',13,5,8,3);rect(g,'#9581a8',14,3,5,3);rect(g,'#bfacc4',15,2,3,2)}
    if(kind==='ranger'){rect(g,'#543f2e',24,13,2,19);rect(g,'#b8945a',25,13,2,3);rect(g,'#b8945a',27,16,2,13);rect(g,'#b8945a',25,29,2,3);rect(g,'#d1c497',25,17,1,12);rect(g,'#b89b69',25,22,7,1);rect(g,'#e3d9ad',30,21,2,3)}
+   if(kind==='smith'){rect(g,'#9f8c76',25,15,2,18);rect(g,'#45586a',21,12,10,7);rect(g,'#edc88d',22,13,3,5);rect(g,'#e6b270',11,11,12,2);rect(g,'#303c47',12,11,4,3);rect(g,'#303c47',18,11,4,3);rect(g,'#f5dba1',13,11,2,1);rect(g,'#f5dba1',19,11,2,1)}
+   if(kind==='mariner'){rect(g,'#e3d4ae',10,6,14,3);rect(g,'#7bacb3',12,4,11,3);rect(g,'#b7d9cf',25,12,2,20);rect(g,'#72a8b8',21,27,10,2);rect(g,'#a6d8dd',21,23,2,5);rect(g,'#a6d8dd',29,23,2,5);rect(g,'#e5e9c7',24,13,5,3)}
+ }else if(kind==='cinderling'){
+   pixels(g,['    y  y    ','   rooor    ','  roffoor   ',' roffyfoor  ',' roobbooor  ','  orooro    ',' orffffro   ','orrfoofrro  ','o rroorr o  ','   oo oo    ','  rro orr   '],{o:'#3f3031',r:'#ba6c44',f:'#efab5f',y:'#ffe3a0',b:'#141d22'},9,17+frame%2);
+ }else if(kind==='bomber'){
+   rect(g,'#342e2e',8,12,18,19);rect(g,'#925b42',10,13,14,17);rect(g,'#b48c61',8,15,18,3);rect(g,'#b48c61',8,25,18,3);rect(g,'#efd191',12,19,3,2);rect(g,'#efd191',20,19,3,2);rect(g,'#e9a45d',15,8,4,6);rect(g,'#ffdd91',16,5+frame%2,2,5);rect(g,'#3d4340',9,31,6,3);rect(g,'#3d4340',21,31,6,3);
+ }else if(kind==='bulwark'){
+   g.drawImage(sprite('knight',frame),0,0);rect(g,'#18272c',3,16,13,19);rect(g,'#5d777e',4,17,11,16);rect(g,'#d5b285',5,18,2,13);rect(g,'#aec6c3',8,19,2,9);rect(g,'#2e434d',11,17,3,16);rect(g,'#dcbd88',10,9,10,2);
+ }else if(kind==='siren'){
+   pixels(g,['    pppp    ','   paccap   ','   pceecp   ','    pccp    ','  ppccccpp  ',' pcaccccacp ','pc pacccp cp',' p pccccp p ','   paccap   ','   ppccpp   ','  pccaaccp  ',' pccp  pccp ','pppp    pppp'],{p:'#243c55',a:'#64a2b0',c:'#a4d3ce',e:'#f4dda7'},8,12+frame%2);rect(g,'#ceb584',25,14,2,17);rect(g,'#e4dcb3',23,12,6,3);
+ }else if(kind==='leech'){
+   poly(g,'#263b47',[[3,31],[7,25],[10,26],[11,17],[16,12],[23,15],[27,24],[25,32],[18,35],[8,34]]);rect(g,'#5797a5',13,17,11,14);rect(g,'#a2ced2',14,17,8,3);rect(g,'#222a3a',16,21,8,6);rect(g,'#e1d6b2',16,21,2,3);rect(g,'#e1d6b2',21,24,2,3);rect(g,'#77b5bb',7,29-frame%2,10,3);
+ }else if(kind==='oracle'){
+   pixels(g,humanoid,{o:'#242337',c:'#65577d',h:'#9b85ac',s:'#9eacb9',e:'#eddbb1',l:'#e2d6c6',b:'#334354',g:'#bcd9cd',d:'#35374e'},7,6);rect(g,'#dbbf91',11,5,12,3);rect(g,'#dbbf91',11,1,2,5);rect(g,'#dbbf91',21,1,2,5);diamond(g,27,17,4,'#a8d8d1');rect(g,'#6d8d94',26,21,2,12);
+ }else if(kind==='furnace'||kind==='coral'){
+   c=canvas(52,66);g=c.getContext('2d');
+   if(kind==='furnace'){rect(g,'#242a2c',4,58,44,6);rect(g,'#5e4b43',11,20,32,38);rect(g,'#83715c',9,18,36,5);rect(g,'#3b3435',17,28,21,25);rect(g,'#be7043',19,35,17,16);rect(g,'#edb46d',23,39,9,11);rect(g,'#efd99a',25,43,4,8);rect(g,'#4f4944',25,3,13,15);rect(g,'#8f7960',24,3,15,3);for(let i=0;i<4;i++)rect(g,'#403c39',18+i*5,29,2,23)}
+   else{rect(g,'#2a4a54',5,58,42,5);poly(g,'#637e91',[[22,61],[20,38],[8,31],[6,16],[11,17],[14,28],[23,30],[25,9],[30,8],[31,33],[39,26],[40,15],[45,14],[45,30],[31,43],[33,60]]);rect(g,'#92b5bd',26,12,3,43);rect(g,'#c4c9b0',25,5,5,8);rect(g,'#b4c5c3',5,13,6,6);rect(g,'#abbec4',40,10,6,6);diamond(g,17,47,3,'#c2d8bc')}
  }else if(kind==='skeleton'){
    pixels(g,[
     '   ooooo   ','  obbbbbo  ',' obbhbbbbo ',' obooboobbo',' obooboobbo','  obbbbbo  ','   bobob   ','    ooo    ',' obbooboob ','ob obbbo bo','ob bbbbo bo','ob obbbo bo',' b obobo b ','   obobo   ','   obobo   ','   bo ob   ','  obo obo  ','  bb   bb  '

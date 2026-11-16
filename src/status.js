@@ -41,7 +41,11 @@ export class CharacterSheet {
     this.mobile=matchMedia('(max-width:700px),(max-height:500px)');
     for(const tab of ['items','fusion']){
       const root=$('sheet-'+tab);
-      root.querySelector('.collection-category')?.addEventListener('change',()=>{this.hideCollection(tab);root.dataset.page=0;this.renderCollection(tab)});
+      const categories=root.querySelector('.collection-category');
+      if(categories)for(const [key,label,icon] of [['all','全部','amount'],['weapon','武器','blade'],['passive','祝福','power'],['relic','遗物','stormcoil'],['boon','契约','curse']]){
+        const button=node('button','icon-choice');button.dataset.choice=key;button.title=label;button.setAttribute('aria-label',label);button.append(artwork(icon),node('span','',label));
+        button.addEventListener('click',()=>{categories.dataset.value=key;this.hideCollection(tab);root.dataset.page=0;this.renderCollection(tab)});categories.append(button);
+      }
       for(const [selector,step] of [['.collection-prev',-1],['.collection-next',1]])root.querySelector(selector).addEventListener('click',()=>{this.hideCollection(tab);root.dataset.page=Number(root.dataset.page||0)+step;this.renderCollection(tab);this.collectionClosing=true;root.querySelector('.catalog-item')?.focus({preventScroll:true});this.collectionClosing=false});
       root.querySelector('.detail-bubble-close').addEventListener('click',()=>this.hideCollection(tab,true));
       root.querySelector('.detail-bubble').addEventListener('beforetoggle',event=>{if(event.newState==='closed'){root.dataset.selected='';root.collectionAnchor?.classList.remove('selected');root.collectionAnchor?.setAttribute('aria-expanded','false')}});
@@ -132,19 +136,24 @@ export class CharacterSheet {
 
   mobilePages(root, label, entries) {
     entries=entries.filter(([,,elements])=>elements.length);
-    root.querySelector(':scope > .mobile-pages-picker')?.remove();
+    root.querySelector(':scope > .mobile-pages-picker')?.remove();root.querySelector(':scope > .mobile-page-back')?.remove();
     if(!entries.length)return;
-    const picker=node('select','mobile-picker mobile-pages-picker');picker.setAttribute('aria-label',label);
-    for(const [id,title,elements] of entries){
-      const option=node('option','',title);option.value=id;picker.append(option);
+    const guide=root.matches('.guide-grid'),picker=node('div','icon-choices mobile-picker mobile-pages-picker'),back=node('button','mobile-page-back hidden','← 返回手记');picker.setAttribute('role','group');picker.setAttribute('aria-label',label);
+    for(const [id,title,elements,icon] of entries){
+      const button=node('button','icon-choice'),original=elements[0].querySelector('canvas'),art=artwork(icon||'growth');button.dataset.choice=id;button.title=title;button.setAttribute('aria-label',title);
+      if(!icon&&original){const g=art.getContext('2d');g.clearRect(0,0,24,24);g.drawImage(original,0,0,24,24)}
+      button.append(art,node('span','',title));button.addEventListener('click',()=>{root.showMobilePage(id);if(guide)back.focus({preventScroll:true})});picker.append(button);
       for(const element of elements){element.classList.add('mobile-page');element.mobilePage={root,id}}
     }
     root.showMobilePage=id=>{
-      root.dataset.mobilePage=id;picker.value=id;
+      root.dataset.mobilePage=id??'';
+      for(const button of picker.children)button.setAttribute('aria-pressed',String(button.dataset.choice===id));
       for(const [key,,elements] of entries)for(const element of elements)element.classList.toggle('mobile-selected',key===id);
+      if(guide){picker.classList.toggle('hidden',id!=null);back.classList.toggle('hidden',id==null)}
     };
-    picker.addEventListener('change',()=>root.showMobilePage(picker.value));root.prepend(picker);
-    root.showMobilePage(entries.some(([id])=>id===root.dataset.mobilePage)?root.dataset.mobilePage:entries[0][0]);
+    root.prepend(picker);
+    if(guide){root.prepend(back);back.addEventListener('click',()=>{const id=root.dataset.mobilePage;root.showMobilePage(null);[...picker.children].find(button=>button.dataset.choice===id)?.focus({preventScroll:true})})}
+    root.showMobilePage(entries.some(([id])=>id===root.dataset.mobilePage)?root.dataset.mobilePage:guide?null:entries[0][0]);
   }
 
   reveal(element) {
@@ -153,8 +162,8 @@ export class CharacterSheet {
     if(collection){
       const tab=collection.id.slice(6),picker=collection.querySelector('.collection-category');
       this.hideDetails();if(this.tab!==tab)this.selectTab(tab);
-      if(picker&&picker.value!=='all'&&picker.value!==element.dataset.category)picker.value=element.dataset.category;
-      const entries=[...collection.querySelector('.collection-cards').children].filter(card=>!picker||picker.value==='all'||picker.value===card.dataset.category);
+      if(picker&&picker.dataset.value!=='all'&&picker.dataset.value!==element.dataset.category)picker.dataset.value=element.dataset.category;
+      const entries=[...collection.querySelector('.collection-cards').children].filter(card=>!picker||picker.dataset.value==='all'||picker.dataset.value===card.dataset.category);
       collection.dataset.page=Math.max(0,Math.floor(entries.indexOf(element)/this.catalog.pageSize));this.renderCollection(tab);this.showCollection(element);
       collection.querySelector('.detail-bubble-close').focus({preventScroll:true});return;
     }
@@ -165,7 +174,8 @@ export class CharacterSheet {
   renderCollection(tab) {
     const root=$('sheet-'+tab),cards=[...root.querySelector('.collection-cards').children];
     const bubble=root.querySelector('.detail-bubble'),restore=bubble.matches(':popover-open')?root.dataset.selected:null,pinned=bubble.dataset.pinned;this.hideCollection(tab);
-    const category=root.querySelector('.collection-category')?.value||'all';
+    const category=root.querySelector('.collection-category')?.dataset.value||'all';
+    for(const button of root.querySelectorAll('.collection-category button'))button.setAttribute('aria-pressed',String(button.dataset.choice===category));
     const entries=cards.filter(card=>tab==='fusion'||category==='all'||card.dataset.category===category);
     for(const card of cards)card.classList.add('hidden');
     const size=this.catalog.pageSize,pages=Math.max(1,Math.ceil(entries.length/size)),page=Math.max(0,Math.min(Number(root.dataset.page||0),pages-1));root.dataset.page=page;
@@ -236,8 +246,8 @@ export class CharacterSheet {
     this.renderCollection('items');
     this.buildMeta(meta,preview);
     const attributes=[...$('sheet-stat-grid').children],groups=[];
-    for(let i=0;i<attributes.length;i+=4)groups.push(['stats-'+i,'角色属性 · '+(i/4+1)+' / '+Math.ceil(attributes.length/4),attributes.slice(i,i+4)]);
-    groups.push(...META_TREES.map((tree,index)=>['meta-'+tree.id,'永久成长 · '+tree.name,[$('sheet-meta').children[index]]]));
+    for(let i=0;i<attributes.length;i+=4)groups.push(['stats-'+i,['战斗','续航','增幅','机制','冲刺'][i/4],attributes.slice(i,i+4),['blade','regen','luck','duration','speed'][i/4]]);
+    groups.push(...META_TREES.map((tree,index)=>['meta-'+tree.id,tree.name,[$('sheet-meta').children[index]],tree.nodes[0]]));
     this.mobilePages($('sheet-attributes'),'选择属性分类',groups);
     this.buildFusions(weapons,passives,preview);
     this.catalog.build();
@@ -325,7 +335,7 @@ export class CharacterSheet {
       ['power', '武器伤害', percent(stats.damageMultiplier), '倍率', source([`角色基础 ×${number(character.damage, 2)}`, m.power && `祭坛 +${m.power * 3}%`, p.power && `猩红誓约 +${p.power * 12}%`,p.curse&&`禁忌烛冠 +${p.curse*10}%`])],
       ['haste', '武器间隔缩减', percent(1-stats.haste*(stats.metaBuffs.haste||1)), '', p.haste ? `时隙沙漏 ${p.haste} 级；含召唤、环绕与领域，共振另计。` : '暂无间隔祝福；武器等级与共振仍会影响实际频率。'],
       ['speed', '移动速度', number(stats.moveSpeed*(stats.metaBuffs.move||1)), '像素 / 秒', source([`角色基础 ${character.speed}`,m.pace&&'行旅轻步 +'+m.pace*2+'%', p.speed && `夜行之靴 +${p.speed * 6}%`])],
-      ['armor', '伤害减免', stats.armor, '点 / 次', '护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'],
+      ['armor', '伤害减免', stats.armor, '点 / 次', (character.id==='smith'?'铸雷师自带 1 护甲。':'')+'护甲扣除固定伤害；至少承受原始伤害的 30%，再由护盾吸收。'],
       ['regen', '持续恢复', number(stats.regeneration,2), '点 / 秒', p.regen ? '复苏苔芽在战斗中持续恢复。' : '需要本局选择恢复道具。'],
       ['regen', '避伤恢复', number(stats.recovery,2), '点 / 秒', '春回之息：连续 4 秒未受攻击后生效；护盾受击也会打断。'],
       ['magnet', '拾取范围', number(stats.pickupRadius), '像素', source(['基础半径 42', character.id === 'witch' && '逐星者 ×1.35', p.magnet && `引魂石 ×${number(1 + p.magnet * .35, 2)}`])],
@@ -337,7 +347,7 @@ export class CharacterSheet {
       ['amount','额外数量',stats.amount,'个','弹数、环绕物与落雷目标；炮台数量上限仍为 2。'],
       ['aegis','当前护盾',preview?(character.id==='warden'?8:0):number(this.game.player.shield),'点','护盾先于生命承受伤害，多个来源取较高值。'],
       ['curse','禁忌等级',stats.curse,'级',stats.curse?`敌人生命 +${stats.curse*12}%，生成频率 +${stats.curse*8}%，速度 +${stats.curse*3}%。`:'未持有禁忌烛冠；怪物按时间变强，不随你的等级额外膨胀。'],
-      ['speed', '冲刺冷却', number(stats.dashCooldown, 2), '秒', source([dashState,'基础 3 秒',p.speed&&`夜行之靴缩短 ${p.speed * 6}%`])],
+      ['speed', '冲刺冷却', number(stats.dashCooldown, 2), '秒', source([dashState,'基础 3 秒',character.id==='mariner'&&'渡潮人缩短 15%',p.speed&&`夜行之靴缩短 ${p.speed * 6}%`])],
       ['armor', '冲刺保护', number(stats.dashInvincibility, 2), '秒', `${number(stats.dashDuration, 2)} 秒冲刺，速度 ×${stats.dashSpeedMultiplier}；冲刺起手获得无敌。`],
     ];
     $('sheet-stat-grid').replaceChildren(...rows.map(([key, label, value, unit, detail]) => {

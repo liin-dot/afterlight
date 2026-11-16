@@ -32,7 +32,10 @@ export class ItemCatalog {
     for(const media of [this.phone,this.landscape,this.short])media.addEventListener('change',()=>{this.page=0;this.render();for(const tab of ['items','fusion'])this.sheet.renderCollection(tab)});
     $('catalog-search').addEventListener('input',e=>{this.query=e.target.value.trim().toLocaleLowerCase();this.page=0;this.render()});
     $('catalog-clear').addEventListener('click',()=>{this.query='';this.page=0;$('catalog-search').value='';this.render();$('catalog-search').focus()});
-    $('catalog-category').addEventListener('change',e=>{this.category=e.target.value;this.page=0;this.render()});
+    for(const [key,label,icon] of [['all','全部','amount'],['weapon','武器','blade'],['fusion','融合','solar'],['passive','祝福','power'],['relic','遗物','stormcoil'],['pickup','拾取','magnet']]){
+      const button=node('button','icon-choice'),art=node('canvas');art.width=art.height=24;art.setAttribute('aria-hidden','true');paintIcon(art,icon);button.dataset.choice=key;button.title=categories[key];button.setAttribute('aria-label',categories[key]);button.append(art,node('span','',label));
+      button.addEventListener('click',()=>{this.category=key;this.page=0;this.render()});$('catalog-category').append(button);
+    }
     for(const [id,step] of [['catalog-prev',-1],['catalog-next',1]])$(id).addEventListener('click',()=>{this.page+=step;this.render();this.closing=true;$('catalog-list').querySelector('button')?.focus({preventScroll:true});this.closing=false});
     $('catalog-detail-close').addEventListener('click',()=>this.hideDetail(true));
     $('catalog-detail').addEventListener('beforetoggle',event=>{if(event.newState==='closed'){this.anchor?.classList.remove('selected');this.anchor?.setAttribute('aria-expanded','false')}});
@@ -69,8 +72,7 @@ export class ItemCatalog {
   render() {
     if(!this.known)return;
     this.hideDetail();
-    $('catalog-category').replaceChildren(...Object.entries(categories).map(([key,label])=>{const option=node('option','',label);option.value=key;return option}));
-    $('catalog-category').value=this.category;
+    for(const button of $('catalog-category').children)button.setAttribute('aria-pressed',String(button.dataset.choice===this.category));
     this.entries=this.known.filter(item=>(this.category==='all'||item.category===this.category)&&(!this.query||[item.data.name,item.data.evolution,item.data.desc,item.data.trigger,categories[item.category],...(item.type==='pickup'?[]:itemTags(item.key).map(tag=>BUILD_TAGS[tag].name))].filter(Boolean).join(' ').toLocaleLowerCase().includes(this.query)));
     const pages=Math.max(1,Math.ceil(this.entries.length/this.pageSize));
     this.page=Math.max(0,Math.min(this.page,pages-1));

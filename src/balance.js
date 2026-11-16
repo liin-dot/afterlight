@@ -3,6 +3,7 @@ import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState
 import {relicDescription,compatibleWeapons,WEAPON_FAMILIES,BUILD_TAGS,itemTags,WEAPON_REFINEMENTS,REFINEMENT_RARITIES,refinementGain,weaponAnomalyText} from './content.js';
 import {weaponStats,refinementValue} from './stats.js';
 import {CHARACTER_TALENTS} from './talents.js';
+import {STAGES} from './expeditions.js';
 
 export const RUN_DURATION=600;
 export const PHASES=[
@@ -19,11 +20,12 @@ export const PHASES=[
   {at:600,name:'破晓',hint:'击败蚀月君王 · 警惕环形弹幕缺口',hp:15.2,damage:2.7,speed:1.5,count:4,interval:1.05,cap:150,roster:{ghost:20,knight:40,reaper:40}},
 ];
 
-export function pressureAt(time,curse=0,difficulty={}){
+export function pressureAt(time,curse=0,difficulty={},stage='graveyard'){
   const index=Math.min(PHASES.length-1,Math.max(0,Math.floor(time/60))),phase=PHASES[index],next=PHASES[Math.min(index+1,PHASES.length-1)];
   const fraction=Math.min(1,Math.max(0,(time-phase.at)/60));
   const bossBreather=(time>=180&&time<192)||(time>=360&&time<372);
-  return {...phase,index,hp:(phase.hp+(next.hp-phase.hp)*fraction)*(1+curse*.12)*(difficulty.hp||1),damage:(phase.damage+(next.damage-phase.damage)*fraction)*(difficulty.damage||1),
+  const chapter=STAGES[stage]||STAGES.graveyard;
+  return {...phase,name:stage==='graveyard'?phase.name:time>=600?chapter.bosses[2]:chapter.name+' · '+(index+1),hint:stage==='graveyard'?phase.hint:chapter.hint,roster:chapter.rosters?.[Math.min(5,Math.floor(time/120))]||phase.roster,index,hp:(phase.hp+(next.hp-phase.hp)*fraction)*(1+curse*.12)*(difficulty.hp||1)*(chapter.hp||1),damage:(phase.damage+(next.damage-phase.damage)*fraction)*(difficulty.damage||1),
     speed:(phase.speed+(next.speed-phase.speed)*fraction)*(1+curse*.03)*(difficulty.speed||1),interval:phase.interval/((1+curse*.08)*(bossBreather?.6:1)*(difficulty.population||1)),
     cap:Math.round(phase.cap*(difficulty.population||1)),eliteChance:time<180?0:.02*(difficulty.elite||1)};
 }

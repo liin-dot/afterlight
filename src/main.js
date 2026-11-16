@@ -1,7 +1,8 @@
 import {Game,RUN_DURATION} from './game.js';
+import {STAGES} from './expeditions.js';
 import {Sound} from './audio.js';
-import {paintIcon,paintAvatar,fire,glow,drawSprite} from './art.js';
-import {CHARACTERS,WEAPONS,PASSIVES,PICKUPS,META,META_TREES,metaState,STARTING_WEAPONS,startingLoadout,formatTime,readSave,writeSave,refreshSave,catalogItem} from './data.js';
+import {paintIcon,paintAvatar,fire,glow,drawSprite,sprite} from './art.js';
+import {CHARACTERS,ENEMIES,WEAPONS,PASSIVES,PICKUPS,META,META_TREES,metaState,STARTING_WEAPONS,startingLoadout,formatTime,readSave,writeSave,refreshSave,catalogItem} from './data.js';
 import {CharacterSheet} from './status.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData,fusionUsesRelic} from './fusions.js';
 import {compatibleWeapons,relicDescription,BUILD_TAGS,itemTags,ALTAR_BOONS,REFINEMENT_RARITIES} from './content.js';
@@ -21,6 +22,7 @@ const game=new Game($('world'),sound);
 game.discoveredFusions=new Set(save.discoveredFusions);
 const sheet=new CharacterSheet(game,save,sound);
 let selected=0,lastFocus=null,lastBoss=null,buyingMeta=false,settling=false,campPage='home';
+let selectedStage='graveyard';
 let viewedWeapon=save.selectedWeapon||'default',viewedMeta='power',metaClosing=false,weaponClosing=false;
 const overlays=['level-screen','reward-screen','pause-screen','end-screen','archive-screen','meta-screen','weapon-screen','status-screen'];
 const touchInput=matchMedia('(pointer:coarse)');
@@ -110,14 +112,16 @@ function updatePreparation(){
  const character=CHARACTERS[selected],loadout=startingLoadout(character,save),weapon=Object.keys(loadout.weapons)[0];
  $('character-description').innerHTML=character.description.replace(WEAPONS[character.weapon].name,WEAPONS[weapon].name);
  text('camp-weapon-label',WEAPONS[weapon].name+' · LV.1');
- text('camp-start-context',character.name+' · '+WEAPONS[weapon].name+'起手');
+ text('camp-start-context',character.name+' · '+STAGES[selectedStage].name);
+ for(const button of $('stage-choices').children)button.setAttribute('aria-pressed',String(button.dataset.choice===selectedStage));
+ text('stage-description',STAGES[selectedStage].hint);text('camp-departure-note','生存十分钟 · 击败'+STAGES[selectedStage].bosses[2]+' · 通关额外 +'+STAGES[selectedStage].reward+' 余烬');
 }
 function updateMenu(){
  text('meta-count',save.embers.toLocaleString()+' ✦');
  updatePreparation();
  text('sound-icon',sound.muted?'♪̸':'♫');$('sound-button').setAttribute('aria-label',sound.muted?'开启声音':'关闭声音');$('sound-button').setAttribute('aria-pressed',String(!sound.muted));
 }
-function start(){if(settling||game.state!=='menu'&&game.state!=='over')return;refreshSave(save);resetTouchInput();closeOverlays();sound.init();sound.play('select');game.start(CHARACTERS[selected],save.meta,save)}
+function start(){if(settling||game.state!=='menu'&&game.state!=='over')return;refreshSave(save);resetTouchInput();closeOverlays();sound.init();sound.play('select');game.start(CHARACTERS[selected],save.meta,{...save,stage:selectedStage})}
 function openRunMenu(){
  if(sheet.visible){if(!['running','paused','level'].includes(sheet.origin))return;sheet.close()}
  if(game.state==='paused'){openModal('pause-screen');return}
@@ -138,7 +142,7 @@ function updateHud(){
  updateBuffHud();
  text('shield-label',game.player.shield>0?'◇ 护盾 '+Math.ceil(game.player.shield):'');
  $('night-progress-fill').style.width=Math.min(100,game.time/RUN_DURATION*100)+'%';
- text('next-encounter',game.time<180?'03:00 · 墓园看守':game.time<360?'06:00 · 无名葬钟':game.time<600?'10:00 · 蚀月君王':'终局 · 击败君王');
+ const bossesForStage=STAGES[game.stage].bosses;text('next-encounter',game.time<180?'03:00 · '+bossesForStage[0]:game.time<360?'06:00 · '+bossesForStage[1]:game.time<600?'10:00 · '+bossesForStage[2]:'终局 · 击败'+bossesForStage[2]);
  text('curse-label',game.stats.curse?'禁忌 '+game.stats.curse+' · 怪物强化':'');
  const maxCooldown=game.stats.dashCooldown;$('dash-cooldown').style.height=Math.min(100,game.player.dashCooldown/maxCooldown*100)+'%';$('touch-dash').style.opacity=game.player.dashCooldown>0?'.45':'1';
  const bosses=game.enemies.filter(e=>e.boss&&!e.dead);const boss=bosses.find(e=>e.final)||bosses[0];if(boss){show('boss-bar');text('boss-name',boss.name+(bosses.length>1?' · 剩余 '+bosses.length+' 位':'')+(boss.enraged?' · 狂怒':''));$('boss-fill').style.width=Math.max(0,boss.hp/boss.maxHp*100)+'%';text('boss-health',Math.max(0,Math.ceil(boss.hp)).toLocaleString()+' / '+boss.maxHp.toLocaleString());lastBoss=boss.id}else{hide('boss-bar');lastBoss=null}
@@ -265,12 +269,12 @@ async function endRun(result){
   show('camp-return-note');announce('已退出远征，返回营地。获得 '+result.reward+' 余烬。');
   return;
  }
- text('end-eyebrow',result.won?'THE DAWN REMEMBERS YOUR NAME':'THE EMBER NEVER DIES');text('end-title',result.won?'长夜已尽，黎明是你。':result.abandoned?'灯火尚存，暂别长夜。':'灯灭，余烬犹存。');text('end-description',result.won?'你击败了蚀月君王。第一缕晨光，终于穿过墓园。':result.abandoned?'带上收获的余烬，下一次会走得更远。':'每一次倒下，都让下一盏灯更明亮。');
+ text('end-eyebrow',result.won?'THE DAWN REMEMBERS YOUR NAME':'THE EMBER NEVER DIES');text('end-title',result.won?'长夜已尽，黎明是你。':result.abandoned?'灯火尚存，暂别长夜。':'灯灭，余烬犹存。');text('end-description',result.won?'你击败了'+STAGES[game.stage].bosses[2]+'，为'+STAGES[game.stage].name+'带回晨光。':result.abandoned?'带上收获的余烬，下一次会走得更远。':'每一次倒下，都让下一盏灯更明亮。');
  const fields=[[formatTime(result.time),'守夜时间'],[result.kills.toLocaleString(),'击败敌人'],['LV. '+result.level,'最终等级'],['+'+result.reward.toLocaleString(),'收获余烬']];$('end-stats').replaceChildren();fields.forEach(([value,label],i)=>{let d=document.createElement('div');if(i===3)d.className='gold';let strong=document.createElement('strong');strong.textContent=value;let span=document.createElement('span');span.textContent=label;d.append(strong,span);$('end-stats').append(d)});
  const damage=Object.entries(game.damageByWeapon).sort((a,b)=>b[1]-a[1]),total=damage.reduce((sum,[,value])=>sum+value,0);
  $('end-damage').innerHTML='<h3>本局伤害记录</h3>'+damage.slice(0,3).map(([key,value])=>`<div><span>${WEAPONS[key]?.name||(key==='talent'?'角色天赋':'遗物与次生伤害')}</span><b>${Math.round(value).toLocaleString()} · ${Math.round(value/(total||1)*100)}%</b></div>`).join('')+`<div><span>累计输出 / 承受伤害（不含护盾）</span><b>${Math.round(total).toLocaleString()} / ${game.damageTaken}</b></div>`;
  const eventRow=document.createElement('div'),eventLabel=document.createElement('span'),eventCount=document.createElement('b');eventLabel.textContent='祭坛挑战 · 完成 / 未完成';eventCount.textContent=(game.eventsCompleted||0)+' / '+(game.eventsFailed||0);eventRow.append(eventLabel,eventCount);$('end-damage').append(eventRow);
- text('record-label',!persisted?'浏览器存储不可用 · 本次成长仅在当前页面保留':result.won?'✦ 黎明守护者 · 额外奖励 250 余烬':record?'✦ 新纪录 · 你又走远了一点':'余烬已存入祭坛');
+ text('record-label',!persisted?'浏览器存储不可用 · 本次成长仅在当前页面保留':result.won?'✦ '+STAGES[game.stage].name+'通关 · 额外奖励 '+STAGES[game.stage].reward+' 余烬':record?'✦ 新纪录 · 你又走远了一点':'余烬已存入祭坛');
  const c=$('end-art'),g=c.getContext('2d');g.clearRect(0,0,96,64);g.imageSmoothingEnabled=false;glow(g,49,40,36,result.won?'#e1cb6f33':'#e1a66f22');drawSprite(g,CHARACTERS[selected].id,30,55,{flip:false,alpha:result.won?1:.7});fire(g,65,53,3,result.won?1:.7);
  openModal('end-screen');updateMenu();announce(result.won?'远征胜利。长夜已尽。':'远征结束。获得 '+result.reward+' 余烬。');
 }
@@ -338,7 +342,7 @@ async function saveWeapon(change){
 
 game.on=(event,data)=>{
  if(event==='start')openCampPage('prepare');
- if(event==='startRun'){hide('menu');hide('camp-return-note');closeOverlays();show('hud');$('event-banner').classList.remove('visible');$('toast').classList.remove('visible');document.body.classList.add('playing');text('player-name',game.character.name);paintAvatar($('hud-avatar'),game.character.id);document.activeElement?.blur();announce('远征开始。WASD 移动，空格冲刺，Esc 打开菜单。')}
+ if(event==='startRun'){hide('menu');hide('camp-return-note');closeOverlays();show('hud');$('event-banner').classList.remove('visible');$('toast').classList.remove('visible');document.body.classList.add('playing');text('player-name',game.character.name);text('stage-label',STAGES[game.stage].name);paintAvatar($('hud-avatar'),game.character.id);document.activeElement?.blur();announce('远征开始。WASD 移动，空格冲刺，Esc 打开菜单。')}
  if(event==='hud')updateHud();
  if(event==='weapons'){storeItemDiscoveries(rememberInventory(save,game));buildDock()}
  if(event==='level'){resetTouchInput();buildUpgrades()}
@@ -409,7 +413,7 @@ for(const id of ['menu-status-button','status-button','pause-status-button','lev
 for(const id of ['menu-fusion-button','fusion-tracker','level-fusion-button'])$(id).addEventListener('click',openFusionBook);
 for(const id of ['menu-talents-button','hud-talents-button','level-talents-button','level-tree-button'])$(id).addEventListener('click',openTalentTree);
 for(const id of ['menu-catalog-button','hud-catalog-button','pause-catalog-button','level-catalog-button','end-catalog-button'])$(id).addEventListener('click',openItemCatalog);
-$('archive-button').addEventListener('click',()=>{sound.init();sound.play('select');openModal('archive-screen')});
+$('archive-button').addEventListener('click',()=>{sound.init();sound.play('select');document.querySelector('.guide-grid').showMobilePage(null);openModal('archive-screen')});
 $('meta-button').addEventListener('click',()=>openMeta());
 $('camp-weapon-button').addEventListener('click',openWeaponChoices);
 $('meta-detail-close').addEventListener('click',()=>hideMetaDetail(true));
@@ -431,8 +435,22 @@ $('weapon-equip').addEventListener('click',()=>saveWeapon({selectWeapon:viewedWe
 
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>closeModal(b.dataset.close)));
 for(const id of ['archive-screen','meta-screen','weapon-screen'])$(id).addEventListener('click',e=>{if(e.target===$(id))closeModal(id)});
-sheet.mobilePages(document.querySelector('.guide-grid'),'选择手记主题',[...document.querySelectorAll('.guide-grid article')].map((article,i)=>[String(i),article.querySelector('h3').textContent,[article]]));
-sheet.mobilePages($('end-report'),'选择结算内容',[['summary','远征概览',[$('end-stats')]],['damage','战斗记录',[$('end-damage')]]]);
+for(const [key,stage] of Object.entries(STAGES)){
+ const button=document.createElement('button'),art=document.createElement('canvas'),label=document.createElement('span'),picture=sprite({graveyard:'grave',foundry:'furnace',coast:'coral'}[key]),scale=Math.min(1,32/picture.height);button.className='icon-choice';button.dataset.choice=key;button.title=stage.subtitle+' · '+stage.name;button.setAttribute('aria-label',button.title);art.width=48;art.height=40;art.setAttribute('aria-hidden','true');const g=art.getContext('2d');g.imageSmoothingEnabled=false;g.drawImage(picture,(48-picture.width*scale)/2,36-picture.height*scale,picture.width*scale,picture.height*scale);label.textContent=stage.name;button.append(art,label);button.addEventListener('click',()=>{selectedStage=key;updatePreparation();sound.init();sound.play('select')});$('stage-choices').append(button);
+ const article=document.createElement('article'),title=document.createElement('h3'),p=document.createElement('p');article.dataset.icon={graveyard:'aegis',foundry:'capacitor',coast:'tide'}[key];title.textContent=stage.name;p.textContent=stage.hint+' 首领：'+stage.bosses.join(' → ')+'。通关额外 '+stage.reward+' 余烬。';article.append(title,p);document.querySelector('.guide-grid').append(article);
+}
+for(const [key,enemy] of Object.entries(ENEMIES).filter(([,enemy])=>enemy.name)){
+ const article=document.createElement('article'),art=document.createElement('canvas'),title=document.createElement('h3'),p=document.createElement('p');art.width=32;art.height=40;art.setAttribute('aria-hidden','true');drawSprite(art.getContext('2d'),key,16,32);title.textContent=enemy.name;p.textContent=enemy.hint;article.append(art,title,p);document.querySelector('.guide-grid').append(article);
+}
+sheet.mobilePages(document.querySelector('.guide-grid'),'选择手记主题',[...document.querySelectorAll('.guide-grid article')].map((article,i)=>[String(i),article.querySelector('h3').textContent,[article],article.dataset.icon||['speed','growth','solar','aegis','curse','storm','orbit','focus'][i]]));
+sheet.mobilePages($('end-report'),'选择结算内容',[['summary','远征概览',[$('end-stats')],'growth'],['damage','战斗记录',[$('end-damage')],'blade']]);
+$('archive-screen').addEventListener('keydown',event=>{const back=document.querySelector('.mobile-page-back');if(event.code==='Escape'&&!back.classList.contains('hidden')){event.preventDefault();event.stopPropagation();back.click()}});
+document.addEventListener('keydown',event=>{
+ const button=event.target.closest('.icon-choices>button'),group=button?.parentElement;if(!group)return;
+ const buttons=[...group.children],columns=getComputedStyle(group).gridTemplateColumns.split(' ').length,step={ArrowLeft:-1,ArrowRight:1,ArrowUp:-columns,ArrowDown:columns}[event.code];
+ if(!step&&!['Home','End'].includes(event.code))return;event.preventDefault();event.stopPropagation();
+ buttons[event.code==='Home'?0:event.code==='End'?buttons.length-1:(buttons.indexOf(button)+step+buttons.length)%buttons.length].focus({preventScroll:true});
+});
 
 // Every icon bubble uses aria-controls: hover previews, while click/touch/Enter pins it.
 let detailExitTimer;

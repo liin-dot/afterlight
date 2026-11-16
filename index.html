@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#101917">
   <meta name="description" content="烬夜 AFTERLIGHT — 一款原创像素风自动战斗生存游戏。守住最后的火光。">
-  <title>烬夜 AFTERLIGHT · 最后的守灯人</title>
+  <title>烬夜 AFTERLIGHT 2.0 · 烬潮远征</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./status.css">
@@ -23,7 +23,7 @@
 
     <header id="masthead">
       <a class="brand" href="./" aria-label="烬夜首页"><i class="brand-mark"></i><span>AFTERLIGHT<span class="brand-sub">THE LAST WARDEN</span></span></a>
-      <div class="header-actions"><span class="version">长夜重铸 <b>VOL. 02</b></span><button id="sound-button" class="icon-button" title="声音开关 [M]" aria-label="声音开关"><span id="sound-icon">♫</span></button><button id="fullscreen-button" class="icon-button" title="全屏 [F]" aria-label="全屏">⛶</button></div>
+      <div class="header-actions"><span class="version">烬潮远征 <b>VOL. 03 · 2.0</b></span><button id="sound-button" class="icon-button" title="声音开关 [M]" aria-label="声音开关"><span id="sound-icon">♫</span></button><button id="fullscreen-button" class="icon-button" title="全屏 [F]" aria-label="全屏">⛶</button></div>
     </header>
 
     <section id="menu" class="menu overlay" aria-label="守灯人营地">
@@ -42,21 +42,22 @@
             <div class="camp-section-heading"><h2 id="camp-prepare-title">选择守灯人</h2><span id="character-tag">近战 · 均衡</span></div>
             <div id="characters" class="character-grid" role="group" aria-label="选择出征角色"></div>
             <div class="character-description" id="character-description"></div>
+            <div class="stage-choice"><span id="stage-choice-label">远征目的地</span><div id="stage-choices" class="icon-choices" role="group" aria-labelledby="stage-choice-label" aria-describedby="stage-description"></div><p id="stage-description"></p></div>
         </div>
         <div class="camp-character-actions">
             <button id="menu-talents-button" class="character-innate" aria-label="查看当前角色的默认天赋与专属天赋树" aria-haspopup="dialog"><canvas id="menu-innate-icon" width="24" height="24"></canvas><span><b id="menu-innate-name"></b><small id="menu-innate-description"></small></span><i>天赋树 <kbd>T</kbd></i></button>
             <button id="menu-status-button" class="camp-status-entry" aria-haspopup="dialog"><span>角色属性与起始装备</span><span><kbd>C</kbd> ↗</span></button>
             <button id="camp-weapon-button" class="camp-status-entry" aria-haspopup="dialog" aria-controls="weapon-screen"><span>开局武器<small id="camp-weapon-label"></small></span><span>选择 ↗</span></button>
             <button id="start-button" class="primary-button"><span>踏 入 长 夜<small id="camp-start-context">守灯人 · 从 LV.1 开始远征</small></span><span class="button-arrow">↗</span></button>
-            <p class="camp-departure-note">遗忘墓园 · 生存十分钟，击败最终首领</p>
+            <p id="camp-departure-note" class="camp-departure-note"></p>
         </div>
       </section>
       <section id="camp-library" class="camp-page hidden" aria-labelledby="camp-library-title">
         <button class="camp-back" data-camp-target="home">← 返回主菜单</button>
         <h2 id="camp-library-title">图鉴与手记</h2>
         <nav class="camp-menu" aria-label="图鉴与玩法说明">
-          <button id="menu-catalog-button" aria-haspopup="dialog" title="永久道具图鉴 [I]"><span>道具图鉴</span><small id="menu-catalog-count">0/82</small><kbd>I</kbd></button>
-          <button id="menu-fusion-button" aria-haspopup="dialog" title="融合图谱 [G]"><span>融合图谱</span><small id="menu-fusion-count">0/20</small><kbd>G</kbd></button>
+          <button id="menu-catalog-button" aria-haspopup="dialog" title="永久道具图鉴 [I]"><span>道具图鉴</span><small id="menu-catalog-count">0/96</small><kbd>I</kbd></button>
+          <button id="menu-fusion-button" aria-haspopup="dialog" title="融合图谱 [G]"><span>融合图谱</span><small id="menu-fusion-count">0/24</small><kbd>G</kbd></button>
           <button id="archive-button" aria-haspopup="dialog"><span>守灯人手记</span><span aria-hidden="true">↗</span></button>
         </nav>
       </section>
@@ -80,7 +81,7 @@
       <div id="toast" role="status" class="toast"></div>
       <div id="event-reward-toast" class="event-reward-toast hidden" aria-hidden="true"></div>
       <ul id="hud-buffs" aria-label="当前增益"></ul>
-      <div class="hud-bottom"><div class="area-label"><span class="live-dot"></span> 遗忘墓园<small id="threat-label">建立主武器 · 留意脚边灵光</small></div><div class="loadout-dock"><div id="weapon-dock" class="weapon-dock" aria-label="已装备武器"></div><div id="passive-dock" class="passive-dock" aria-label="已装备道具"></div><button id="hud-loadout-button" aria-haspopup="dialog"><span>装备</span><small id="hud-loadout-count"></small><span aria-hidden="true">↗</span></button></div><div class="dash-status"><div class="dash-icon">↯<span id="dash-cooldown"></span></div><span>幽影冲刺<small><kbd>SPACE</kbd></small></span></div></div>
+      <div class="hud-bottom"><div class="area-label"><span class="live-dot"></span> <span id="stage-label">遗忘墓园</span><small id="threat-label">建立主武器 · 留意脚边灵光</small></div><div class="loadout-dock"><div id="weapon-dock" class="weapon-dock" aria-label="已装备武器"></div><div id="passive-dock" class="passive-dock" aria-label="已装备道具"></div><button id="hud-loadout-button" aria-haspopup="dialog"><span>装备</span><small id="hud-loadout-count"></small><span aria-hidden="true">↗</span></button></div><div class="dash-status"><div class="dash-icon">↯<span id="dash-cooldown"></span></div><span>幽影冲刺<small><kbd>SPACE</kbd></small></span></div></div>
       <button id="world-event-start" class="hidden" disabled><kbd>E</kbd> <span id="world-event-action">接受任务</span></button>
       <div id="touch-controls"><div id="joystick" aria-hidden="true"><i></i></div><button id="touch-dash" aria-label="冲刺">↯</button></div>
     </section>
@@ -109,7 +110,7 @@
       <div class="end-actions"><button id="retry-button" class="primary-button compact">重新开始 <span>↻</span></button><button id="home-button" class="sheet-entry">返回营地</button><button id="end-status-button" class="sheet-entry">本局装备与属性</button><button id="end-catalog-button" class="sheet-entry">永久道具图鉴</button></div>
     </div></section>
 
-    <section id="archive-screen" class="modal-wrap hidden"><div class="panel archive-panel"><button class="close-button" data-close="archive-screen" aria-label="关闭">×</button><div class="eyebrow">FIELD NOTES / 137</div><h2>守灯人手记</h2><p>记住这些，黎明就会近一点。</p><div class="guide-grid"><article><span>01</span><h3>保持移动</h3><p>武器会自动锁敌。用 WASD 或方向键移动，空格冲刺穿过敌群；冲刺期间免疫伤害。右上角「菜单」或 Esc 可暂停、重新开始和退出到营地。</p></article><article><span>02</span><h3>拾起灵光</h3><p>拾取经验后升级三选一。优先培养主武器，每局有三次重铸、三次放逐；近期选择会提高同标签道具的权重，改选可以转型。属性祝福与遗物共用六个道具位。</p></article><article><span>03</span><h3>进化与融合</h3><p>16 种基础武器在两分钟后可升至 6 级进化。三分钟后开启 20 条隐藏融合路线：双武器各需 4 级，或武器 5 级加遗物 2 级。亲手铸成后按 G 回看配方。满级武器继续获得白、绿、紫、黄四档精修，强化当前武器的伤害、频率及标签特性。</p></article><article><span>04</span><h3>守到黎明</h3><p>每分钟敌群组成与压力都会改变。首领在 03:00、06:00 来袭；活过十分钟并击败蚀月君王，黎明才会到来。前中期保持走位，生命不会随等级自动提高；完成融合与遗物联动后再向怪潮反攻。</p></article><article><span>05</span><h3>探索墓园</h3><p>01:00、04:00、07:00 依次显现守灯、归魂、猎影祭坛，按由易到难的顺序接取，未接取会一直保留。靠近按 E 接受挑战，魂光沿青白光柱和箭头寻找。完成后从三种带收益与代价的契约中选一，或换取 1／2／3 次随机武器强化；两种选择均额外获得经验、余烬和治疗，随阶段提高。每位首领必掉全场经验吸取道具，每波首领共享一个成长宝箱；精英保留八倍经验、不掉升级宝箱；药草恢复 12 生命，场上最多一株。春回之息需连续避伤 4 秒才能恢复；想在交战中续航，需要投入恢复、汲取或护盾构筑。</p></article><article><span>06</span><h3>融合共振</h3><p>融合武器与一套适配联动均达 LV.2：间隔额外 −15%、范围 +20%；均达 LV.3：−30%、+40%，只取最高档。试试不熄燃芯＋死火余烬、寒髓针＋雷霜符、牧魂契＋长明烛。装备详情列出搭配；被融合消耗的材料不计入。</p></article><article><span>07</span><h3>角色天赋</h3><p>守灯人以近身命中积蓄灯火，逐星者自带伴星，荒野客移动蓄势追加风矢。按 T 查看默认能力和角色专属天赋树。稀有的无尽薪种可在学会天赋后，让角色能力命中概率叠加本局伤害、范围或生命上限。</p></article><article><span>08</span><h3>选择专精</h3><p>10、20、30 级各获 1 点天赋，每局最多 3 点。首次学习锁定整条路线，依次强化角色能力与装备联动。获得点数时先弹出天赋选择，再进行装备升级；可以保留点数。点选图标查看和学习，重开重置。</p></article></div><div class="archive-foot">建议戴上耳机 · 支持键盘与触屏 · 进度保存在当前浏览器</div></div></section>
+    <section id="archive-screen" class="modal-wrap hidden"><div class="panel archive-panel"><button class="close-button" data-close="archive-screen" aria-label="关闭">×</button><div class="eyebrow">FIELD NOTES / 137</div><h2>守灯人手记</h2><p>记住这些，黎明就会近一点。</p><div class="guide-grid"><article><span>01</span><h3>保持移动</h3><p>武器会自动锁敌。用 WASD 或方向键移动，空格冲刺穿过敌群；冲刺期间免疫伤害。右上角「菜单」或 Esc 可暂停、重新开始和退出到营地。</p></article><article><span>02</span><h3>拾起灵光</h3><p>拾取经验后升级四选一。优先培养主武器，每局有三次重铸、三次放逐；近期选择会提高同标签道具的权重，改选可以转型。属性祝福与遗物共用六个道具位。</p></article><article><span>03</span><h3>进化与融合</h3><p>20 种基础武器在两分钟后可升至 6 级进化。三分钟后开启 24 条隐藏融合路线：双武器各需 4 级，或武器 5 级加遗物 2 级。亲手铸成后按 G 回看配方。满级武器继续获得白、绿、紫、黄四档精修，强化当前武器的伤害、频率及标签特性。</p></article><article><span>04</span><h3>守到黎明</h3><p>每分钟敌群组成与压力都会改变。首领在 03:00、06:00 来袭；活过十分钟并击败当前关卡的最终首领，黎明才会到来。前中期保持走位，生命不会随等级自动提高；完成融合与遗物联动后再向怪潮反攻。</p></article><article><span>05</span><h3>探索墓园</h3><p>01:00、04:00、07:00 依次显现守灯、归魂、猎影祭坛，按由易到难的顺序接取，未接取会一直保留。靠近按 E 接受挑战，魂光沿青白光柱和箭头寻找。完成后从三种带收益与代价的契约中选一，或换取 1／2／3 次随机武器强化；两种选择均额外获得经验、余烬和治疗，随阶段提高。每位首领必掉全场经验吸取道具，每波首领共享一个成长宝箱；精英保留八倍经验、不掉升级宝箱；药草恢复 12 生命，场上最多一株。春回之息需连续避伤 4 秒才能恢复；想在交战中续航，需要投入恢复、汲取或护盾构筑。</p></article><article><span>06</span><h3>融合共振</h3><p>融合武器与一套适配联动均达 LV.2：间隔额外 −15%、范围 +20%；均达 LV.3：−30%、+40%，只取最高档。试试不熄燃芯＋死火余烬、寒髓针＋雷霜符、牧魂契＋长明烛。装备详情列出搭配；被融合消耗的材料不计入。</p></article><article><span>07</span><h3>角色天赋</h3><p>守灯人以近身命中积蓄灯火，逐星者自带伴星，荒野客移动蓄势追加风矢。铸雷师通过命中蓄电放雷，渡潮人通过移动释放潮环。按 T 查看默认能力和角色专属天赋树。稀有的无尽薪种可在学会天赋后，让角色能力命中概率叠加本局伤害、范围或生命上限。</p></article><article><span>08</span><h3>选择专精</h3><p>10、20、30 级各获 1 点天赋，每局最多 3 点。首次学习锁定整条路线，依次强化角色能力与装备联动。获得点数时先弹出天赋选择，再进行装备升级；可以保留点数。点选图标查看和学习，重开重置。</p></article></div><div class="archive-foot">建议戴上耳机 · 支持键盘与触屏 · 进度保存在当前浏览器</div></div></section>
 
     <section id="meta-screen" class="modal-wrap hidden" role="dialog" aria-modal="true" aria-labelledby="meta-title" aria-describedby="meta-description">
       <div class="panel meta-panel">
@@ -146,7 +147,7 @@
           <div id="sheet-talents" class="hidden" role="tabpanel" aria-labelledby="sheet-tab-talents" tabindex="0"></div><div id="sheet-items" class="hidden" role="tabpanel" aria-labelledby="sheet-tab-items" tabindex="0">
             <div class="catalog-browser">
               <div id="sheet-build-summary" class="catalog-summary"></div>
-              <div class="catalog-toolbar"><select class="collection-category" aria-label="装备分类"><option value="all">全部装备</option><option value="weapon">武器</option><option value="passive">属性祝福</option><option value="relic">联动遗物</option><option value="boon">祭坛契约</option></select></div>
+              <div class="catalog-toolbar"><div class="collection-category icon-choices" role="group" aria-label="装备分类" data-value="all"></div></div>
               <nav class="catalog-list" aria-label="已装备的武器与道具"></nav><p class="catalog-empty hidden" role="status">尚未装备这类道具。</p>
               <nav class="catalog-pagination" aria-label="装备翻页"><button class="collection-prev" aria-label="上一页">← 上一页</button><span class="collection-page" aria-live="polite"></span><button class="collection-next" aria-label="下一页">下一页 →</button></nav>
             </div>
@@ -155,7 +156,7 @@
           <div id="sheet-catalog" class="hidden" role="tabpanel" aria-labelledby="sheet-tab-catalog" tabindex="0">
             <div id="catalog-browser" class="catalog-browser">
               <div class="catalog-summary"><span>已发现</span><strong id="catalog-count">0 / 82</strong></div>
-              <div class="catalog-toolbar"><label class="catalog-search"><span aria-hidden="true">⌕</span><input id="catalog-search" type="search" aria-label="搜索已发现的道具" placeholder="搜索道具" autocomplete="off" spellcheck="false"><button id="catalog-clear" aria-label="清空搜索">×</button></label><select id="catalog-category" aria-label="图鉴分类"></select></div>
+              <div class="catalog-toolbar"><label class="catalog-search"><span aria-hidden="true">⌕</span><input id="catalog-search" type="search" aria-label="搜索已发现的道具" placeholder="搜索道具" autocomplete="off" spellcheck="false"><button id="catalog-clear" aria-label="清空搜索">×</button></label><div id="catalog-category" class="icon-choices" role="group" aria-label="图鉴分类"></div></div>
               <nav id="catalog-list" class="catalog-list" aria-label="已发现道具"></nav><p id="catalog-empty" class="catalog-empty hidden" role="status"></p>
               <nav id="catalog-pagination" class="catalog-pagination" aria-label="图鉴翻页"><button id="catalog-prev" aria-label="上一页">← 上一页</button><span id="catalog-page" aria-live="polite">1 / 1</span><button id="catalog-next" aria-label="下一页">下一页 →</button></nav>
             </div>
