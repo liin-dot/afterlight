@@ -1,7 +1,8 @@
-import {WEAPON_FAMILIES,relicValues} from './content.js';
+import {WEAPON_FAMILIES,WEAPON_RUNES,weaponFamilies,relicValues} from './content.js';
 import {onCharacterCast,onCharacterXp} from './talents.js';
 import {META} from './data.js';
 import {weaponStats} from './stats.js';
+import {onCoreCast,onCoreKill} from './run-cores.js';
 
 const near=(game,x,y,r)=>game.grid.near(x,y,r+30).filter(e=>!e.dead&&e.hp>0&&Math.hypot(e.x-x,e.y-y)<r+e.r);
 const pulse=(game,x,y,r,color)=>game.effects.push({type:'pulse',x,y:y-8,r,color,t:.42,max:.42});
@@ -40,17 +41,23 @@ export function chainLightning(game,first,damage,count,range,exclude=new Set()) 
 
 export function onWeaponHit(game,e,kind,critical=false,periodic=false,damage=0) {
   if(!kind||e.dead)return;
-  const tags=WEAPON_FAMILIES[kind]||[],p=game.passives;
+  const tags=weaponFamilies(kind,game.weaponRunes),p=game.passives;
   if(tags.includes('fire'))e.burningUntil=Math.max(e.burningUntil||0,game.time+2);
   if(periodic)return;
+  const rune=game.weaponRunes[kind];
+  if(rune==='fire'){e.burn={damage:Math.max(e.burn?.damage||0,damage*.12),until:Math.max(e.burn?.until||0,game.time+2),next:e.burn?.next??game.time+.5};e.burningUntil=Math.max(e.burningUntil||0,e.burn.until)}
+  if(rune==='poison')poisonEnemy(game,e,damage*.18,3);
+  if(rune==='cold')e.slow=Math.max(e.slow,1.5);
+  if(rune&&WEAPON_RUNES[rune])game.burst(e.x,e.y-10,2,WEAPON_RUNES[rune].color,25);
   if(tags.length&&p.brine&&tags.some(tag=>tag==='cold'||tag==='spirit')){const v=relicValues('brine',p.brine,game.stats);e.slow=Math.max(e.slow,v.duration);game.markEnemy(e,'brine',v.multiplier,v.duration);readyProc(game,'brine')}
   if(p.circuit&&tags.includes('lightning')){game.circuitCharge=(game.circuitCharge||0)+1;const v=relicValues('circuit',p.circuit,game.stats);if(game.circuitCharge>=v.hits){game.circuitCharge=0;chainLightning(game,e,v.damage,v.count,v.range);readyProc(game,'circuit')}}
   const upgrades=game.stats.weaponUpgrades?.[kind];
   if(upgrades?.anomaly&&Math.random()<Math.min(1,upgrades.anomaly)){
-    if(tags.includes('fire')){e.burn={damage:Math.max(e.burn?.damage||0,damage*.15*(1+(upgrades.affliction||0))),until:Math.max(e.burn?.until||0,game.time+2),next:e.burn?.next??game.time+.5};e.burningUntil=Math.max(e.burningUntil||0,e.burn.until)}
-    if(tags.includes('poison'))poisonEnemy(game,e,damage*.3*(1+(upgrades.affliction||0)),3);
-    if(tags.includes('cold')){const v=weaponStats(kind,game.weapons[kind],game.stats,game.character);e.freeze=Math.max(e.freeze,(e.boss?v.bossFreeze:v.freeze)*1.25)}
-    if(tags.includes('lightning'))game.markEnemy(e,'refinement_lightning',1.15,3);
+    const native=WEAPON_FAMILIES[kind]||[];
+    if(native.includes('fire')){e.burn={damage:Math.max(e.burn?.damage||0,damage*.15*(1+(upgrades.affliction||0))),until:Math.max(e.burn?.until||0,game.time+2),next:e.burn?.next??game.time+.5};e.burningUntil=Math.max(e.burningUntil||0,e.burn.until)}
+    if(native.includes('poison'))poisonEnemy(game,e,damage*.3*(1+(upgrades.affliction||0)),3);
+    if(native.includes('cold')){const v=weaponStats(kind,game.weapons[kind],game.stats,game.character);e.freeze=Math.max(e.freeze,(e.boss?v.bossFreeze:v.freeze)*1.25)}
+    if(native.includes('lightning'))game.markEnemy(e,'refinement_lightning',1.15,3);
   }
   const venom=p.venomfang&&(tags.includes('melee')||tags.includes('projectile'))?relicValues('venomfang',p.venomfang,game.stats):null;
   if(p.aegis&&tags.length&&game.player.hp>0){
@@ -129,6 +136,12 @@ export function onWeaponHit(game,e,kind,critical=false,periodic=false,damage=0) 
   return venom?.hitDamage||0;
 }
 
+export function onRuneHit(game,e,source,periodic,damage){
+  if(periodic||game.weaponRunes[source]!=='lightning'||game.player.hp<=0)return;
+  game.runeCharges[source]=(game.runeCharges[source]||0)+1;
+  if(game.runeCharges[source]>=5){game.runeCharges[source]=0;chainLightning(game,e,damage*.4,2,140);readyProc(game,'rune_'+source)}
+}
+
 export function onPlayerHurt(game,shieldBroke=false){
   const p=game.player;
   if(p.hp>0){
@@ -165,9 +178,10 @@ export function onPlayerTravel(game){
   }
 }
 
-export function onXpPickup(game,amount,starLinked=false){if(game.passives.harvest)game.harvestCharge+=amount;onCharacterXp(game,amount,starLinked)}
+export function onXpPickup(game,amount,starLinked=false){if(game.passives.harvest)game.harvestCharge+=amount;if(game.cores.harvest)game.coreState.xp=Math.min(60,game.coreState.xp+amount);onCharacterXp(game,amount,starLinked)}
 
 export function onEnemyKilled(game,e) {
+  onCoreKill(game,e);
   if(!e.summoned&&game.passives.souljar){const v=relicValues('souljar',game.passives.souljar,game.stats);game.souljarCharge=(game.souljarCharge||0)+1;if(game.souljarCharge>=v.kills){game.souljarCharge=0;for(let i=0;i<v.count;i++){const a=i*Math.PI*2/v.count;game.projectiles.push({type:'soul',x:e.x,y:e.y-8,vx:Math.cos(a)*180,vy:Math.sin(a)*180,r:4,t:3,pierce:2,damage:v.damage,hit:new Set(),trail:[],homing:true,refracted:true})}readyProc(game,'souljar')}}
   if(game.player.hp>0&&(e.boss||e.elite)&&game.passives.emberheart){const v=relicValues('emberheart',game.passives.emberheart,game.stats);game.player.hp=Math.min(game.player.maxHp,game.player.hp+v.heal);game.player.shield=Math.max(game.player.shield,v.shield);readyProc(game,'emberheart')}
   if(game.player.hp>0&&game.player.hp<game.player.maxHp&&metaProc(game,'blood',.1)){
@@ -195,6 +209,7 @@ export function onEnemyKilled(game,e) {
 }
 
 export function onWeaponCast(game,kind,projectile) {
+  onCoreCast(game,kind);
   if(game.passives.sundial){game.sundialCasts=(game.sundialCasts||0)+1;const v=relicValues('sundial',game.passives.sundial,game.stats);if(game.sundialCasts>=v.casts){game.sundialCasts=0;const key=Object.keys(game.weapons).sort((a,b)=>(game.timers[b]||0)-(game.timers[a]||0))[0];if(key)game.timers[key]=Math.max(0,(game.timers[key]||0)-v.advance);readyProc(game,'sundial')}}
   onCharacterCast(game,kind);
   const p=game.passives;
@@ -206,7 +221,7 @@ export function onWeaponCast(game,kind,projectile) {
       for(const e of near(game,game.player.x,game.player.y,v.radius))game.hit(e,v.damage,game.player.x,game.player.y,75,false);
     }
   }
-  if(p.lens&&projectile) {
+  if(p.lens&&projectile&&!projectile.core&&!projectile.refracted&&!projectile.talent) {
     const v=relicValues('lens',p.lens,game.stats),a=Math.atan2(projectile.vy,projectile.vx)+.35;
     game.projectiles.push({type:'refraction',source:kind,x:game.player.x,y:game.player.y-9,vx:Math.cos(a)*245,vy:Math.sin(a)*245,r:4,damage:projectile.damage*v.multiplier,t:2,pierce:1,hit:new Set(),homing:true,trail:[],angle:a,refracted:true});
     game.relicProcs.lens=(game.relicProcs.lens||0)+1;

@@ -1,9 +1,10 @@
 import {WEAPONS,PASSIVES} from './data.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,fusionChoice} from './fusions.js';
-import {relicDescription,compatibleWeapons,WEAPON_FAMILIES,BUILD_TAGS,itemTags,WEAPON_REFINEMENTS,REFINEMENT_RARITIES,refinementGain,weaponAnomalyText} from './content.js';
+import {relicDescription,compatibleWeapons,WEAPON_FAMILIES,weaponFamilies,BUILD_TAGS,itemTags,WEAPON_REFINEMENTS,REFINEMENT_RARITIES,refinementGain,weaponAnomalyText} from './content.js';
 import {weaponStats,refinementValue} from './stats.js';
 import {CHARACTER_TALENTS} from './talents.js';
 import {STAGES} from './expeditions.js';
+import {RUN_CORES} from './run-cores.js';
 
 export const RUN_DURATION=900;
 export const BOSS_TIMES=[180,360,600,RUN_DURATION];
@@ -47,17 +48,18 @@ export function recordUpgradeChoice(game,key){
 
 export function buildProfile(game){
   const scores={};
-  const add=(key,weight)=>{const tags=itemTags(key).filter(tag=>tag!=='versatile');for(const tag of tags)scores[tag]=(scores[tag]||0)+weight/tags.length};
+  const add=(key,weight)=>{const tags=itemTags(key,game.weaponRunes).filter(tag=>tag!=='versatile');for(const tag of tags)scores[tag]=(scores[tag]||0)+weight/tags.length};
   // Equipped items are a weak anchor; recent deliberate choices drive the larger signal.
   for(const [key,level] of Object.entries({...game.weapons,...game.passives}))add(key,.18+Math.min(4,level-1)*.04);
+  for(const [key,rank] of Object.entries(game.cores||{}))for(const tag of RUN_CORES[key].tags)scores[tag]=(scores[tag]||0)+(1+rank*.25)/RUN_CORES[key].tags.length;
   const history=game.choiceHistory||[];
   for(let i=history.length-1;i>=0;i--)add(history[i],.82**(history.length-1-i));
   const leading=Object.keys(scores).filter(tag=>scores[tag]>=.25).sort((a,b)=>scores[b]-scores[a]).slice(0,3);
-  return {scores,leading};
+  return {scores,leading,runes:game.weaponRunes};
 }
 
 export function tagAffinity(key,profile){
-  const matches=itemTags(key).filter(tag=>profile.scores[tag]>0).sort((a,b)=>profile.scores[b]-profile.scores[a]);
+  const matches=itemTags(key,profile.runes).filter(tag=>profile.scores[tag]>0).sort((a,b)=>profile.scores[b]-profile.scores[a]);
   const strength=(profile.scores[matches[0]]||0)+(profile.scores[matches[1]]||0)*.25;
   return {multiplier:1+1.6*Math.min(1,strength/3),matches};
 }
@@ -91,8 +93,8 @@ export function upgradePool(game){
     if(!current&&(weapon?weaponCount>=WEAPON_SLOTS:passiveCount>=PASSIVE_SLOTS))continue;
     const evolution=weapon&&!data.fusion&&current===5;
     if(evolution&&game.time<120)continue;
-    const linked=data.relic?compatibleWeapons(key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades):[];
-    const enables=!current&&Object.keys(game.passives).some(id=>PASSIVES[id].relic&&!compatibleWeapons(id,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades).length&&compatibleWeapons(id,weapon?{...game.weapons,[key]:1}:game.weapons,weapon?game.passives:{...game.passives,[key]:1},game.talents,game.character.id,game.weaponUpgrades).length);
+    const linked=data.relic?compatibleWeapons(key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades,game.weaponRunes,game.cores):[];
+    const enables=!current&&Object.keys(game.passives).some(id=>PASSIVES[id].relic&&!compatibleWeapons(id,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades,game.weaponRunes,game.cores).length&&compatibleWeapons(id,weapon?{...game.weapons,[key]:1}:game.weapons,weapon?game.passives:{...game.passives,[key]:1},game.talents,game.character.id,game.weaponUpgrades,game.weaponRunes,game.cores).length);
     let weight=itemRarity(data).weight*(current?(weapon?2.25:1.7):1);
     if(data.relic)weight*=linked.length?1.8:.22;
     if(!weapon&&!data.relic&&passiveCount<2)weight*=1.25;
@@ -103,7 +105,7 @@ export function upgradePool(game){
     });
     if(related)weight*=1.25;
     if(enables)weight*=1.8;
-    const specialty=CHARACTER_TALENTS[game.character.id],affinity=weapon?(WEAPON_FAMILIES[key]||[]).some(tag=>specialty.families.includes(tag)):specialty.items.includes(key);
+    const specialty=CHARACTER_TALENTS[game.character.id],affinity=weapon?weaponFamilies(key,game.weaponRunes).some(tag=>specialty.families.includes(tag)):specialty.items.includes(key);
     if(affinity)weight*=1.18;
     if((key==='vitality'||key==='regen')&&game.player.hp<game.player.maxHp*.4)weight*=1.6;
     const fit=tagAffinity(key,profile);weight*=fit.multiplier;
@@ -129,9 +131,9 @@ export function rollUpgradeChoices(game,previous=[]){
   if(result.length<4&&!result.some(item=>item.weapon&&item.current&&!item.refinement))take(weightedPick(pool.filter(item=>item.weapon&&item.current&&!item.refinement),weight));
   if(result.length<4)take(weightedPick(pool.filter(item=>item.refinement),weight));
   if(result.length<4&&Object.keys(game.weapons).length<2)take(weightedPick(pool.filter(item=>item.weapon&&!item.current),weight));
-  if(result.length<4&&game.level%4===0)take(weightedPick(pool.filter(item=>!item.weapon&&PASSIVES[item.key].relic&&compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades).length),weight));
+  if(result.length<4&&game.level%4===0)take(weightedPick(pool.filter(item=>!item.weapon&&PASSIVES[item.key].relic&&compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades,game.weaponRunes,game.cores).length),weight));
   if(result.length<4&&game.level>=5&&Math.random()<.22){
-    const pivot=weightedPick(pool.filter(item=>!item.current&&item.affinity<1.18&&(!PASSIVES[item.key]?.relic||compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades).length)),weight);
+    const pivot=weightedPick(pool.filter(item=>!item.current&&item.affinity<1.18&&(!PASSIVES[item.key]?.relic||compatibleWeapons(item.key,game.weapons,game.passives,game.talents,game.character.id,game.weaponUpgrades,game.weaponRunes,game.cores).length)),weight);
     if(pivot)take({...pivot,reason:'转型机会',exploration:true});
   }
   while(result.length<4&&pool.length)take(weightedPick(pool,weight));

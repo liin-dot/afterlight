@@ -144,6 +144,9 @@ body.playing #masthead{opacity:0;pointer-events:none}#hud{position:absolute;inse
  #hud:has(#touch-controls #world-event-start:not(.hidden)) .toast{left:auto;right:var(--hud-right);bottom:calc(var(--hud-bottom) + 84px);transform:none;transition:opacity .2s}
 }
 
+.upgrade-card.core-card{border-color:var(--card-color);background:linear-gradient(160deg,#31413a,#14251f)}
+.detail-bubble[data-side=overlay]:before{display:none}
+
 /* Keep four upgrade choices and actions in the mobile viewport. */
 @media(max-width:700px),(max-height:500px){
  #level-screen{padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
@@ -163,7 +166,7 @@ body.playing #masthead{opacity:0;pointer-events:none}#hud{position:absolute;inse
  #level-screen .upgrade-card>*{grid-column:1/-1}
  #level-screen .upgrade-card:hover,#level-screen .upgrade-card:focus-visible{transform:none}
  #level-screen .rarity{grid-area:1/2;display:block;min-height:32px;margin:0 40px 6px 0;font-size:9px;line-height:12px;letter-spacing:0}
- #level-screen .fusion-card .rarity{min-height:0;margin-right:0}
+ #level-screen .fusion-card .rarity,#level-screen .core-card .rarity{min-height:0;margin-right:0}
  #level-screen .rarity kbd,#level-screen .upgrade-type,#level-screen .upgrade-reason,#level-screen .affinity-boost{display:none}
  #level-screen .upgrade-card canvas{grid-area:1/1;display:block;position:static;width:32px;height:32px;margin:0 0 6px}
  #level-screen .upgrade-card h3{display:block;margin:0 0 5px;font-size:15px;line-height:20px;letter-spacing:.5px}

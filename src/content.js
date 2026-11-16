@@ -88,6 +88,17 @@ export const WEAPON_FAMILIES = {
   bloodmoon:['melee','projectile','cast'], tempest:['beam','lightning','cast'], absolute:['cold','cast'],
 };
 
+export const WEAPON_RUNES={
+  fire:{name:'烈焰',icon:'flame',color:'#e8ab7a',damage:.8,description:'武器伤害 −20%；直接命中点燃 2 秒，每半秒造成该次伤害的 12%。追加火焰标签，可接爆燃、腐时与炼金。'},
+  cold:{name:'寒霜',icon:'frost',color:'#b2dfe8',damage:.85,description:'武器伤害 −15%；直接命中减速 55% 持续 1.5 秒。追加寒霜标签，可接盐痕、碎冰与冰雷。'},
+  lightning:{name:'雷电',icon:'storm',color:'#c9b8ea',damage:.8,description:'武器伤害 −20%；每 5 次直接命中传导 2 个其他目标，各造成该次伤害的 40%。追加雷电标签，可接蓄电与雷盾。'},
+  poison:{name:'剧毒',icon:'thorn',color:'#b9cd82',damage:.8,description:'武器伤害 −20%；直接命中施加 3 秒侵蚀，每秒造成该次伤害的 18%。追加侵蚀标签，可接孢爆、腐时与炼金。'},
+};
+export function weaponFamilies(key,runes={}){
+  const tags=WEAPON_FAMILIES[key]||[],rune=runes[key];
+  return tags.length&&Object.hasOwn(WEAPON_RUNES,rune)&&!tags.includes(rune)?[...tags,rune]:tags;
+}
+
 export const REFINEMENT_RARITIES={
   white:{name:'白 · 普通',color:'#e3e4db',weight:60,index:0},green:{name:'绿 · 精良',color:'#91d4a0',weight:28,index:1},
   purple:{name:'紫 · 稀有',color:'#c5a1ed',weight:10,index:2},gold:{name:'黄 · 传说',color:'#f0ce72',weight:2,index:3},
@@ -126,8 +137,8 @@ const EXTRA_TAGS={
   aegis:['guard'],thorns:['guard','melee'],dashfire:['mobility','fire'],harvest:['growth','spirit'],embercore:['fire','melee','projectile'],conductor:['lightning','projectile'],rime:['cold','area'],spore:['poison','area'],siphon:['melee','guard'],echo:['spirit','area'],lens:['projectile'],cinder:['fire','area'],
   soulpact:['spirit','summon'],hoarfrost:['mobility','cold','control'],rotclock:['fire','poison'],bulwark:['guard','projectile'],forkseed:['critical','projectile'],stormcoil:['lightning','guard'],
 };
-export function itemTags(key){
-  const families=(WEAPON_FAMILIES[key]||[]).map(tag=>tag==='beam'?'projectile':tag==='blast'?'area':tag).filter(tag=>BUILD_TAGS[tag]);
+export function itemTags(key,runes={}){
+  const families=weaponFamilies(key,runes).map(tag=>tag==='beam'?'projectile':tag==='blast'?'area':tag).filter(tag=>BUILD_TAGS[tag]);
   return [...new Set([...families,...(EXTRA_TAGS[key]||[])])];
 }
 
@@ -247,20 +258,20 @@ export const ALTAR_BOONS={
   souls:{name:'群魂共鸣',icon:'soulpact',positive:'灵魂、召唤武器与伴星伤害 +45%',negative:'怪物与首领伤害 +20%',multiply:{summonMultiplier:1.45},difficulty:{damage:.2}},
 };
 
-export function compatibleWeapons(key,weapons,passives={},talents={},characterId=null,weaponUpgrades={}) {
+export function compatibleWeapons(key,weapons,passives={},talents={},characterId=null,weaponUpgrades={},weaponRunes={},cores={}) {
   if(key==='everseed')return Object.keys(talents).length?Object.keys(weapons):[];
   const families=RELICS[key]?.families||[];
-  const tags=Object.keys(weapons).flatMap(id=>WEAPON_FAMILIES[id]||[]);
+  const tags=Object.keys(weapons).flatMap(id=>weaponFamilies(id,weaponRunes));
   const enabled=id=>!!passives[id]&&RELICS[id].families.some(tag=>tags.includes(tag));
-  const fire=tags.includes('fire')||enabled('embercore')||!!passives.dashfire||!!talents.w_flame2;
+  const fire=tags.includes('fire')||enabled('embercore')||!!passives.dashfire||!!talents.w_flame2||!!cores.garden;
   const poison=tags.includes('poison')||enabled('venomfang');
-  const cold=tags.includes('cold')||!!weapons.tether||!!weapons.soulchain||!!weapons.hammer||!!weapons.quake||enabled('frostbrand')||enabled('brine')||!!talents.s_frost1||!!passives.hoarfrost||characterId==='mariner';
-  if(key==='bulwark'&&!passives.aegis&&!passives.emberheart&&!weapons.bastion&&!talents.s_scholar2&&!talents.f_guard1&&!talents.m_guard1&&characterId!=='warden'&&!(passives.stormcoil&&tags.includes('lightning')))return [];
+  const cold=tags.includes('cold')||!!weapons.tether||!!weapons.soulchain||!!weapons.hammer||!!weapons.quake||enabled('frostbrand')||enabled('brine')||!!talents.s_frost1||!!passives.hoarfrost||characterId==='mariner'||!!cores.stride;
+  if(key==='bulwark'&&!passives.aegis&&!passives.emberheart&&!weapons.bastion&&!talents.s_scholar2&&!talents.f_guard1&&!talents.m_guard1&&characterId!=='warden'&&!(passives.stormcoil&&tags.includes('lightning'))&&!cores.ward)return [];
   const refinedBurn=Object.keys(weapons).some(id=>weaponUpgrades[id]?.anomaly>0&&WEAPON_FAMILIES[id]?.includes('fire'));
-  if(key==='rotclock'&&!poison&&!enabled('embercore')&&!talents.w_flame2&&!refinedBurn)return [];
+  if(key==='rotclock'&&!poison&&!enabled('embercore')&&!talents.w_flame2&&!refinedBurn&&!Object.values(weaponRunes).includes('fire'))return [];
   if(key==='volatile'&&!(fire&&poison)||key==='stormseal'&&!cold)return [];
   return Object.keys(weapons).filter(id=>{
-    const tags=WEAPON_FAMILIES[id]||[];
+    const tags=weaponFamilies(id,weaponRunes);
     return families.some(tag=>['hit','guard','travel','pickup'].includes(tag))||tags.some(tag=>families.includes(tag))
       || key==='cinder'&&fire
       || key==='spore'&&poison

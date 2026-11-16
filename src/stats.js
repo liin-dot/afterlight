@@ -1,10 +1,10 @@
 import {WEAPONS} from './data.js';
-import {WEAPON_FAMILIES,WEAPON_REFINEMENTS,REFINEMENT_RARITIES,RELICS,SYNERGIES,relicValues,compatibleWeapons,ALTAR_BOONS} from './content.js';
+import {WEAPON_FAMILIES,WEAPON_RUNES,WEAPON_REFINEMENTS,REFINEMENT_RARITIES,RELICS,SYNERGIES,relicValues,compatibleWeapons,ALTAR_BOONS} from './content.js';
 
 // The simulation and character sheet use the same effective values.
-export function characterStats(character, passives = {}, meta = {}, talents = {}, weapons = {}, boons = [], empowerments = {}, metaBuffs = {}, growth = {}, weaponUpgrades = {}) {
+export function characterStats(character, passives = {}, meta = {}, talents = {}, weapons = {}, boons = [], empowerments = {}, metaBuffs = {}, growth = {}, weaponUpgrades = {}, weaponRunes = {}, cores = {}) {
   const stats={
-    boons:[...boons],empowerments:{...empowerments},metaBuffs,growth:{...growth},weaponUpgrades,summonMultiplier:1,damageTakenMultiplier:1,
+    boons:[...boons],empowerments:{...empowerments},metaBuffs,growth:{...growth},weaponUpgrades,weaponRunes:{...weaponRunes},cores:{...cores},summonMultiplier:1,damageTakenMultiplier:1,
     difficulty:{hp:1,damage:1,speed:1,population:1,elite:1,bosses:0},
     talents,
     passives:{...passives},
@@ -104,7 +104,7 @@ export function weaponStats(kind,level,stats,character){
   values.criticalChance=Math.min(1,stats.criticalChance+(upgrades.critical||0));values.anomalyChance=Math.min(1,upgrades.anomaly||0);
   if(values.fusion&&level>=2)for(const link of stats.resonances||[]){
     const rank=Math.min(level-1,link.rank),weapons={...stats.weapons,[kind]:level};
-    const linked=link.items.filter(key=>RELICS[key]).map(key=>compatibleWeapons(key,weapons,stats.passives,stats.talents,character.id,stats.weaponUpgrades));
+    const linked=link.items.filter(key=>RELICS[key]).map(key=>compatibleWeapons(key,weapons,stats.passives,stats.talents,character.id,stats.weaponUpgrades,stats.weaponRunes,stats.cores));
     if(rank>(values.resonance?.rank||0)&&linked.every(ids=>ids.length)&&linked.some(ids=>ids.includes(kind)))values.resonance={...link,rank};
   }
   const rank=values.resonance?.rank||0,tempo=(1-rank*.15)*(stats.metaBuffs.haste||1);
@@ -123,6 +123,8 @@ export function weaponStats(kind,level,stats,character){
   const pact=(tags.includes('spirit')||tags.includes('summon'))?stats.soulpact?.multiplier||1:1;
   for(const key of Object.keys(values))if(key==='damage'||key.endsWith('Damage'))values[key]*=pact;
   if(tags.includes('summon')&&values.fireInterval)values.fireInterval*=stats.soulpact?.interval||1;
+  const rune=WEAPON_RUNES[stats.weaponRunes?.[kind]];
+  if(rune)for(const key of Object.keys(values))if(key==='damage'||key.endsWith('Damage'))values[key]*=rune.damage;
   return values;
 }
 

@@ -2,10 +2,11 @@ import {paintAvatar, paintIcon} from './art.js';
 import {WEAPONS, PASSIVES, META, META_TREES, startingLoadout, formatTime,catalogItem} from './data.js';
 import {characterStats, weaponStats} from './stats.js';
 import {FUSIONS,WEAPON_SLOTS,PASSIVE_SLOTS,maxWeaponLevel,weaponName,fusionState,ingredientData} from './fusions.js';
-import {relicDescription,compatibleWeapons,SYNERGIES,ALTAR_BOONS,refinementGain,weaponAnomalyText} from './content.js';
+import {relicDescription,compatibleWeapons,SYNERGIES,ALTAR_BOONS,refinementGain,weaponAnomalyText,WEAPON_RUNES,itemTags,BUILD_TAGS} from './content.js';
 import {passiveEffect,weaponFacts,resonanceText} from './item-info.js';
 import {ItemCatalog,itemArt,effectText} from './catalog.js';
 import {CHARACTER_TALENTS,TALENT_LEVELS,talentPoints,talentNodeState,characterTalentSummary} from './talents.js';
+import {RUN_CORES,coreDescription,coreReady,coreProgress} from './run-cores.js';
 
 const $ = id => document.getElementById(id);
 const number = (value, digits = 1) => Number(value.toFixed(digits)).toLocaleString('zh-CN', {maximumFractionDigits: digits});
@@ -42,7 +43,7 @@ export class CharacterSheet {
     for(const tab of ['items','fusion']){
       const root=$('sheet-'+tab);
       const categories=root.querySelector('.collection-category');
-      if(categories)for(const [key,label,icon] of [['all','全部','amount'],['weapon','武器','blade'],['passive','祝福','power'],['relic','遗物','stormcoil'],['boon','契约','curse']]){
+      if(categories)for(const [key,label,icon] of [['all','全部','amount'],['weapon','武器','blade'],['passive','祝福','power'],['relic','遗物','stormcoil'],['boon','契约','curse'],['core','核心','prism']]){
         const button=node('button','icon-choice');button.dataset.choice=key;button.title=label;button.setAttribute('aria-label',label);button.append(artwork(icon),node('span','',label));
         button.addEventListener('click',()=>{categories.dataset.value=key;this.hideCollection(tab);root.dataset.page=0;this.renderCollection(tab)});categories.append(button);
       }
@@ -76,6 +77,7 @@ export class CharacterSheet {
     const modal = document.querySelector('.modal-wrap:not(.hidden)');
     if (modal && !['pause-screen', 'level-screen', 'reward-screen', 'end-screen'].includes(modal.id)) return false;
     this.origin = this.game.state;
+    this.editingRune=null;
     this.previousFocus = document.activeElement;
     this.previousModal = modal;
     if (modal) modal.classList.add('hidden');
@@ -185,7 +187,8 @@ export class CharacterSheet {
       const icon=card.querySelector('.detail-art canvas');
       if(icon){const canvas=node('canvas');canvas.width=canvas.height=24;canvas.setAttribute('aria-hidden','true');canvas.getContext('2d').drawImage(icon,0,0);button.append(canvas)}else button.append(node('span','sealed-icon','?'));
       button.addEventListener('click',event=>{this.showCollection(card);if(event.detail===0)root.querySelector('.detail-bubble-close').focus({preventScroll:true})});
-      button.addEventListener('focus',()=>this.showCollection(card));button.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&button.getAttribute('aria-expanded')!=='true')this.showCollection(card)});return button;
+      // Pointer focus precedes click; opening an overlapping bubble here can swallow that click.
+      button.addEventListener('focus',()=>{if(button.matches(':focus-visible'))this.showCollection(card)});button.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&button.getAttribute('aria-expanded')!=='true')this.showCollection(card)});return button;
     }));
     root.querySelector('.collection-prev').disabled=page===0;root.querySelector('.collection-next').disabled=page===pages-1;
     root.querySelector('.collection-page').textContent=(page+1)+' / '+pages;root.querySelector('.catalog-pagination').classList.toggle('hidden',!entries.length);root.querySelector('.catalog-empty').classList.toggle('hidden',!!entries.length);
@@ -234,15 +237,19 @@ export class CharacterSheet {
     put('sheet-return', this.origin==='talent'?(talentPoints(game)>0?'保留天赋点，继续升级 ↗':'继续升级 ↗'):({menu: '返回营地 ↗', running: '继续守夜 ↗', paused: '返回暂停界面 ↗', level: '返回升级选择 ↗', reward: '返回祭坛奖励 ↗', over: '返回远征结算 ↗'})[this.origin]);
     $('sheet-menu-button').classList.toggle('hidden',!['running','paused','level','reward'].includes(this.origin));
     put('sheet-meta-note', preview ? '下次出征生效' : '本次出征时的祭坛加成');
-    put('sheet-item-count', Object.keys(weapons).length + Object.keys(passives).length+(preview?0:game.boons.length));
+    put('sheet-item-count', Object.keys(weapons).length + Object.keys(passives).length+(preview?0:game.boons.length+Object.keys(game.cores).length));
     put('sheet-items-label',preview?'装备预览':'本局装备');
     this.buildAttributes(character, stats, passives, meta, preview);
     this.buildTalents(character,preview);
-    put('sheet-build-summary',`武器 ${Object.keys(weapons).length} / ${WEAPON_SLOTS} · 道具 ${Object.keys(passives).length} / ${PASSIVE_SLOTS}`);
+    put('sheet-build-summary',`武器 ${Object.keys(weapons).length} / ${WEAPON_SLOTS} · 道具 ${Object.keys(passives).length} / ${PASSIVE_SLOTS}`+(preview||!Object.keys(game.cores).length?'':' · 核心 '+Object.keys(game.cores).length));
     const boons=(preview?[]:game.boons||[]).map(id=>{
       const boon=ALTAR_BOONS[id],card=this.itemCard(catalogItem('passive:'+boon.icon),boon.name,'祭坛契约','本局生效');card.id='sheet-boon-'+id;card.dataset.category='boon';card.append(effectText(boon.positive+'；'+boon.negative+'。'));return card;
     });
-    $('sheet-items').querySelector('.collection-cards').replaceChildren(...this.buildWeapons(character,stats,weapons),...this.buildPassives(passives,stats,weapons),...boons);
+    const cores=Object.entries(preview?{}:game.cores).map(([key,rank])=>{
+      const info=RUN_CORES[key],icon=catalogItem((WEAPONS[info.icon]?'weapon:':'passive:')+info.icon),card=this.itemCard(icon,info.name,'本局核心 · '+info.style,['','Ⅰ','Ⅱ','Ⅲ'][rank]+'阶');
+      card.id='sheet-core-'+key;card.dataset.category='core';card.append(effectText(coreDescription(key,rank,game)),node('p','',coreReady(game,key)?coreProgress(game,key)+' · 触发 '+(game.coreState.procs[key]||0)+' 次 · 不占装备位':'暂缺触发武器 · 装备相关武器后生效'));return card;
+    });
+    $('sheet-items').querySelector('.collection-cards').replaceChildren(...this.buildWeapons(character,stats,weapons),...this.buildPassives(passives,stats,weapons),...boons,...cores);
     this.renderCollection('items');
     this.buildMeta(meta,preview);
     const attributes=[...$('sheet-stat-grid').children],groups=[];
@@ -259,15 +266,15 @@ export class CharacterSheet {
     this.hideDetails();
     put('sheet-talent-count',preview?'预览':points>0?'+'+points:learned+'/3');
     const root=$('sheet-talents');root.replaceChildren();root.style.setProperty('--talent-color',definition.color);
-    const selected=definition.branches.find(branch=>branch.nodes.some(talent=>game.talents[talent.id]));
-    const budget=node('div','talent-budget');budget.append(node('b','',preview?'天赋预览':points+' 点可用'),node('span','',selected?'已锁定 · '+selected.name:'首次学习锁定路线'));
-    root.append(budget,node('p','talent-rules',this.origin==='talent'?'获得天赋点 · 先选天赋，再选升级；也可保留点数。':'LV.'+TALENT_LEVELS.join(' / ')+' 各 1 点 · 点选图标查看'));
+    const selected=definition.branches.filter(branch=>branch.nodes.some(talent=>game.talents[talent.id]));
+    const budget=node('div','talent-budget');budget.append(node('b','',preview?'天赋预览':points+' 点可用'),node('span','',selected.length?selected.map(b=>b.name).join(' / '):'三路自由搭配'));
+    root.append(budget,node('p','talent-rules',this.origin==='talent'?'先选天赋 · 可跨路线学习，也可保留点数。':'LV.'+TALENT_LEVELS.join(' / ')+' 各 1 点 · 可混搭、逐级撤回'));
     const tree=node('div','talent-tree');tree.setAttribute('aria-label',definition.name+'天赋树');
     const bubble=node('div','detail-bubble');bubble.id='talent-detail';bubble.popover='auto';bubble.setAttribute('role','dialog');bubble.setAttribute('aria-labelledby','talent-detail-title');
     bubble.addEventListener('beforetoggle',event=>{if(event.newState==='closed'){this.talentAnchor?.classList.remove('selected');this.talentAnchor?.setAttribute('aria-expanded','false')}});
     const buttonFor=(talent,branch,tier)=>{
       const state=branch?talentNodeState(game,talent.id):null;
-      const button=node('button','talent-node'+(!branch?' innate':state.learned?' learned':state.exclusive?' excluded':state.available&&!readOnly?' available':' locked'));
+      const button=node('button','talent-node'+(!branch?' innate':state.learned?' learned':state.available&&!readOnly?' available':' locked'));
       button.id='talent-'+(talent.id||'innate');button.append(artwork(talent.icon));
       button.setAttribute('aria-label',(branch?branch.name+' · '+talent.name+' · '+state.reason:'初始被动 · '+definition.name));button.setAttribute('aria-controls',bubble.id);button.setAttribute('aria-expanded','false');button.setAttribute('aria-haspopup','dialog');
       const inspect=()=>{
@@ -281,7 +288,9 @@ export class CharacterSheet {
         if(branch){
           const reason=state.learned?'✓ 已学会':preview?'出征后获得天赋点':this.origin==='over'?'远征已结束':state.reason;
           copy.append(node('p','talent-detail-state',reason));
-          if(state.available&&!readOnly){const learn=node('button','talent-learn',selected?'学习 · 1 点':'学习并锁定此路线 · 1 点');learn.addEventListener('click',()=>this.game.learnTalent(talent.id));copy.append(learn)}
+          if(state.available&&!readOnly){const learn=node('button','talent-learn','学习 · 1 点');learn.addEventListener('click',()=>this.game.learnTalent(talent.id));copy.append(learn)}
+          if(state.refundable&&!readOnly){const refund=node('button','talent-learn talent-refund','撤回 · 返还 1 点');refund.addEventListener('click',()=>this.game.unlearnTalent(talent.id));copy.append(refund)}
+          else if(state.learned&&!readOnly)copy.append(node('p','talent-detail-state','先撤回后续节点，才能撤回此点。'));
         }
         bubble.replaceChildren(close,copy);if(!bubble.matches(':popover-open'))bubble.showPopover();
         this.positionBubble(bubble,button);
@@ -290,10 +299,10 @@ export class CharacterSheet {
       button.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&button.getAttribute('aria-expanded')!=='true')inspect()});
       return button;
     };
-    const innate=buttonFor(definition);innate.addEventListener('keydown',event=>{if(event.code==='ArrowDown'){event.preventDefault();$('talent-'+(selected||definition.branches[0]).nodes[0].id).focus({preventScroll:true})}});tree.append(innate);
+    const innate=buttonFor(definition);innate.addEventListener('keydown',event=>{if(event.code==='ArrowDown'){event.preventDefault();$('talent-'+(selected[0]||definition.branches[0]).nodes[0].id).focus({preventScroll:true})}});tree.append(innate);
     const branches=node('div','talent-branches');
     definition.branches.forEach((branch,index)=>{
-      const column=node('div','talent-branch'+(selected===branch?' chosen':''));column.setAttribute('role','group');column.setAttribute('aria-label',branch.name);
+      const column=node('div','talent-branch'+(selected.includes(branch)?' chosen':''));column.setAttribute('role','group');column.setAttribute('aria-label',branch.name);
       branch.nodes.forEach((talent,tier)=>{
         const button=buttonFor(talent,branch,tier);
         button.addEventListener('keydown',event=>{
@@ -320,8 +329,9 @@ export class CharacterSheet {
     else if(anchor.left>=width+gap+pad){side='left';left=anchor.left-width-gap;top=Math.max(pad,Math.min(anchor.y+(anchor.height-height)/2,innerHeight-height-pad))}
     else{
       side=anchor.top>innerHeight-anchor.bottom?'above':'below';left=Math.max(pad,Math.min(anchor.x+(anchor.width-width)/2,innerWidth-width-pad));
-      const space=(side==='above'?anchor.top:innerHeight-anchor.bottom)-gap-pad;bubble.style.maxHeight=Math.max(100,space)+'px';
-      top=side==='above'?anchor.top-gap-bubble.getBoundingClientRect().height:anchor.bottom+gap;
+      const space=(side==='above'?anchor.top:innerHeight-anchor.bottom)-gap-pad;
+      if(height>space){side='overlay';top=Math.max(pad,Math.min(anchor.y+(anchor.height-height)/2,innerHeight-height-pad))}
+      else top=side==='above'?anchor.top-gap-height:anchor.bottom+gap;
     }
     bubble.dataset.side=side;bubble.style.left=left+'px';bubble.style.top=top+'px';
     bubble.style.setProperty('--tail',Math.max(20,Math.min((side==='left'||side==='right'?anchor.y+anchor.height/2-top:anchor.x+anchor.width/2-left),(side==='left'||side==='right'?bubble.offsetHeight:width)-20))+'px');
@@ -378,10 +388,24 @@ export class CharacterSheet {
       const data=WEAPONS[key],values=weaponStats(key,level,stats,character);
       const card=this.itemCard(catalogItem('weapon:'+key),weaponName(key,level),values.fusion?'融合武器':data.category,values.evolved?'已进化':'LV. '+level+' / '+maxWeaponLevel(key));
       card.dataset.category='weapon';card.dataset.badge=values.evolved?'✦':values.resonance?'共振'+(values.resonance.rank===2?'Ⅱ':'Ⅰ'):'LV.'+level;card.id='sheet-weapon-'+key;
+      const rune=WEAPON_RUNES[stats.weaponRunes?.[key]],inspectable=level>=3||values.fusion,editable=this.origin!=='menu'&&this.origin!=='over'&&inspectable;
+      if(this.editingRune===key&&inspectable){
+        const choices=node('div','icon-choices rune-choices');choices.setAttribute('role','group');choices.setAttribute('aria-label','为'+weaponName(key,level)+'选择符文');
+        for(const [id,info] of [['', {name:'原型',icon:key}],...Object.entries(WEAPON_RUNES)]){
+          const button=node('button','icon-choice');button.dataset.rune=id;button.disabled=!editable;button.setAttribute('aria-pressed',String((stats.weaponRunes?.[key]||'')===id));button.setAttribute('aria-label',info.name+(id?'符文':'形态'));button.append(artwork(info.icon),node('span','',info.name));button.addEventListener('click',()=>this.game.setWeaponRune(key,id||null));choices.append(button);
+        }
+        const linked=Object.keys(PASSIVES).filter(id=>PASSIVES[id].relic&&compatibleWeapons(id,weapons,stats.passives,stats.talents,character.id,stats.weaponUpgrades,stats.weaponRunes,stats.cores).includes(key)),equipped=linked.filter(id=>stats.passives[id]);
+        const tags=itemTags(key,stats.weaponRunes).map(id=>BUILD_TAGS[id].name).join(' / ');
+        card.append(choices,effectText(rune?rune.description:'保持武器原有伤害与标签，不附加符文效果。'),node('p','collection-note','当前标签：'+tags),node('p','collection-note','已装备联动：'+(equipped.length?equipped.map(id=>PASSIVES[id].name).join('、'):'暂无')));
+        const back=node('button','sheet-recipe-link','返回武器详情');back.addEventListener('click',()=>{this.editingRune=null;this.build();this.showCollection($('sheet-weapon-'+key));$('items-detail').dataset.pinned='true';$('sheet-weapon-'+key).querySelector('.weapon-rune-button')?.focus({preventScroll:true})});card.append(back);return card;
+      }
       card.append(effectText(values.evolved?data.upgrades.at(-1).replace(/^进化：/,''):data.desc));
       const facts=node('dl','sheet-facts');
       for(const [label,value] of weaponFacts(key,values).slice(0,4)){const pair=node('div');pair.append(node('dt','',label),node('dd','',value));facts.append(pair)}
-      card.append(facts);if(stats.empowerments?.[key])card.append(effectText('祭坛淬炼 · 伤害 +'+stats.empowerments[key]*12+'%，已计入数值。','collection-note'));if(stats.weaponUpgrades?.[key])card.append(effectText('满级精修：'+Object.entries(stats.weaponUpgrades[key]).map(([id,value])=>refinementGain(id,value)).join('；')+'。同类收益累加，已计入战斗与预览；概率最高 100%。','collection-note'));if(values.anomalyChance)card.append(effectText('直接命中：'+weaponAnomalyText(key)+'。','collection-note'));if(values.resonance)card.append(effectText(resonanceText(values),'collection-note'));this.addFusionLink(card,key);return card;
+      card.append(facts);if(stats.empowerments?.[key])card.append(effectText('祭坛淬炼 · 伤害 +'+stats.empowerments[key]*12+'%，已计入数值。','collection-note'));if(stats.weaponUpgrades?.[key])card.append(effectText('满级精修：'+Object.entries(stats.weaponUpgrades[key]).map(([id,value])=>refinementGain(id,value)).join('；')+'。已计入数值。','collection-note'));if(values.anomalyChance)card.append(effectText('直接命中：'+weaponAnomalyText(key)+'。','collection-note'));if(values.resonance)card.append(effectText(resonanceText(values),'collection-note'));
+      if(inspectable){const edit=node('button','sheet-recipe-link weapon-rune-button','符文变体 · '+(rune?.name||'原型')+' ↗');edit.addEventListener('click',()=>{this.editingRune=key;this.build();this.showCollection($('sheet-weapon-'+key));$('items-detail').dataset.pinned='true';(editable?$('sheet-weapon-'+key).querySelector('[data-rune][aria-pressed="true"]'):$('items-detail').querySelector('.detail-bubble-close'))?.focus({preventScroll:true})});card.append(edit)}
+      else card.append(node('p','collection-note','武器 LV.3 解锁符文变体；融合武器直接开放。'));
+      this.addFusionLink(card,key);if(inspectable)card.querySelector('.collection-actions')?.prepend(card.querySelector('.weapon-rune-button'));return card;
     });
   }
 
@@ -432,7 +456,7 @@ export class CharacterSheet {
       const card=this.itemCard(catalogItem('passive:'+key),data.name,data.relic?'联动遗物 · '+data.trigger:'属性祝福','LV. '+level+' / '+data.max);card.id='sheet-passive-'+key;card.dataset.badge='LV.'+level;
       card.append(effectText(description));
       if(data.relic){
-        const linked=compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id,stats.weaponUpgrades);
+        const linked=compatibleWeapons(key,weapons,passives,stats.talents,this.game.character.id,stats.weaponUpgrades,stats.weaponRunes,stats.cores);
         const status=linked.length?'联动就绪':'缺少触发来源';
         card.append(effectText(key==='soulpact'?'持续强化灵魂与召唤武器，已计入当前武器数值。'+(stats.talents?.s_swarm1?'星群伴星同时继承伤害与射速。':''):status+' · 本局触发 '+(this.origin==='menu'?0:(this.game.relicProcs?.[key]||0))+' 次。','collection-note'));
       }

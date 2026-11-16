@@ -1,4 +1,4 @@
-import {WEAPON_FAMILIES} from './content.js';
+import {weaponFamilies} from './content.js';
 import {TAU,diamond,glow} from './art.js';
 
 export const TALENT_LEVELS=[10,20,30];
@@ -114,9 +114,9 @@ export function talentNodeState(game,id){
   const branch=definition?.branches.find(b=>b.nodes.some(n=>n.id===id)),tier=branch?.nodes.findIndex(n=>n.id===id);
   if(!branch)return {available:false,reason:'其他角色的天赋'};
   const learned=!!game.talents?.[id],requiredLevel=TALENT_LEVELS[tier];
-  const selected=definition.branches.find(b=>b.nodes.some(n=>game.talents?.[n.id])),exclusive=!!selected&&selected!==branch;
-  const reason=learned?'已学会':exclusive?'本局已锁定「'+selected.name+'」路线':game.level<requiredLevel?'需要 LV. '+requiredLevel:tier>0&&!game.talents?.[branch.nodes[tier-1].id]?'先学习「'+branch.nodes[tier-1].name+'」':talentPoints(game)<=0?'需要 1 天赋点':!selected?'学习并锁定「'+branch.name+'」':'学习 · 1 天赋点';
-  return {available:!learned&&!exclusive&&game.level>=requiredLevel&&(tier===0||!!game.talents?.[branch.nodes[tier-1].id])&&talentPoints(game)>0,learned,exclusive,reason,tier,node:branch.nodes[tier]};
+  const refundable=learned&&!game.talents?.[branch.nodes[tier+1]?.id];
+  const reason=learned?'已学会':game.level<requiredLevel?'需要 LV. '+requiredLevel:tier>0&&!game.talents?.[branch.nodes[tier-1].id]?'先学习「'+branch.nodes[tier-1].name+'」':talentPoints(game)<=0?'需要 1 天赋点':'学习 · 1 天赋点';
+  return {available:!learned&&game.level>=requiredLevel&&(tier===0||!!game.talents?.[branch.nodes[tier-1].id])&&talentPoints(game)>0,learned,refundable,reason,tier,node:branch.nodes[tier]};
 }
 
 export function resetCharacterTalents(game){
@@ -227,18 +227,18 @@ export function updateCharacterTalents(game,dt,moved){
 export function onCharacterCast(game,kind){
   const s=game.characterState;
   if(game.character.id==='ranger'&&s.charge>=windLimit(game)&&s.nextWind<=game.time&&fireWind(game)){s.charge=0;s.nextWind=game.time+windInterval(game)}
-  if(game.talents.s_swarm3&&(WEAPON_FAMILIES[kind]||[]).some(tag=>tag==='spirit'||tag==='summon')&&s.nextStar<=game.time){
+  if(game.talents.s_swarm3&&weaponFamilies(kind,game.weaponRunes).some(tag=>tag==='spirit'||tag==='summon')&&s.nextStar<=game.time){
     const target=game.closest(game.player.x,game.player.y,420);if(target){s.nextStar=game.time+.5;fireStar(game,game.player.x,game.player.y-8,Math.atan2(target.y-game.player.y,target.x-game.player.x))}
   }
 }
 export function characterHitMultiplier(game,e,source,periodic){
-  const tags=WEAPON_FAMILIES[source];if(!tags)return 1;const t=game.talents;
+  const tags=weaponFamilies(source,game.weaponRunes);if(!tags.length)return 1;const t=game.talents;
   if(t.w_flame3&&e.burningUntil>game.time&&(tags.includes('melee')||tags.includes('fire')))return 1.2;
   if(t.w_guard2&&!periodic&&game.player.shield>0&&(tags.includes('melee')||tags.includes('spirit')))return 1.2;
   return t.r_sight1&&e.windMarkedUntil>game.time?1.18:1;
 }
 export function onCharacterHit(game,e,source,periodic,critical=false){
-  const tags=WEAPON_FAMILIES[source];if(!tags)return;
+  const tags=weaponFamilies(source,game.weaponRunes);if(!tags.length)return;
   const s=game.characterState,t=game.talents,p=game.player;
   if(game.character.id==='warden'&&(!periodic||t.w_flame2&&tags.includes('fire'))&&Math.hypot(e.x-p.x,e.y-p.y)<=emberRadius(game)){
     const ready=game.time>=s.nextCharge;
@@ -279,13 +279,13 @@ export function onCharacterTravel(game){
   if(t.f_dash2)forgeDischarge(game,.6);
   if(t.m_dash2)tidePulse(game,.7);
   if(t.m_dash3){s.nextPulse=game.time;chargeTide(game,tideLimit(t))}
-  for(const kind of Object.keys(game.weapons)){const tags=WEAPON_FAMILIES[kind]||[];if(t.f_dash3&&tags.some(tag=>tag==='lightning'||tag==='projectile')||t.m_dash3&&tags.some(tag=>tag==='cold'||tag==='spirit'))game.timers[kind]=Math.max(0,(game.timers[kind]||0)-(t.f_dash3?1:.8))}
+  for(const kind of Object.keys(game.weapons)){const tags=weaponFamilies(kind,game.weaponRunes);if(t.f_dash3&&tags.some(tag=>tag==='lightning'||tag==='projectile')||t.m_dash3&&tags.some(tag=>tag==='cold'||tag==='spirit'))game.timers[kind]=Math.max(0,(game.timers[kind]||0)-(t.f_dash3?1:.8))}
   if(t.w_dash3){s.assaultUntil=game.time+4;s.nextPulse=Math.min(s.nextPulse,game.time+2.5*game.stats.haste)}
   if(t.w_dash1)chargeEmber(game,3);
   if(t.w_dash2)emberPulse(game,p.x,p.y,.8);
   if(t.r_roam2){s.charge=windLimit(game);s.nextWind=game.time}
   if(t.r_roam3){s.ghostUntil=game.time+3;s.nextGhost=game.time}
-  for(const kind of Object.keys(game.weapons)){const tags=WEAPON_FAMILIES[kind];if(t.w_dash3&&(tags.includes('melee')||tags.includes('fire'))||t.r_roam3&&(tags.includes('projectile')||tags.includes('beam')))game.timers[kind]=Math.max(0,(game.timers[kind]||0)-(t.w_dash3?.75:.5))}
+  for(const kind of Object.keys(game.weapons)){const tags=weaponFamilies(kind,game.weaponRunes);if(t.w_dash3&&(tags.includes('melee')||tags.includes('fire'))||t.r_roam3&&(tags.includes('projectile')||tags.includes('beam')))game.timers[kind]=Math.max(0,(game.timers[kind]||0)-(t.w_dash3?.75:.5))}
 }
 export function onCharacterHurt(game){
   const p=game.player,s=game.characterState;
@@ -302,7 +302,7 @@ export function onCharacterXp(game,amount,starLinked=false){
   if(s.xp>=wellLimit(t)&&game.time>=s.nextWell){
     s.xp=0;s.nextWell=game.time+4;s.wells++;p.hp=Math.min(p.maxHp,p.hp+3);p.shield=Math.max(p.shield,t.s_scholar3?14:8);
     game.effects.push({type:'pulse',x:p.x,y:p.y-8,r:35,color:'#b7d9e8',t:.5,max:.5});game.texts.push({x:p.x,y:p.y-35,text:'灵泉',t:1,max:1,color:'#b7d9e8'});
-    if(t.s_scholar3){for(let i=0;i<6;i++)fireStar(game,p.x,p.y-8,i*TAU/6);for(const kind of Object.keys(game.weapons))if(WEAPON_FAMILIES[kind].some(tag=>tag==='spirit'||tag==='summon'))game.timers[kind]=Math.max(0,(game.timers[kind]||0)-.8)}
+    if(t.s_scholar3){for(let i=0;i<6;i++)fireStar(game,p.x,p.y-8,i*TAU/6);for(const kind of Object.keys(game.weapons))if(weaponFamilies(kind,game.weaponRunes).some(tag=>tag==='spirit'||tag==='summon'))game.timers[kind]=Math.max(0,(game.timers[kind]||0)-.8)}
   }
 }
 

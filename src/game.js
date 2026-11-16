@@ -5,12 +5,13 @@ import {characterStats,weaponStats,refinementValue} from './stats.js';
 import {FUSIONS,fusionState,maxWeaponLevel} from './fusions.js';
 import {updateFusion,chainArrow,updateFusionZone,drawFusionZone,drawFusionWeapons} from './fusion-combat.js';
 import {updateExpandedWeapon,updateExpandedProjectile,updateExpandedZone,drawExpandedProjectile,drawExpandedZone,drawExpandedEffect} from './expanded-combat.js';
-import {onWeaponHit,onEnemyKilled,onWeaponCast,onPlayerHurt,onPlayerTravel,onXpPickup,updateRelicStates,readyProc} from './relic-combat.js';
+import {onWeaponHit,onRuneHit,onEnemyKilled,onWeaponCast,onPlayerHurt,onPlayerTravel,onXpPickup,updateRelicStates,readyProc} from './relic-combat.js';
 import {RUN_DURATION,BOSS_TIMES,pressureAt,xpForLevel,weightedPick,upgradePool,rollUpgradeChoices,recordUpgradeChoice} from './balance.js';
 import {talentPoints,talentNodeState,resetCharacterTalents,updateCharacterTalents,onCharacterLearn,onCharacterHit,onCharacterProjectileHit,characterHitMultiplier,onCharacterTravel,onCharacterHurt,drawCharacterTalents} from './talents.js';
 import {EVENT_TYPES,ALTAR_REWARDS,resetWorldEvents,startWorldEvent,updateWorldEvents,drawWorldEvents,nearestWorldEvent,worldEventTarget} from './world-events.js';
-import {ALTAR_BOONS,relicValues,refinementGain} from './content.js';
+import {ALTAR_BOONS,WEAPON_RUNES,relicValues,refinementGain} from './content.js';
 import {drawCombatProjectile,drawCombatZone,drawCombatEffect,drawSpirit} from './combat-art.js';
+import {CORE_LEVELS,rollCoreChoices,learnCore,onCoreHit,onCoreHurt,updateCores} from './run-cores.js';
 
 export {RUN_DURATION};
 
@@ -70,8 +71,10 @@ export class Game{
   const loadout=startingLoadout(character,preparation);this.weapons=loadout.weapons;this.passives=loadout.passives;
   this.relicTimers={};this.relicProcs={};this.echoCasts=0;
   this.choiceHistory=[];this.stormCharge=0;this.circuitCharge=0;this.souljarCharge=0;this.sundialCasts=0;
+  this.cores={};this.coreState={procs:{},xp:0};this.pendingCoreChoices=0;this.coreDraft=false;
+  this.weaponRunes={};this.runeCharges={};
   this.xpNext=xpForLevel(1);this.waveClock=42;this.banished=new Set();this.banishes=3;this.lastHealDrop=-20;this.lastUtilityDrop=-30;this.lastHurt=-8;this.harvestCharge=0;this.damageByWeapon={};this.damageTaken=0;this.lastPhase=0;this.pressure=pressureAt(0,0,{},this.stage);
-  this.boons=[];this.weaponEmpowerments={};this.weaponUpgrades={};this.metaBuffs={};this.growth={};this.stats=characterStats(character,this.passives,this.meta,{},this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
+  this.boons=[];this.weaponEmpowerments={};this.weaponUpgrades={};this.metaBuffs={};this.growth={};this.stats=characterStats(character,this.passives,this.meta,{},this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
   const maxHp=this.stats.maxHp;this.player={x:0,y:37,hp:maxHp,maxHp,r:7,flip:false,walk:0,moving:false,invincible:1,lastX:0,lastY:1,travelCharge:0};
   this.player.shield=0;
   resetCharacterTalents(this);
@@ -112,6 +115,7 @@ export class Game{
   for(const e of [...this.enemies])this.updateEnemy(e,dt);
   this.grid.rebuild(this.enemies);updateRelicStates(this);
   const moved=Math.hypot(p.x-oldX,p.y-oldY);
+  updateCores(this,dt,moved);
   if(p.hp>0&&moved>0){p.travelCharge+=moved;if(p.travelCharge>=240){p.travelCharge%=240;onPlayerTravel(this);onCharacterTravel(this)}}
   updateCharacterTalents(this,dt,moved);this.updateWeapons(dt);this.updateProjectiles(dt);this.updateZones(dt);this.updateHazards(dt);this.updateDrops(dt);
   updateWorldEvents(this,dt);
@@ -213,7 +217,7 @@ export class Game{
    for(const e of this.grid.near(b.x,b.y,36)){if(e.dead||b.hit.has(e.id))continue;
     // Sweep each projectile through its previous position to avoid tunnelling.
     const vx=b.x-oldX,vy=b.y-oldY,den=vx*vx+vy*vy||1,u=clamp(((e.x-oldX)*vx+(e.y-9-oldY)*vy)/den,0,1);const dd=Math.hypot(e.x-(oldX+vx*u),e.y-9-(oldY+vy*u));
-    if(dd<e.r+b.r){b.hit.add(e.id);if(b.slowDuration)e.slow=Math.max(e.slow,b.slowDuration);if(b.freeze)e.freeze=Math.max(e.freeze,e.boss?b.bossFreeze:b.freeze);const multiplier=onCharacterProjectileHit(this,b,e);this.hit(e,b.damage*multiplier,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!b.talent);if(b.blastDamage&&!b.blastDone){b.blastDone=true;this.effects.push({type:'pulse',source:b.source,x:e.x,y:e.y-8,r:b.blastRadius,color:WEAPONS[b.source].color,t:.4,max:.4});for(const other of this.grid.near(e.x,e.y,b.blastRadius+25))if(!other.dead&&distance(e,other)<b.blastRadius+other.r)this.hit(other,b.blastDamage,e.x,e.y,20,false,b.source,true)}chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
+    if(dd<e.r+b.r){b.hit.add(e.id);if(b.slowDuration)e.slow=Math.max(e.slow,b.slowDuration);if(b.freeze)e.freeze=Math.max(e.freeze,e.boss?b.bossFreeze:b.freeze);const multiplier=onCharacterProjectileHit(this,b,e);this.hit(e,b.damage*multiplier,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!(b.talent||b.core));if(b.blastDamage&&!b.blastDone){b.blastDone=true;this.effects.push({type:'pulse',source:b.source,x:e.x,y:e.y-8,r:b.blastRadius,color:WEAPONS[b.source].color,t:.4,max:.4});for(const other of this.grid.near(e.x,e.y,b.blastRadius+25))if(!other.dead&&distance(e,other)<b.blastRadius+other.r)this.hit(other,b.blastDamage,e.x,e.y,20,false,b.source,true)}chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
    }
   }this.projectiles=this.projectiles.filter(b=>b.t>0);
  }
@@ -240,9 +244,13 @@ export class Game{
   if(this.texts.length<90)this.texts.push({x:e.x+(Math.random()-.5)*9,y:e.y-22*e.scale,text:dmg,t:.65,max:.65,critical,color:critical?'#efd395':'#d6ddbd'});
   if(feedback){this.sound.play('hit');this.burst(e.x,e.y-10,critical?6:3,critical?'#efd096':'#a3ab78',40)}
   if(critical&&feedback){this.shake=Math.max(this.shake,1.6);this.hitstop=Math.max(this.hitstop,.022)}
+  // Mark before reactions can kill; native weapon effects resolve before core attacks.
+  if(this.cores.garden&&WEAPONS[source]&&!periodic)e.coreGardenUntil=this.time+4;
   const poisonImpact=onWeaponHit(this,e,source,critical,periodic,dmg);
   onCharacterHit(this,e,source,periodic,critical);
   if(poisonImpact)this.hit(e,poisonImpact,e.x,e.y,0,false,null,true);
+  onRuneHit(this,e,source,periodic,dmg);
+  onCoreHit(this,e,source,periodic,dmg);
   if(source==='talent')this.growFromTalent();
   if(e.hp<=0&&!e.dead)this.kill(e);
  }
@@ -251,7 +259,7 @@ export class Game{
   const values=relicValues('everseed',this.passives.everseed);if(Math.random()>=values.chance||!readyProc(this,'everseed'))return;
   const key=['damage','area','vitality'][Math.floor(Math.random()*3)],hp=this.player.hp;
   this.growth[key]=(this.growth[key]||0)+1;
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(hp,this.player.maxHp);
   this.texts.push({x:this.player.x,y:this.player.y-42,text:'薪种 · '+{damage:'伤害 +1%',area:'范围 +1%',vitality:'生命上限 +2'}[key],t:1.2,max:1.2,color:'#e4cc82'});this.on('hud');
  }
@@ -275,7 +283,7 @@ export class Game{
   if(e.final)this.finalDefeated=!this.enemies.some(other=>other.final&&!other.dead);
   onEnemyKilled(this,e);
  }
- hurt(amount,x,y){const p=this.player;if(p.invincible>0||this.state!=='running')return;const dmg=Math.max(1,Math.round(Math.max(amount*.3,amount-this.stats.armor)*this.stats.damageTakenMultiplier)),absorbed=Math.min(p.shield||0,dmg);p.shield-=absorbed;p.hp-=dmg-absorbed;this.lastHurt=this.time;this.damageTaken+=dmg-absorbed;p.invincible=.6;this.shake=5;this.flash=.23;this.sound.play('hurt');this.burst(p.x,p.y-11,12,absorbed?'#c1d9c1':'#bd7968',60);this.texts.push({x:p.x,y:p.y-30,text:absorbed===dmg?'格挡':'−'+(dmg-absorbed),t:.9,max:.9,critical:true,color:absorbed?'#c4e4d0':'#ef9d85'});const shieldBroke=absorbed>0&&p.shield===0;onCharacterHurt(this);onPlayerHurt(this,shieldBroke);this.on('hud')}
+ hurt(amount,x,y){const p=this.player;if(p.invincible>0||this.state!=='running')return;const dmg=Math.max(1,Math.round(Math.max(amount*.3,amount-this.stats.armor)*this.stats.damageTakenMultiplier)),absorbed=Math.min(p.shield||0,dmg);p.shield-=absorbed;p.hp-=dmg-absorbed;this.lastHurt=this.time;this.damageTaken+=dmg-absorbed;p.invincible=.6;this.shake=5;this.flash=.23;this.sound.play('hurt');this.burst(p.x,p.y-11,12,absorbed?'#c1d9c1':'#bd7968',60);this.texts.push({x:p.x,y:p.y-30,text:absorbed===dmg?'格挡':'−'+(dmg-absorbed),t:.9,max:.9,critical:true,color:absorbed?'#c4e4d0':'#ef9d85'});const shieldBroke=absorbed>0&&p.shield===0;onCoreHurt(this,absorbed);onCharacterHurt(this);onPlayerHurt(this,shieldBroke);this.on('hud')}
  updateDrops(dt){
   const p=this.player,r=this.pickupRadius;
   if(p.hp<=0)return;
@@ -307,7 +315,7 @@ export class Game{
    if(item?.refinement){this.refineWeapon(item);rewards.push(item.name+' · '+refinementGain(item.refinement,item.value))}
    else if(item){(item.weapon?this.weapons:this.passives)[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12;rewards.push(item.name+' · LV.'+item.current+' → LV.'+item.next)}
    else rewards.push('经验 +'+this.gainXp(24).toLocaleString('zh-CN',{maximumFractionDigits:2})+'（无可强化装备）');
-   this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
+   this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
   }
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   if(this.player.hp>hp)rewards.push('生命 +'+(this.player.hp-hp).toLocaleString('zh-CN',{maximumFractionDigits:2}));
@@ -331,7 +339,7 @@ export class Game{
    if(consumed.has(id)){if(!inserted){replacement[key]=ready.level;inserted=true}}else replacement[id]=level;
   }
   this.weapons=replacement;
-  for(const id of consumed){this.consumedWeapons.add(id);delete this.timers[id];delete this.weaponUpgrades[id]}
+  for(const id of consumed){this.consumedWeapons.add(id);delete this.timers[id];delete this.weaponUpgrades[id];delete this.weaponRunes[id];delete this.runeCharges[id]}
   for(const item of recipe.ingredients.filter(i=>i.type==='passive')){delete this.passives[item.id];this.consumedPassives.add(item.id);delete this.relicTimers[item.id]}
   this.projectiles=this.projectiles.filter(b=>b.enemy||!consumed.has(b.source||b.fusionKind||b.type));
   this.zones=this.zones.filter(z=>!consumed.has(z.source||z.kind||'flame'));
@@ -363,7 +371,7 @@ export class Game{
    }
   }else{this.boons.push(id);rewards.push(ALTAR_BOONS[id].name+' · '+ALTAR_BOONS[id].positive+' / '+ALTAR_BOONS[id].negative)}
   const hpRatio=this.player.hp/this.player.maxHp;
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.maxHp,this.player.maxHp*hpRatio);
   if(bonus){
     const hp=this.player.hp;this.player.hp=Math.min(this.player.maxHp,hp+bonus.heal);this.gold+=bonus.gold;
@@ -374,14 +382,15 @@ export class Game{
   this.eventReward={name:index===-1?'祭坛武器强化':'已缔结祭坛契约',rewards,expiresAt:this.time+5};
   this.sound.play('chest');this.on('altarChosen');this.on('weapons');this.on('hud');this.checkFusionReadiness();return true;
  }
- gainXp(amount){if(!Number.isFinite(amount)||amount<=0)return 0;const points=talentPoints(this),gained=amount*this.xpMultiplier;this.xp+=gained;while(this.xp>=this.xpNext){this.xp-=this.xpNext;this.level++;this.pendingLevels++;this.xpNext=xpForLevel(this.level)}if(talentPoints(this)>points){this.pendingTalentChoice=true;this.on('talentPoints')}return gained}
+ gainXp(amount){if(!Number.isFinite(amount)||amount<=0)return 0;const points=talentPoints(this),gained=amount*this.xpMultiplier;this.xp+=gained;while(this.xp>=this.xpNext){this.xp-=this.xpNext;this.level++;this.pendingLevels++;if(CORE_LEVELS.includes(this.level))this.pendingCoreChoices++;this.xpNext=xpForLevel(this.level)}if(talentPoints(this)>points){this.pendingTalentChoice=true;this.on('talentPoints')}return gained}
  presentLevelChoices(){
   if(this.state!=='running')return;
   if(this.pendingTalentChoice){
    this.pendingTalentChoice=false;
    if(talentPoints(this)>0){this.state='talent';this.keys.clear();this.stick={x:0,y:0};this.sound.play('level');this.on('talentChoice');return}
   }
-  if(this.pendingLevels>0){this.pendingLevels--;this.state='level';this.keys.clear();this.stick={x:0,y:0};this.choices=this.rollUpgrades();this.sound.play('level');this.on('level')}
+  if(this.pendingCoreChoices>0){this.pendingCoreChoices--;this.coreDraft=true;this.state='level';this.keys.clear();this.stick={x:0,y:0};this.choices=rollCoreChoices(this);this.sound.play('level');this.on('level');return}
+  if(this.pendingLevels>0){this.pendingLevels--;this.coreDraft=false;this.state='level';this.keys.clear();this.stick={x:0,y:0};this.choices=this.rollUpgrades();this.sound.play('level');this.on('level')}
  }
  rollUpgrades(){
   return rollUpgradeChoices(this);
@@ -394,25 +403,51 @@ export class Game{
  learnTalent(id){
   const active=['running','paused','level','reward','talent'].includes(this.state)||this.state==='status'&&['running','paused','level','reward','talent'].includes(this.statusReturn);
   const node=talentNodeState(this,id);if(!active||!node.available)return false;
-  this.talents[id]=true;this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
+  this.talents[id]=true;this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
   onCharacterLearn(this);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.sound.play('select');this.on('talentLearned',id);this.on('hud');return true;
  }
- reroll(){if(this.state!=='level'||this.rerolls<=0)return;this.rerolls--;this.choices=rollUpgradeChoices(this,this.choices.map(item=>item.choiceId||item.key));this.sound.play('select');this.on('level')}
- banish(index){if(this.state!=='level'||this.banishes<=0)return;const item=this.choices[index];if(!item||item.fusion||item.key==='heal')return;this.banished.add(item.key);this.banishes--;this.checkFusionReadiness();this.choices=rollUpgradeChoices(this,this.choices.map(choice=>choice.choiceId||choice.key));this.sound.play('select');this.on('level')}
- skipUpgrade(){if(this.state!=='level')return;this.gold+=10;this.state='running';this.keys.clear();this.on('upgrade');this.on('hud');this.toast('已跳过本次成长 · 余烬 +10')}
+ unlearnTalent(id){
+  const active=['paused','level','reward','talent'].includes(this.state)||this.state==='status'&&['running','paused','level','reward','talent'].includes(this.statusReturn);
+  if(!active||!talentNodeState(this,id).refundable)return false;
+  delete this.talents[id];
+  if(id==='w_guard3')this.characterState.reviveReady=false;
+  if(id==='w_dash3')this.characterState.assaultUntil=0;
+  if(id==='r_roam3')this.characterState.ghostUntil=0;
+  if(id==='s_scholar2')this.characterState.xp=0;
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
+  onCharacterLearn(this);this.sound.play('select');this.on('talentRefunded',id);this.on('hud');return true;
+ }
+ setWeaponRune(key,rune){
+  const active=['paused','level','reward','talent'].includes(this.state)||this.state==='status'&&['running','paused','level','reward','talent'].includes(this.statusReturn);
+  if(!active||!Object.hasOwn(WEAPONS,key)||!this.weapons[key]||!WEAPONS[key].fusion&&this.weapons[key]<3||rune!==null&&!Object.hasOwn(WEAPON_RUNES,rune)||(this.weaponRunes[key]||null)===rune)return false;
+  if(rune===null)delete this.weaponRunes[key];else this.weaponRunes[key]=rune;
+  delete this.runeCharges[key];
+  // Clear the old variant's attacks, retaining weapon cooldown and player resources.
+  this.projectiles=this.projectiles.filter(b=>b.enemy||(b.source||b.fusionKind||b.type)!==key);
+  this.zones=this.zones.filter(z=>(z.source||z.kind||'flame')!==key);
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
+  this.checkFusionReadiness();this.sound.play('select');this.on('weaponRune',key);this.on('weapons');this.on('hud');return true;
+ }
+ reroll(){if(this.state!=='level'||this.rerolls<=0)return;this.rerolls--;this.choices=(this.coreDraft?rollCoreChoices:rollUpgradeChoices)(this,this.choices.map(item=>item.choiceId||item.key));this.sound.play('select');this.on('level')}
+ banish(index){if(this.state!=='level'||this.coreDraft||this.banishes<=0)return;const item=this.choices[index];if(!item||item.fusion||item.key==='heal')return;this.banished.add(item.key);this.banishes--;this.checkFusionReadiness();this.choices=rollUpgradeChoices(this,this.choices.map(choice=>choice.choiceId||choice.key));this.sound.play('select');this.on('level')}
+ skipUpgrade(){if(this.state!=='level')return;this.gold+=10;this.coreDraft=false;this.state='running';this.keys.clear();this.on('upgrade');this.on('hud');this.toast('已跳过本次成长 · 余烬 +10')}
  chooseUpgrade(index){
   if(this.state!=='level'||!this.choices[index])return;const item=this.choices[index];
-  if(item.fusion){if(!this.fuseWeapon(item.key))return}
+  if(item.core){if(!learnCore(this,item))return}
+  else if(this.coreDraft)return;
+  else if(item.fusion){if(!this.fuseWeapon(item.key))return}
   else if(item.refinement){if(!this.refineWeapon(item))return}
   else if(item.weapon){this.weapons[item.key]=item.next;this.timers[item.key]=.12;if(item.evolution){this.banner(item.name+' · 觉醒','WEAPON EVOLVED',3);this.shake=6}}
   else if(item.key==='heal'){this.player.hp=Math.min(this.player.maxHp,this.player.hp+12);this.gold+=15}
   else{this.passives[item.key]=item.next;if(item.key==='vitality')this.player.hp+=12}
-  recordUpgradeChoice(this,item.key);
-  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades);
+  if(!item.core)recordUpgradeChoice(this,item.key);
+  this.coreDraft=false;
+  this.stats=characterStats(this.character,this.passives,this.meta,this.talents,this.weapons,this.boons,this.weaponEmpowerments,this.metaBuffs,this.growth,this.weaponUpgrades,this.weaponRunes,this.cores);
   this.player.maxHp=this.stats.maxHp;this.player.hp=Math.min(this.player.hp,this.player.maxHp);
   this.checkFusionReadiness();
+  if(item.weapon&&!item.refinement&&(item.next===3||item.fusion))this.toast('符文变体已开放 · 本局装备 → 武器，自由选择烈焰、寒霜、雷电或剧毒。',5);
   this.effects.push({type:'pulse',x:this.player.x,y:this.player.y,r:85,t:.7,max:.7,color:item.color});this.burst(this.player.x,this.player.y-10,30,item.color,80);this.player.invincible=Math.max(this.player.invincible,.45);this.sound.play('select');this.keys.clear();this.state='running';this.on('upgrade');this.on('weapons');this.on('hud');
  }
  burst(x,y,count,color,speed=50){for(let i=0;i<count&&this.particles.length<650;i++){const a=Math.random()*TAU,s=speed*(.2+Math.random()*.8),t=.2+Math.random()*.5;this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,t,max:t,color,size:Math.random()<.7?1:2,gravity:20})}}

@@ -255,7 +255,7 @@ export function updateExpandedZone(game,z,dt) {
       if(v?.poisonDamage)poisonEnemy(game,e,v.poisonDamage,v.poisonDuration);
       if(v?.slowDuration)e.slow=Math.max(e.slow,v.slowDuration);
       if(z.kind==='relicFire')e.burningUntil=Math.max(e.burningUntil||0,game.time+1);
-      game.hit(e,v?.fieldDamage||z.damage,z.x,z.y,0,false,z.kind==='relicFire'?null:z.source,true);
+      game.hit(e,v?.fieldDamage||z.damage,z.x,z.y,0,false,z.kind==='relicFire'&&!z.core?null:z.source,true);
     }}
     return true;
   }

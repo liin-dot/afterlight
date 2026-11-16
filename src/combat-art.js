@@ -26,7 +26,7 @@ export function drawSpirit(g,x,y,t,size=18,golden=false){
 }
 export function drawCombatProjectile(g,b,ox,oy,t){
  if(!artAvailable())return false;
- const x=b.x+ox,y=b.y+oy,source=b.source||b.fusionKind||b.type,a=Math.atan2(b.vy,b.vx),color=colorOf(source);
+ const x=b.x+ox,y=b.y+oy,source=b.source||b.fusionKind||b.type,a=Math.atan2(b.vy,b.vx),color=b.color||colorOf(source);
  if(x<-40||y<-40||x>g.canvas.width+40||y>g.canvas.height+40)return true;
  // Every projectile uses its actual world position; animation never changes hit geometry.
  g.save();
@@ -37,6 +37,10 @@ export function drawCombatProjectile(g,b,ox,oy,t){
  if(b.enemy){
   // Hostile shots keep a warm outline and hollow core even against bright player spells.
   g.fillStyle='#351e32';g.beginPath();g.arc(x,y,6,0,TAU);g.fill();g.strokeStyle='#ff8e9c';g.lineWidth=1.5;g.stroke();path(g,[[x-3,y],[x,y-3],[x+3,y],[x,y+3]],'#ffc2ac');
+ }else if(source==='core_edge'){
+  g.translate(Math.round(x),Math.round(y));g.rotate(a);path(g,[[-5,-11],[4,0],[-5,11],[1,0]],color);path(g,[[-1,-6],[4,0],[-1,6]],'#fff0cf',false,1);
+ }else if(source==='core_weave'){
+  drawSpirit(g,x,y,t,16);path(g,[[x-4,y],[x,y-4],[x+4,y],[x,y+4]],color,false,1);
  }else if(b.type==='scythe'){
   g.translate(Math.round(x),Math.round(y));g.rotate(t*9*(b.returning?-1:1));const r=b.r;
   const blades=source==='eclipse'?2:1;
