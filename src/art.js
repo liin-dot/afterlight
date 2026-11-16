@@ -1,5 +1,5 @@
-// All artwork is drawn on a low-resolution canvas, one pixel at a time.
-// No sprite packs, image downloads, or rendering libraries are used.
+// Local CC0 sprite packs with original pixel-art fallbacks and scenery.
+import {packedSprite,packedIcon,terrainChunk} from './assets.js';
 export const TAU = Math.PI * 2;
 export const palette = { gold:'#dfa66b', light:'#eee3b4', green:'#a6d788', cyan:'#92d9ce', purple:'#bdabd9', red:'#c97967' };
 export function hash(x, y = 0, seed = 0) { let n = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(seed | 0, 1442695041); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967295; }
@@ -10,6 +10,7 @@ function rect(g,color,x,y,w,h){g.fillStyle=color;g.fillRect(Math.round(x),Math.r
 function poly(g,color,points){g.fillStyle=color;g.beginPath();points.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.closePath();g.fill();}
 function pixels(g, rows, colors, ox=0, oy=0){rows.forEach((row,y)=>[...row].forEach((p,x)=>{if(colors[p])rect(g,colors[p],ox+x,oy+y,1,1)}));}
 const cache = new Map();
+const fallbackDecor={crate:'grave',scrap:'bush',wreck:'deadTree',seaweed:'bush',tideStone:'grave',anvil:'furnace'};
 
 const humanoid = [
  '      ooooo      ',
@@ -45,7 +46,9 @@ const charColors = {
  ranger:{o:'#101e1a',c:'#738659',h:'#a5b57d',s:'#c2af8c',e:'#e0e4a5',l:'#eee0ac',b:'#2a4332',g:'#be995f',d:'#3b4731'},
 };
 
-export function sprite(kind,frame=0,variant=0){
+export function sprite(kind,frame=0,variant=0,moving=false){
+ const packed=packedSprite(kind,frame,variant,moving);if(packed)return packed;
+ kind=fallbackDecor[kind]||kind;
  const key=`${kind}:${frame%2}:${variant}`;if(cache.has(key))return cache.get(key);
  let c=canvas(32,40),g=c.getContext('2d');g.imageSmoothingEnabled=false;
  if(charColors[kind]){
@@ -117,8 +120,8 @@ export function sprite(kind,frame=0,variant=0){
  cache.set(key,c);return c;
 }
 
-export function drawSprite(g,kind,x,y,{frame=0,flip=false,scale=1,alpha=1,variant=0}={}){
- const s=sprite(kind,frame,variant);const anchor=s.width===32&&s.height===40?10:4;g.save();g.globalAlpha*=alpha;g.translate(Math.round(x),Math.round(y));if(flip)g.scale(-1,1);g.drawImage(s,Math.round(-s.width*scale/2),Math.round((-s.height+anchor)*scale),Math.round(s.width*scale),Math.round(s.height*scale));
+export function drawSprite(g,kind,x,y,{frame=0,flip=false,scale=1,alpha=1,variant=0,moving=false}={}){
+ const s=sprite(kind,frame,variant,moving);const anchor=s.width===32&&s.height===40?10:4;g.save();g.globalAlpha*=alpha;g.translate(Math.round(x),Math.round(y));if(flip)g.scale(-1,1);g.drawImage(s,Math.round(-s.width*scale/2),Math.round((-s.height+anchor)*scale),Math.round(s.width*scale),Math.round(s.height*scale));
  g.restore();
 }
 
@@ -126,6 +129,7 @@ import {drawContentIcon} from './content-art.js';
 const iconCache=new Map();
 export function icon(kind){
  if(iconCache.has(kind))return iconCache.get(kind);const c=canvas(24,24),g=c.getContext('2d');
+ if(packedIcon(g,kind)){iconCache.set(kind,c);return c}
  if(drawContentIcon(g,kind)){iconCache.set(kind,c);return c}
  if(kind==='solar'){for(let i=0;i<12;i++){let a=i*TAU/12;rect(g,i%2?'#edc581':'#c98348',11+Math.cos(a)*9,11+Math.sin(a)*9,3,3)}rect(g,'#ba673e',7,7,11,11);rect(g,'#efb665',9,7,7,11);rect(g,'#ffdf9c',11,5,3,13);rect(g,'#ffefc1',12,5,1,10);rect(g,'#886340',7,16,11,2);rect(g,'#e3b77a',11,18,3,4)}
  if(kind==='thunderbolt'){g.drawImage(icon('bolt'),0,0);poly(g,'#655782',[[13,1],[21,1],[16,8],[22,8],[10,23],[13,13],[7,13]]);poly(g,'#c7b9e8',[[14,2],[19,2],[14,10],[19,10],[12,19],[15,11],[10,11]]);rect(g,'#f3e9ff',14,3,2,4);rect(g,'#a5e4e0',3,3,2,2);rect(g,'#b6c7f1',19,18,2,2)}
@@ -149,8 +153,10 @@ export function paintAvatar(target,kind){const g=target.getContext('2d');g.image
 
 export class Landscape{
  constructor(){this.chunks=new Map();this.objects=new Map();}
- chunk(cx,cy){
-  const key=cx+','+cy;if(this.chunks.has(key))return this.chunks.get(key);const c=canvas(256,256),g=c.getContext('2d');g.fillStyle='#273c2d';g.fillRect(0,0,256,256);
+ chunk(cx,cy,stage='graveyard'){
+  const key=stage+':'+cx+','+cy;if(this.chunks.has(key))return this.chunks.get(key);const c=canvas(256,256),g=c.getContext('2d');
+  if(terrainChunk(g,cx,cy,stage,hash)){this.chunks.set(key,c);if(this.chunks.size>100)this.chunks.delete(this.chunks.keys().next().value);return c}
+  g.fillStyle='#273c2d';g.fillRect(0,0,256,256);
   for(let j=0;j<8;j++)for(let i=0;i<8;i++){let r=hash(cx*8+i,cy*8+j,3);rect(g,['#293e2e','#283d2e','#263b2d','#2b3e2e'][Math.floor(r*4)],i*32,j*32,32,32)}
   for(let i=0;i<500;i++){let x=hash(i,cx,cy*3+77)*256,y=hash(i,cy,cx*3+12)*256,r=hash(i,cy,55);rect(g,['#334831','#3b4e34','#22372a','#30472f','#45603b'][Math.floor(r*5)],x,y,1+Math.floor(r*4),1);if(r>.78)rect(g,'#4c6040',x+1,y-2,1,3)}
   for(let i=0;i<23;i++){let x=hash(i,cx,cy+15)*256,y=hash(i,cy,cx+48)*256;rect(g,'#203829',x,y,6,3);rect(g,'#495a41',x,y-1,4,2);rect(g,'#617056',x+1,y-1,2,1)}
@@ -159,8 +165,9 @@ export class Landscape{
   for(let j=0;j<16;j++)for(let i=0;i<16;i++){let wx=cx*256+i*16,wy=cy*256+j*16;let circle=Math.hypot(wx,wy);let path=Math.abs(wx+Math.sin(wy/140)*16)<32||Math.abs(wy)<25;let plaza=circle<117;if((path||plaza)&&hash(wx,wy,48)>.15){let x=i*16+1,y=j*16+1,r=hash(wx,wy,21);rect(g,r>.5?'#465344':'#3f4e3e',x,y,14,14);rect(g,'#53604a',x,y,14,1);rect(g,'#2f4232',x,y+13,14,1);if(r>.7){rect(g,'#283e2b',x+8,y+2,1,6);rect(g,'#283e2b',x+7,y+7,1,5)}if(r<.3)rect(g,'#60734c',x+1,y+8,4,2)}}
   this.chunks.set(key,c);if(this.chunks.size>100)this.chunks.delete(this.chunks.keys().next().value);return c;
  }
- drawFloor(g,camera,w,h,t){
-   const left=camera.x-w/2,top=camera.y-h/2;const minX=Math.floor(left/256),minY=Math.floor(top/256);for(let cy=minY;cy<=Math.floor((top+h)/256);cy++)for(let cx=minX;cx<=Math.floor((left+w)/256);cx++)g.drawImage(this.chunk(cx,cy),Math.round(cx*256-left),Math.round(cy*256-top));
+ drawFloor(g,camera,w,h,t,stage='graveyard'){
+   const left=camera.x-w/2,top=camera.y-h/2;const minX=Math.floor(left/256),minY=Math.floor(top/256);for(let cy=minY;cy<=Math.floor((top+h)/256);cy++)for(let cx=minX;cx<=Math.floor((left+w)/256);cx++)g.drawImage(this.chunk(cx,cy,stage),Math.round(cx*256-left),Math.round(cy*256-top));
+   if(stage!=='graveyard')return;
    let sx=Math.round(-left),sy=Math.round(-top);
    g.save();g.translate(sx,sy);g.strokeStyle='#8b966144';g.lineWidth=1;g.beginPath();g.arc(0,0,78,0,TAU);g.stroke();g.strokeStyle='#243929';g.beginPath();g.arc(0,0,72,0,TAU);g.stroke();
    for(let i=0;i<12;i++){let a=i*TAU/12;rect(g,'#82866188',Math.cos(a)*78-1,Math.sin(a)*78-1,3,3)}

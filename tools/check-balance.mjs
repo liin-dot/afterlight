@@ -1208,7 +1208,56 @@ try{
       assert.deepEqual(timeline.markers,[20,40]);assert(timeline.departure.includes('15 分钟')&&timeline.guide.includes('10–15 分钟'));
       for(const row of timeline.rows){assert.equal(row.left,row.time===0?'15:00':row.time===600?'05:00':row.time<RUN_DURATION?'00:01':'击败首领');if(row.time===600){assert(row.next.startsWith('15:00'));assert(Math.abs(row.progress-200/3)<.01)}}
       console.log('PASS: all chapter HUDs show 15-minute timing, five minutes remaining at 10:00, final boss hints and correctly positioned early milestones.');
-      if(process.argv.includes('--icon-menus')){
+      if(process.argv.includes('--art')){
+        const audit=await evaluate(`
+          const {game}=await import('/src/main.js'),{WEAPONS,CHARACTERS,ENEMIES}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js'),{sprite}=await import('/src/art.js'),{artAvailable,PACK_ACTORS}=await import('/src/assets.js');
+          if(!artAvailable())throw Error('CC0 art packs did not load');
+          const digest=c=>{const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let n=0;for(const v of data)n=(Math.imul(n,31)+v)>>>0;return n};
+          const sprites=PACK_ACTORS.map(key=>{const images=Array.from({length:4},(_,i)=>sprite(key,i,0,true));return {key,frames:new Set(images.map(digest)).size,visible:images.every(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4===3&&v))}});
+          const gallery=document.createElement('canvas');gallery.width=1200;gallery.height=Math.ceil(Object.keys(WEAPONS).length/4)*210;const g=gallery.getContext('2d');g.fillStyle='#101b23';g.fillRect(0,0,gallery.width,gallery.height);g.imageSmoothingEnabled=false;
+          const on=game.on;game.on=()=>{};const rows=[];let index=0;
+          for(const [key,weapon] of Object.entries(WEAPONS)){
+            game.start(CHARACTERS[0]);game.state='paused';game.weapons={[key]:weapon.fusion?3:6};game.passives={};game.stats=characterStats(game.character,{}, {},{},game.weapons);game.enemies=[];game.spawnClock=1e6;game.waveClock=1e6;game.player.x=0;game.player.y=37;game.player.invincible=100;
+            for(let i=0;i<18;i++){const enemy=game.spawnEnemy(i%3?'skeleton':'ghoul'),a=i*2.4,r=i===0?22:55+i*7;Object.assign(enemy,{x:Math.cos(a)*r,y:37+Math.sin(a)*r,speed:0,hp:1e7,maxHp:1e7,damage:0})}game.grid.rebuild(game.enemies);
+            const samples=[];let emitted=0;const seen=new Set();
+            for(let i=0;i<28;i++){
+              game.update(.05);game.ambient=i*.05;for(const item of [...game.effects,...game.projectiles,...game.zones]){emitted++;seen.add(item.source||item.fusionKind||item.type||item.kind)}
+              if([1,5,13,21,27].includes(i)){game.render();const c=document.createElement('canvas');c.width=game.w;c.height=game.h;c.getContext('2d').drawImage(game.canvas,0,0);samples.push(c)}
+            }
+            const field=['meteor','starfall','supernova','hailfire','mine','wintermine','pestilence','thorn','plague'].includes(key),sample=samples[field?3:0],x=index%4*300,y=Math.floor(index/4)*210;
+            g.drawImage(sample,0,0,sample.width,sample.height,x+4,y+29,292,176);g.fillStyle=weapon.color;g.font='14px sans-serif';g.fillText(weapon.name,x+10,y+20);g.strokeStyle='#374951';g.strokeRect(x+3,y+28,294,178);
+            rows.push({key,emitted,seen:[...seen],frames:new Set(samples.map(digest)).size});index++;
+          }
+          game.on=on;game.returnToMenu();return {sprites,rows,gallery:gallery.toDataURL('image/png')};
+        `);
+        assert.equal(audit.rows.length,44);assert(audit.sprites.every(row=>row.visible&&row.frames>1),JSON.stringify(audit.sprites));
+        assert(audit.rows.every(row=>row.frames>1&&(row.key==='orbit'||row.emitted>0&&row.seen.includes(row.key))),JSON.stringify(audit.rows));
+        writeFileSync('artifacts/art-weapon-gallery.png',Buffer.from(audit.gallery.split(',')[1],'base64'));
+        const composition=await evaluate(`
+          const {game}=await import('/src/main.js'),{CHARACTERS}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js');
+          const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;const g=canvas.getContext('2d');g.imageSmoothingEnabled=false;g.fillStyle='#101b23';g.fillRect(0,0,1280,900);
+          const builds=[['炉心 · 铸雷与冰梭',3,'foundry',{arcforge:3,needle:6,sentinel:6}],['渡魂 · 潮眼与天灯',4,'coast',{maelstrom:3,beacon:3,tether:6}],['冻土 · 冰棺与寒晶',1,'graveyard',{wintermine:3,glacier:3,prism:6}],['疫庭 · 孢子与月镰',2,'graveyard',{pestilence:3,crescent:6,bell:6}]];
+          const on=game.on;game.on=()=>{};
+          for(let n=0;n<builds.length;n++){
+            const [label,character,stage,weapons]=builds[n];game.start(CHARACTERS[character],{}, {stage});game.state='paused';game.weapons=weapons;game.stats=characterStats(game.character,{}, {},{},weapons);game.enemies=[];game.spawnClock=1e6;game.waveClock=1e6;game.player.invincible=100;game.player.x=90;game.player.y=120;game.camera={x:90,y:100};
+            for(let i=0;i<28;i++){const a=i*2.4,r=22+i*5,e=game.spawnEnemy(stage==='foundry'?['cinderling','bulwark','bomber'][i%3]:stage==='coast'?['siren','leech','oracle'][i%3]:['skeleton','ghoul','ghost'][i%3]);Object.assign(e,{x:90+Math.cos(a)*r,y:120+Math.sin(a)*r,speed:0,damage:0,hp:1e6,maxHp:1e6})}game.grid.rebuild(game.enemies);
+            for(let step=0;step<23;step++){game.update(.05);game.ambient=step*.05}game.updateWeapons(0);game.texts=[];game.render();
+            const x=n%2*640,y=Math.floor(n/2)*450;g.drawImage(game.canvas,0,0,game.w,game.h,x,y+36,640,410);g.fillStyle='#dfd5b2';g.font='18px sans-serif';g.fillText(label,x+18,y+25);
+          }game.on=on;game.returnToMenu();return canvas.toDataURL('image/png');
+        `);
+        writeFileSync('artifacts/art-builds.png',Buffer.from(composition.split(',')[1],'base64'));
+        const performance=await evaluate(`
+          const {game}=await import('/src/main.js'),{CHARACTERS}=await import('/src/data.js'),{characterStats}=await import('/src/stats.js');game.start(CHARACTERS[0],{}, {stage:'coast'});game.state='paused';game.weapons={beacon:3,maelstrom:3,pestilence:3,stormsentry:3,solar:3,glacier:3};game.stats=characterStats(game.character,{}, {},{},game.weapons);game.enemies=[];game.player.invincible=100;game.spawnClock=1e6;
+          for(let i=0;i<350;i++){const e=game.spawnEnemy('skeleton'),a=i*2.4,r=30+Math.sqrt(i)*12;Object.assign(e,{x:Math.cos(a)*r,y:37+Math.sin(a)*r,hp:1e7,maxHp:1e7,speed:0,damage:0})}game.grid.rebuild(game.enemies);
+          for(let i=0;i<25;i++)game.update(.05);game.texts=[];const times=[];for(let i=0;i<60;i++){game.ambient+=.016;const start=performance.now();game.render();times.push(performance.now()-start)}times.sort((a,b)=>a-b);return {median:times[30],p95:times[57],enemies:game.enemies.length,zones:game.zones.length,projectiles:game.projectiles.length};
+        `);
+        console.log('Art render pressure:',JSON.stringify(performance));assert(performance.p95<80,'350-enemy art rendering exceeded the headless 80 ms budget');
+        await call('Network.enable');await call('Network.setBlockedURLs',{urls:['*/assets/*']});await call('Page.reload',{ignoreCache:true});await delay(700);
+        assert(await evaluate(`const {game}=await import('/src/main.js'),{artAvailable}=await import('/src/assets.js'),{sprite}=await import('/src/art.js');game.start(game.character,{}, {stage:'foundry'});game.state='paused';game.render();return !artAvailable()&&['warden','crate','scrap','anvil','wreck','seaweed','tideStone'].every(key=>{const c=sprite(key);return c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((value,i)=>i%4===3&&value)})`),'missing assets must retain playable canvas art');
+        await shot('art-fallback');await call('Network.setBlockedURLs',{urls:[]});await call('Page.reload',{ignoreCache:true});await delay(700);
+        assert.equal(errors.length,0,JSON.stringify(errors));
+        console.log('PASS: 17 animated actors, all 44 live weapon animations, four build compositions, local assets, 350-enemy rendering and zero runtime errors. Art gallery: artifacts/art-weapon-gallery.png.');
+      }else if(process.argv.includes('--icon-menus')){
         let touch=false;
         const activate=async selector=>{
           const point=await evaluate(`const e=document.querySelector(${JSON.stringify(selector)}),r=e.getBoundingClientRect();if(!r.width||document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')!==e)throw Error('unreachable '+${JSON.stringify(selector)});return {x:r.x+r.width/2,y:r.y+r.height/2}`);

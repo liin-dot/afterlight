@@ -1,4 +1,5 @@
 import {TAU,hash,diamond} from './art.js';
+import {artAvailable} from './assets.js';
 
 export const STAGES={
   graveyard:{name:'遗忘墓园',subtitle:'第一章 · 最后一盏灯',color:'#bdd397',hint:'十五分钟守夜，躲避首领冲锋与落点。',reward:250,bosses:['墓园看守','无名葬钟','蚀月君王'],bossKinds:['knight','knight','reaper']},
@@ -54,6 +55,7 @@ function shot(game,e,a,speed,damage){game.projectiles.push({x:e.x,y:e.y-12,vx:Ma
 
 export function drawExpeditionFloor(game,g,cam,w,h){
   if(game.stage==='graveyard')return;
+  if(artAvailable()){game.landscape.drawFloor(g,cam,w,h,game.ambient,game.stage);return}
   const forge=game.stage==='foundry',left=cam.x-w/2,top=cam.y-h/2;
   g.fillStyle=forge?'#292526':'#172f37';g.fillRect(0,0,w,h);
   for(let cy=Math.floor(top/64);cy<=Math.floor((top+h)/64);cy++)for(let cx=Math.floor(left/64);cx<=Math.floor((left+w)/64);cx++){

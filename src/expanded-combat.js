@@ -6,7 +6,7 @@ const KINDS=new Set(['capacitor','arcforge','tide','maelstrom','needle','frostlo
 const nearby=(game,x,y,r)=>game.grid.near(x,y,r+30).filter(e=>!e.dead&&Math.hypot(e.x-x,e.y-y)<r+e.r);
 function wave(game,kind,x,y,r,damage,freeze=0,bossFreeze=0,slowDuration=3.2) {
   const color=WEAPONS[kind].color;
-  game.effects.push({type:kind==='absolute'?'frost':'pulse',x,y:y-8,r,color,t:.55,max:.55});
+  game.effects.push({type:kind==='absolute'?'frost':'pulse',source:kind,x,y:y-8,r,color,t:.55,max:.55});
   for(const e of nearby(game,x,y,r)) {
     if(freeze){e.freeze=Math.max(e.freeze,e.boss?bossFreeze:freeze);e.slow=Math.max(e.slow,slowDuration)}
     game.hit(e,damage,x,y,95,true,kind);
@@ -16,7 +16,7 @@ function wave(game,kind,x,y,r,damage,freeze=0,bossFreeze=0,slowDuration=3.2) {
 
 function lanceStrike(game,kind,x,y,angle,v){
   const tx=x+Math.cos(angle)*v.range,ty=y+Math.sin(angle)*v.range;
-  game.effects.push({type:'beam',x,y:y-8,tx,ty:ty-8,width:v.width,color:WEAPONS[kind].color,t:.28,max:.28});
+  game.effects.push({type:'beam',source:kind,x,y:y-8,tx,ty:ty-8,width:v.width,color:WEAPONS[kind].color,t:.28,max:.28});
   for(const e of nearby(game,x,y,v.range+30)){
     const dx=e.x-x,dy=e.y-y,along=dx*Math.cos(angle)+dy*Math.sin(angle),across=Math.abs(-dx*Math.sin(angle)+dy*Math.cos(angle));
     if(along<0||along>v.range+e.r||across>v.width+e.r)continue;
@@ -27,7 +27,7 @@ function lanceStrike(game,kind,x,y,angle,v){
 
 function detonate(game,z){
   const v=z.values,color=WEAPONS[z.source].color;
-  game.effects.push({type:'pulse',x:z.x,y:z.y-8,r:v.radius,color,t:.6,max:.6});
+  game.effects.push({type:'pulse',source:z.source,x:z.x,y:z.y-8,r:v.radius,color,t:.6,max:.6});
   game.burst(z.x,z.y-8,18,color,95);
   for(const e of nearby(game,z.x,z.y,v.radius)){
     if(v.freeze)e.freeze=Math.max(e.freeze,e.boss?v.bossFreeze:v.freeze);
@@ -50,7 +50,7 @@ export function updateExpandedWeapon(game,kind,v,dt) {
   const angle=target?Math.atan2(target.y-p.y,target.x-p.x):Math.atan2(p.lastY,p.lastX),before=game.projectiles.length;
   if(kind==='capacitor'||kind==='arcforge'){
     const used=new Set();let last=p;
-    for(let i=0;i<v.count;i++){const e=game.closest(last.x,last.y,i? v.chainRange:340,used);if(!e)break;used.add(e.id);game.effects.push({type:'lightning',x:last.x,y:last.y-8,tx:e.x,ty:e.y-8,t:.3,max:.3,seed:Math.random()*100,lvl:2});game.hit(e,v.damage,last.x,last.y,25,true,kind);last=e}
+    for(let i=0;i<v.count;i++){const e=game.closest(last.x,last.y,i? v.chainRange:340,used);if(!e)break;used.add(e.id);game.effects.push({type:'lightning',source:kind,x:last.x,y:last.y-8,tx:e.x,ty:e.y-8,t:.3,max:.3,seed:Math.random()*100,lvl:2});game.hit(e,v.damage,last.x,last.y,25,true,kind);last=e}
     if(v.blastDamage&&last!==p)wave(game,kind,last.x,last.y,v.blastRadius,v.blastDamage);game.sound.play('storm');
   }
   if(kind==='tide'||kind==='maelstrom')for(let i=0;i<v.count;i++){const a=angle+(i-(v.count-1)/2)*.55;game.zones.push({kind:'tidalWave',source:kind,x:p.x,y:p.y,r:v.radius,vx:Math.cos(a)*100,vy:Math.sin(a)*100,t:v.duration,max:v.duration,values:v,hit:new Set()})}
@@ -73,7 +73,7 @@ export function updateExpandedWeapon(game,kind,v,dt) {
     const used=new Set();let last=p;
     for(let i=0;i<v.count;i++){
       const e=game.closest(last.x,last.y,i===0?300:v.range,used);if(!e)break;used.add(e.id);
-      game.effects.push({type:'beam',x:last.x,y:last.y-8,tx:e.x,ty:e.y-8,width:2,color:WEAPONS[kind].color,t:.4,max:.4});
+      game.effects.push({type:'beam',source:kind,x:last.x,y:last.y-8,tx:e.x,ty:e.y-8,width:2,color:WEAPONS[kind].color,t:.4,max:.4});
       e.slow=Math.max(e.slow,v.slowDuration);
       const dx=p.x-e.x,dy=p.y-e.y,d=Math.hypot(dx,dy)||1,shift=Math.max(0,Math.min(d-25,v.pull*(e.boss?.12:1)));
       e.x+=dx/d*shift;e.y+=dy/d*shift;game.hit(e,v.damage,p.x,p.y,0,true,kind);
@@ -121,7 +121,7 @@ export function updateExpandedWeapon(game,kind,v,dt) {
     let first=null;
     for(let i=0;i<v.count;i++) {
       const a=angle+(i-(v.count-1)/2)*.26,x=p.x,y=p.y-8,tx=x+Math.cos(a)*v.range,ty=y+Math.sin(a)*v.range;
-      game.effects.push({type:'beam',x,y,tx,ty,width:v.width,color:WEAPONS[kind].color,t:.32,max:.32});
+      game.effects.push({type:'beam',source:kind,x,y,tx,ty,width:v.width,color:WEAPONS[kind].color,t:.32,max:.32});
       for(const e of nearby(game,x,y,v.range)) {
         const dx=e.x-x,dy=e.y-8-y,along=dx*Math.cos(a)+dy*Math.sin(a),across=Math.abs(-dx*Math.sin(a)+dy*Math.cos(a));
         if(along>=-e.r&&along<=v.range+e.r&&across<v.width+e.r) {
@@ -176,7 +176,7 @@ export function updateExpandedProjectile(game,b,dt) {
       break;
     }
     if(b.splashDamage) {
-      game.effects.push({type:'pulse',x:e.x,y:e.y-8,r:b.splashRadius,color:'#cbbfe5',t:.23,max:.23});
+      game.effects.push({type:'pulse',source:b.source,x:e.x,y:e.y-8,r:b.splashRadius,color:'#cbbfe5',t:.23,max:.23});
       for(const other of nearby(game,e.x,e.y,b.splashRadius))if(other!==e)game.hit(other,b.splashDamage,e.x,e.y,25,false);
     }
     if(b.type==='venom'){poisonPool(game,b);b.t=0;break}

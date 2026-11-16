@@ -162,7 +162,7 @@ function fireWind(game,target){
 }
 function emberPulse(game,x,y,scale=1,echo=false){
   const t=game.talents,r=emberRadius(game),damage=emberDamage(game)*scale;
-  game.effects.push({type:'pulse',x,y:y-8,r,color:'#e8ae72',t:.55,max:.55});game.burst(x,y-8,12,'#e8ae72',85);
+  game.effects.push({type:'pulse',source:'ember',x,y:y-8,r,color:'#e8ae72',t:.55,max:.55});game.burst(x,y-8,12,'#e8ae72',85);
   for(const e of nearby(game,x,y,r)){
     if(t.w_flame2){e.burningUntil=Math.max(e.burningUntil||0,game.time+3);e.burn={damage:Math.max(e.burn?.damage||0,(6+game.level*.5)*game.stats.damageMultiplier),until:Math.max(e.burn?.until||0,game.time+3),next:e.burn?.next??game.time+.5}}
     game.hit(e,damage,x,y,70,false,'talent',true);
@@ -182,7 +182,7 @@ function chargeEmber(game,amount){
 
 function forgeDischarge(game,scale=1){
   const p=game.player,t=game.talents,targets=nearby(game,p.x,p.y,t.f_arc2?300:240).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y)).slice(0,t.f_arc3?6:3);
-  for(const e of targets){if(t.f_arc3)game.markEnemy(e,'forge',1.2,3);game.effects.push({type:'lightning',x:p.x,y:p.y-8,tx:e.x,ty:e.y-8,t:.28,max:.28,seed:game.time,lvl:2});game.hit(e,forgeDamage(game)*scale,p.x,p.y,25,false,'talent',true)}
+  for(const e of targets){if(t.f_arc3)game.markEnemy(e,'forge',1.2,3);game.effects.push({type:'lightning',source:'forge',x:p.x,y:p.y-8,tx:e.x,ty:e.y-8,t:.28,max:.28,seed:game.time,lvl:2});game.hit(e,forgeDamage(game)*scale,p.x,p.y,25,false,'talent',true)}
   return targets.length>0;
 }
 function chargeForge(game,amount){
@@ -194,7 +194,7 @@ function chargeForge(game,amount){
 }
 function tidePulse(game,scale=1){
   const p=game.player,t=game.talents,r=65*(t.m_tide1?1.35*game.stats.areaMultiplier:1),duration=t.m_tide1?game.stats.durationMultiplier:1;
-  game.effects.push({type:'pulse',x:p.x,y:p.y-8,r,color:'#94d9df',t:.6,max:.6});
+  game.effects.push({type:'pulse',source:'tideTalent',x:p.x,y:p.y-8,r,color:'#94d9df',t:.6,max:.6});
   for(const e of nearby(game,p.x,p.y,r)){e.slow=Math.max(e.slow,1.5*duration);if(t.m_tide3)e.freeze=Math.max(e.freeze,e.boss?.2:duration);if(t.m_guard3)game.markEnemy(e,'harbor',1.15,3);game.hit(e,tideDamage(game)*scale,p.x,p.y,50,false,'talent',true)}
 }
 function chargeTide(game,moved){

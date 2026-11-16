@@ -10,6 +10,7 @@ import {RUN_DURATION,pressureAt,xpForLevel,weightedPick,upgradePool,rollUpgradeC
 import {talentPoints,talentNodeState,resetCharacterTalents,updateCharacterTalents,onCharacterLearn,onCharacterHit,onCharacterProjectileHit,characterHitMultiplier,onCharacterTravel,onCharacterHurt,drawCharacterTalents} from './talents.js';
 import {EVENT_TYPES,ALTAR_REWARDS,resetWorldEvents,startWorldEvent,updateWorldEvents,drawWorldEvents,nearestWorldEvent,worldEventTarget} from './world-events.js';
 import {ALTAR_BOONS,relicValues,refinementGain} from './content.js';
+import {drawCombatProjectile,drawCombatZone,drawCombatEffect,drawSpirit} from './combat-art.js';
 
 export {RUN_DURATION};
 
@@ -186,20 +187,20 @@ export class Game{
    const target=this.closest(p.x,p.y,kind==='blade'?values.radius+10:420);if(!target){this.timers[kind]=.08;continue}let a=Math.atan2(target.y-p.y,target.x-p.x);
    this.timers[kind]=values.cooldown;const projectileStart=this.projectiles.length;
    if(kind==='blade'){
-    const r=values.radius,arc=values.arc;this.effects.push({type:'slash',x:p.x,y:p.y-8,r,a,arc,t:.28,max:.28,evolved:lvl===6,color:lvl===6?'#f5d18d':'#e2d3a1'});
+    const r=values.radius,arc=values.arc;this.effects.push({type:'slash',source:kind,x:p.x,y:p.y-8,r,a,arc,t:.28,max:.28,evolved:lvl===6,color:lvl===6?'#f5d18d':'#e2d3a1'});
     for(const e of this.grid.near(p.x,p.y,r+30)){if(distance(p,e)<r+e.r&&Math.abs(angleDifference(Math.atan2(e.y-p.y,e.x-p.x),a))<arc/2)this.hit(e,values.damage,p.x,p.y,100,true,kind)}this.sound.play('slash');
    }
    if(kind==='bolt'){
     const count=values.count;for(let i=0;i<count;i++){const angle=a+(i-(count-1)/2)*.15;this.projectiles.push({type:'bolt',x:p.x,y:p.y-9,vx:Math.cos(angle)*270,vy:Math.sin(angle)*270,r:3,damage:values.damage,pierce:values.pierce,t:2,hit:new Set(),homing:values.homing,angle,trail:[]})}this.sound.play('shoot');
    }
    if(kind==='storm'){
-    let last={x:p.x,y:p.y-18},excluded=new Set(),count=values.count;for(let i=0;i<count;i++){let e=this.closest(last.x,last.y,i===0?400:values.chainRange,excluded);if(!e)break;excluded.add(e.id);this.effects.push({type:'lightning',x:last.x,y:last.y-5,tx:e.x,ty:e.y-12,t:.38,max:.38,seed:Math.random()*100,lvl});this.hit(e,values.damage,p.x,p.y,50,true,kind);last=e;this.burst(e.x,e.y-9,8,'#d4c3e4',60)}this.sound.play('storm');this.shake=Math.max(this.shake,2);if(lvl===6)this.flash=.1;
+    let last={x:p.x,y:p.y-18},excluded=new Set(),count=values.count;for(let i=0;i<count;i++){let e=this.closest(last.x,last.y,i===0?400:values.chainRange,excluded);if(!e)break;excluded.add(e.id);this.effects.push({type:'lightning',source:kind,x:last.x,y:last.y-5,tx:e.x,ty:e.y-12,t:.38,max:.38,seed:Math.random()*100,lvl});this.hit(e,values.damage,p.x,p.y,50,true,kind);last=e;this.burst(e.x,e.y-9,8,'#d4c3e4',60)}this.sound.play('storm');this.shake=Math.max(this.shake,2);if(lvl===6)this.flash=.1;
    }
    if(kind==='flame'){
     const count=values.count;for(let i=0;i<count;i++){let angle=a+(i-(count-1)/2)*.40;this.projectiles.push({type:'flame',x:p.x,y:p.y-10,vx:Math.cos(angle)*137,vy:Math.sin(angle)*137,r:6,damage:values.damage,pierce:1,t:1.4,hit:new Set(),lvl,trail:[],angle,trailClock:0})}this.sound.play('flame');
    }
    if(kind==='frost'){
-    let r=values.radius;this.effects.push({type:'frost',x:p.x,y:p.y-7,r,t:.75,max:.75,evolved:lvl===6});for(const e of this.grid.near(p.x,p.y,r+30)){if(distance(p,e)<r+e.r){e.slow=Math.max(e.slow,values.slowDuration);if(values.freeze)e.freeze=Math.max(e.freeze,e.boss?values.bossFreeze:values.freeze);this.hit(e,values.damage,p.x,p.y,55,true,kind)}}this.sound.play('frost');this.burst(p.x,p.y-7,24,'#afdcd2',130);
+    let r=values.radius;this.effects.push({type:'frost',source:kind,x:p.x,y:p.y-7,r,t:.75,max:.75,evolved:lvl===6});for(const e of this.grid.near(p.x,p.y,r+30)){if(distance(p,e)<r+e.r){e.slow=Math.max(e.slow,values.slowDuration);if(values.freeze)e.freeze=Math.max(e.freeze,e.boss?values.bossFreeze:values.freeze);this.hit(e,values.damage,p.x,p.y,55,true,kind)}}this.sound.play('frost');this.burst(p.x,p.y-7,24,'#afdcd2',130);
    }
    onWeaponCast(this,kind,this.projectiles[projectileStart]);
   }
@@ -213,11 +214,11 @@ export class Game{
    for(const e of this.grid.near(b.x,b.y,36)){if(e.dead||b.hit.has(e.id))continue;
     // Sweep each projectile through its previous position to avoid tunnelling.
     const vx=b.x-oldX,vy=b.y-oldY,den=vx*vx+vy*vy||1,u=clamp(((e.x-oldX)*vx+(e.y-9-oldY)*vy)/den,0,1);const dd=Math.hypot(e.x-(oldX+vx*u),e.y-9-(oldY+vy*u));
-    if(dd<e.r+b.r){b.hit.add(e.id);if(b.slowDuration)e.slow=Math.max(e.slow,b.slowDuration);if(b.freeze)e.freeze=Math.max(e.freeze,e.boss?b.bossFreeze:b.freeze);const multiplier=onCharacterProjectileHit(this,b,e);this.hit(e,b.damage*multiplier,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!b.talent);if(b.blastDamage&&!b.blastDone){b.blastDone=true;this.effects.push({type:'pulse',x:e.x,y:e.y-8,r:b.blastRadius,color:WEAPONS[b.source].color,t:.4,max:.4});for(const other of this.grid.near(e.x,e.y,b.blastRadius+25))if(!other.dead&&distance(e,other)<b.blastRadius+other.r)this.hit(other,b.blastDamage,e.x,e.y,20,false,b.source,true)}chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
+    if(dd<e.r+b.r){b.hit.add(e.id);if(b.slowDuration)e.slow=Math.max(e.slow,b.slowDuration);if(b.freeze)e.freeze=Math.max(e.freeze,e.boss?b.bossFreeze:b.freeze);const multiplier=onCharacterProjectileHit(this,b,e);this.hit(e,b.damage*multiplier,oldX,oldY,45,true,b.refracted?null:b.source||b.fusionKind||b.type,!!b.talent);if(b.blastDamage&&!b.blastDone){b.blastDone=true;this.effects.push({type:'pulse',source:b.source,x:e.x,y:e.y-8,r:b.blastRadius,color:WEAPONS[b.source].color,t:.4,max:.4});for(const other of this.grid.near(e.x,e.y,b.blastRadius+25))if(!other.dead&&distance(e,other)<b.blastRadius+other.r)this.hit(other,b.blastDamage,e.x,e.y,20,false,b.source,true)}chainArrow(this,b,e);b.pierce--;if(b.type==='flame'){this.addFire(b);b.t=0;break}if(b.pierce<=0){b.t=0;break}}
    }
   }this.projectiles=this.projectiles.filter(b=>b.t>0);
  }
- addFire(b,trail=false){const values=weaponStats('flame',b.lvl,this.stats,this.character),upgrades=this.weaponUpgrades.flame||{},r=trail?20*this.stats.areaMultiplier*(1+(upgrades.area||0)):values.radius,duration=trail?1.4*this.stats.durationMultiplier*(1+(upgrades.duration||0)):values.duration;this.zones.push({x:b.x,y:b.y,r,t:duration,max:duration,tick:0,hitInterval:values.hitInterval,damage:values.burnDamage,seed:Math.random()*100});if(!trail){this.effects.push({type:'pulse',x:b.x,y:b.y,r:r*1.1,t:.3,max:.3,color:'#e6ad6a'});this.burst(b.x,b.y,14,'#dc9b55',65)}}
+ addFire(b,trail=false){const values=weaponStats('flame',b.lvl,this.stats,this.character),upgrades=this.weaponUpgrades.flame||{},r=trail?20*this.stats.areaMultiplier*(1+(upgrades.area||0)):values.radius,duration=trail?1.4*this.stats.durationMultiplier*(1+(upgrades.duration||0)):values.duration;this.zones.push({x:b.x,y:b.y,r,t:duration,max:duration,tick:0,hitInterval:values.hitInterval,damage:values.burnDamage,seed:Math.random()*100});if(!trail){this.effects.push({type:'pulse',source:'flame',x:b.x,y:b.y,r:r*1.1,t:.3,max:.3,color:'#e6ad6a'});this.burst(b.x,b.y,14,'#dc9b55',65)}}
  updateZones(dt){
   for(const z of this.zones){if(updateExpandedZone(this,z,dt))continue;if(z.kind==='solar'||z.kind==='glacier'){updateFusionZone(this,z,dt);continue}z.t-=dt;if(z.t<=0)continue;z.tick-=dt;if(z.tick<=0){z.tick=z.hitInterval;for(const e of this.grid.near(z.x,z.y,z.r+15))if(distance(z,e)<z.r+e.r)this.hit(e,z.damage,z.x,z.y,0,false,'flame',true)}}
   // ponytail: retain the newest 128 fields to bound rendering; pool fields if future content routinely reaches this ceiling.
@@ -431,19 +432,19 @@ export class Game{
   const g=this.g,w=this.w,h=this.h,t=this.ambient;
   const menu=this.state==='menu'||(this.state==='status'&&this.statusReturn==='menu');if(menu){this.camera.x=lerp(this.camera.x,-w*.235,.025);this.camera.y=lerp(this.camera.y,-26,.025)}
   let sx=this.shake>0?(Math.random()-.5)*this.shake:0,sy=this.shake>0?(Math.random()-.5)*this.shake:0;const cam={x:Math.round(this.camera.x+sx),y:Math.round(this.camera.y+sy)};const ox=w/2-cam.x,oy=h/2-cam.y;
-  if(menu||this.stage==='graveyard')this.landscape.drawFloor(g,cam,w,h,t);else drawExpeditionFloor(this,g,cam,w,h);const decor=this.landscape.getObjects(cam,w,h).map(o=>!menu&&this.stage!=='graveyard'?{...o,kind:o.kind==='tree'||o.kind==='deadTree'?(this.stage==='foundry'?'furnace':'coral'):o.kind==='grave'||o.kind==='cross'?'pillar':o.kind}:o);
+  if(menu||this.stage==='graveyard')this.landscape.drawFloor(g,cam,w,h,t);else drawExpeditionFloor(this,g,cam,w,h);const decor=this.landscape.getObjects(cam,w,h).map(o=>!menu&&this.stage!=='graveyard'?{...o,kind:({foundry:{tree:'furnace',deadTree:'anvil',grave:o.variant%2?'crate':'scrap',cross:'pillar',bush:'scrap'},coast:{tree:'coral',deadTree:'wreck',grave:'tideStone',cross:'pillar',bush:'seaweed'}}[this.stage][o.kind]||o.kind)}:o);
   // Subtle cool moonlight travels diagonally through the canopy.
   g.save();g.globalAlpha=.05;g.fillStyle='#b7c5a0';for(let i=0;i<3;i++){const x=w*.6+i*110+Math.sin(t*.08)*10;g.beginPath();g.moveTo(x,0);g.lineTo(x+70,0);g.lineTo(x-85,h);g.lineTo(x-160,h);g.closePath();g.fill()}g.restore();
-  if(!menu){this.drawZones(g,ox,oy,t);this.drawHazards(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
+  if(!menu){this.drawZones(g,ox,oy,t);this.drawDrops(g,ox,oy,t)}
   // Shadows are drawn beneath all sprites, maintaining a coherent depth plane.
   for(const obj of decor)shadow(g,obj.x+ox,obj.y+oy,obj.kind==='tree'?28:obj.kind==='arch'?53:10,.20);
   if(!menu){for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+40&&Math.abs(e.y-cam.y)<h/2+50)shadow(g,e.x+ox,e.y+oy,e.r*1.3,.3);shadow(g,this.player.x+ox,this.player.y+oy,12,.44)}
   const renderables=decor.map(o=>({...o,category:'decor'}));renderables.push({kind:'campfire',x:0,y:15,category:'fire'});
-  if(menu){renderables.push({kind:this.character.id,x:24,y:48,category:'hero',frame:0,flip:true});for(const e of this.menuWalkers)renderables.push({...e,x:e.x+Math.sin(t*.15+e.phase)*16,y:e.y+Math.cos(t*.12+e.phase)*12,category:'enemy',scale:1,frame:Math.floor(t*2+e.phase)%2})}
+  if(menu){renderables.push({kind:this.character.id,x:24,y:48,category:'hero',frame:Math.floor(t*4)%4,flip:true});for(const e of this.menuWalkers)renderables.push({...e,x:e.x+Math.sin(t*.15+e.phase)*16,y:e.y+Math.cos(t*.12+e.phase)*12,category:'enemy',scale:1,moving:true,frame:Math.floor(t*5+e.phase)%4})}
   else{
    for(const s of this.shrines)if(Math.abs(s.x-cam.x)<w/2+40&&Math.abs(s.y-cam.y)<h/2+80)renderables.push({...s,kind:'shrine',category:'decor'});
-   for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+50&&Math.abs(e.y-cam.y)<h/2+80)renderables.push({...e,category:'enemy',frame:Math.floor(e.walk)%2});
-   renderables.push({...this.player,kind:this.character.id,category:'hero',frame:this.player.moving?Math.floor(this.player.walk)%2:0});
+   for(const e of this.enemies)if(Math.abs(e.x-cam.x)<w/2+50&&Math.abs(e.y-cam.y)<h/2+80)renderables.push({...e,category:'enemy',moving:e.freeze<=0,frame:Math.floor(e.walk)%4});
+   renderables.push({...this.player,kind:this.character.id,category:'hero',frame:this.player.moving?Math.floor(this.player.walk)%4:Math.floor(t*4)%4});
   }
   renderables.sort((a,b)=>a.y-b.y);
   for(const o of renderables){const x=Math.round(o.x+ox),y=Math.round(o.y+oy);
@@ -454,8 +455,8 @@ export class Game{
    if(!menu&&(o.kind==='tree'||o.kind==='arch'||o.kind==='deadTree')&&Math.abs(o.x-this.player.x)<35&&o.y>this.player.y&&o.y-this.player.y<80)alpha=.4;
    if(o.kind==='ghost')alpha=.68+Math.sin(t*4+o.x)*.12;
    if(o.elite||o.boss){g.strokeStyle=o.boss?'#c3917066':'#d3ba7066';g.lineWidth=1;g.beginPath();g.ellipse(x,y,o.r+5,(o.r+5)*.45,0,0,TAU);g.stroke()}
-   drawSprite(g,o.kind,x,y+(o.kind==='ghost'?Math.sin(t*3+o.x)*3:0),{frame:o.frame||0,flip:o.flip,scale:o.scale||1,alpha,variant:o.variant||0});
-   if(o.flash>0){g.save();g.globalCompositeOperation='screen';g.globalAlpha=.65;drawSprite(g,o.kind,x,y,{frame:o.frame||0,flip:o.flip,scale:o.scale||1});g.restore()}
+   drawSprite(g,o.kind,x,y+(o.kind==='ghost'?Math.sin(t*3+o.x)*3:0),{frame:o.frame||0,flip:o.flip,scale:o.scale||1,alpha,variant:o.variant||0,moving:o.moving});
+   if(o.flash>0){g.save();g.globalCompositeOperation='screen';g.globalAlpha=.65;drawSprite(g,o.kind,x,y,{frame:o.frame||0,flip:o.flip,scale:o.scale||1,moving:o.moving});g.restore()}
    if(o.freeze>0){g.fillStyle='#a4d6d54d';g.fillRect(x-o.r,y-o.r*2.3,o.r*2,o.r*2.5);diamond(g,x,y-o.r*2.5,3,'#c7e6d4')}
    if(o.hp<o.maxHp&&!o.boss&&o.category==='enemy'){const width=o.elite?26:16;g.fillStyle='#102219';g.fillRect(x-width/2,y+5,width,2);g.fillStyle=o.elite?'#b8a46f':'#a49468';g.fillRect(x-width/2,y+5,width*Math.max(0,o.hp/o.maxHp),1)}
    if(o.boss&&o.state==='windup')diamond(g,x,y-43*o.scale,5,'#edb783');
@@ -467,22 +468,28 @@ export class Game{
   glow(g,ox,oy-6,92+Math.sin(t*7)*4,'#e9983e34');glow(g,ox,oy-6,32,'#f4c26a32');
   for(const o of decor)if(o.kind==='lantern')glow(g,o.x+ox,o.y+oy-24,37,'#e7b36221');
   if(!menu){this.drawWeapons(g,ox,oy,t);this.drawProjectiles(g,ox,oy,t);this.drawEffects(g,ox,oy,t);for(const p of this.particles){g.globalAlpha=clamp(p.t/p.max,0,1);g.fillStyle=p.color;g.fillRect(Math.round(p.x+ox),Math.round(p.y+oy),p.size,p.size)}g.globalAlpha=1;for(const tx of this.texts){g.globalAlpha=Math.min(1,tx.t*4);pixelText(g,tx.text,tx.x+ox,tx.y+oy,tx.color,tx.critical?11:8)}g.globalAlpha=1}
+  if(!menu){
+   // Keep danger telegraphs and the player readable when several builds overlap.
+   this.drawHazards(g,ox,oy,t);for(const b of this.projectiles)if(b.enemy)drawCombatProjectile(g,b,ox,oy,t);const hero=renderables.find(o=>o.category==='hero');
+   drawSprite(g,hero.kind,hero.x+ox,hero.y+oy,{frame:hero.frame,flip:hero.flip,moving:hero.moving,alpha:this.player.invincible>0&&Math.floor(t*18)%2===0?.55:1});
+   drawCharacterTalents(this,g,ox,oy);
+  }
   this.drawAtmosphere(g,w,h,t,menu);
   if(!menu&&this.player){glow(g,this.player.x+ox,this.player.y+oy-8,74,'#bfd0910b');if(this.player.hp/this.player.maxHp<.28){const gradient=g.createRadialGradient(w/2,h/2,h*.25,w/2,h/2,w*.65);gradient.addColorStop(0,'transparent');gradient.addColorStop(1,`rgba(116,36,27,${.23+Math.sin(t*4)*.07})`);g.fillStyle=gradient;g.fillRect(0,0,w,h)}if(this.flash>0){g.fillStyle=`rgba(217,139,110,${this.flash*.5})`;g.fillRect(0,0,w,h)}}
   if(!menu){drawWorldEvents(this,g,ox,oy);this.drawCompass(g,cam,w,h)}
  }
- drawZones(g,ox,oy,t){for(const z of this.zones){if(drawExpandedZone(g,z,ox,oy,t))continue;if(z.kind){drawFusionZone(g,z,ox,oy,t);continue}const x=z.x+ox,y=z.y+oy;g.globalAlpha=Math.min(1,z.t)*.5;g.fillStyle='#b1703540';g.beginPath();g.ellipse(x,y,z.r,z.r*.8,0,0,TAU);g.fill();g.strokeStyle='#d8a35a55';g.stroke();g.globalAlpha=Math.min(1,z.t);for(let i=0;i<10;i++){let a=hash(i,z.seed)*TAU,r=hash(i+20,z.seed)*z.r,xx=x+Math.cos(a)*r,yy=y+Math.sin(a)*r,hh=3+(Math.sin(t*8+i)+1)*4;g.fillStyle=i%2?'#ce8c48':'#e3b361';g.fillRect(Math.round(xx),Math.round(yy-hh),2,hh);g.fillStyle='#eac88a';g.fillRect(Math.round(xx),Math.round(yy-3),1,3)}g.globalAlpha=1}}
+ drawZones(g,ox,oy,t){for(const z of this.zones){if(drawCombatZone(g,z,ox,oy,t))continue;if(drawExpandedZone(g,z,ox,oy,t))continue;if(z.kind){drawFusionZone(g,z,ox,oy,t);continue}const x=z.x+ox,y=z.y+oy;g.globalAlpha=Math.min(1,z.t)*.5;g.fillStyle='#b1703540';g.beginPath();g.ellipse(x,y,z.r,z.r*.8,0,0,TAU);g.fill();g.strokeStyle='#d8a35a55';g.stroke();g.globalAlpha=Math.min(1,z.t);for(let i=0;i<10;i++){let a=hash(i,z.seed)*TAU,r=hash(i+20,z.seed)*z.r,xx=x+Math.cos(a)*r,yy=y+Math.sin(a)*r,hh=3+(Math.sin(t*8+i)+1)*4;g.fillStyle=i%2?'#ce8c48':'#e3b361';g.fillRect(Math.round(xx),Math.round(yy-hh),2,hh);g.fillStyle='#eac88a';g.fillRect(Math.round(xx),Math.round(yy-3),1,3)}g.globalAlpha=1}}
  drawHazards(g,ox,oy,t){for(const z of this.hazards){let x=z.x+ox,y=z.y+oy;g.save();g.strokeStyle=z.color||'#db9a7a';g.lineWidth=1;if(z.type==='tide'){drawTideHazard(g,z,ox,oy)}else if(z.type==='line'){g.globalAlpha=.5;g.setLineDash([4,3]);g.beginPath();g.moveTo(x,y);let a=Math.atan2(z.ty-z.y,z.tx-z.x);g.lineTo(x+Math.cos(a)*150,y+Math.sin(a)*150);g.stroke()}else{g.fillStyle=`rgba(175,83,66,${.08+(1-z.t/z.max)*.2})`;g.beginPath();g.arc(x,y,z.r,0,TAU);g.fill();g.globalAlpha=.5+Math.sin(t*20)*.25;g.stroke();g.strokeStyle='#f3c597';g.beginPath();g.arc(x,y,z.r*(1-z.t/z.max),0,TAU);g.stroke();g.fillRect(x-2,y-2,4,4)}g.restore()}}
  drawDrops(g,ox,oy,t){for(const d of this.drops){const x=Math.round(d.x+ox),y=Math.round(d.y+oy);if(x<-20||x>this.w+20||y<-20||y>this.h+20)continue;const bob=Math.round(Math.sin(t*3+d.x)*1.5);shadow(g,x,y,4,.2);if(d.type==='xp'){const big=d.elite||d.value>=12;diamond(g,x,y-4+bob,big?5:3,big?'#e2cd89':d.value>=5?'#8fcabb':'#8cb16f');g.fillStyle=big?'#fae7b7':'#d2dfa2';g.fillRect(x-1,y-6+bob,1,2);if(big)glow(g,x,y,16,'#dec38712')}if(d.type==='heal'){g.fillStyle='#617d51';g.fillRect(x-2,y-9+bob,4,3);g.fillStyle='#b5c789';g.fillRect(x-4,y-6+bob,8,7);g.fillStyle='#e0e3b1';g.fillRect(x-2,y-5+bob,2,4)}if(d.type==='magnet'){diamond(g,x,y-7+bob,6,'#8bbccc');diamond(g,x,y-7+bob,3,'#daeee0');glow(g,x,y-7,22,'#8dc7d922')}if(['hourglass','nova','ward'].includes(d.type)){const color={hourglass:'#b4dbe7',nova:'#e8ae70',ward:'#c4dda8'}[d.type];glow(g,x,y-7,22,color+'33');diamond(g,x,y-7+bob,7,color);g.fillStyle='#eff2d2';if(d.type==='hourglass'){g.fillRect(x-4,y-12+bob,8,2);g.fillRect(x-4,y-4+bob,8,2)}else if(d.type==='nova'){g.fillRect(x-1,y-16+bob,2,17);g.fillRect(x-8,y-8+bob,17,2)}else diamond(g,x,y-8+bob,3,'#4f715c')}if(d.type==='chest'){glow(g,x,y-8,33,'#d7ac5d24');drawSprite(g,'chest',x,y+bob);for(let i=0;i<3;i++){g.fillStyle='#dec988';g.fillRect(x-12+i*11,y-12-Math.round((t*12+i*7)%19),1,2)}}}}
- drawWeapons(g,ox,oy,t){drawCharacterTalents(this,g,ox,oy);drawFusionWeapons(this,g,ox,oy);const p=this.player,lvl=this.weapons.orbit;if(p.shield>0){g.strokeStyle='#bfe4cc88';g.lineWidth=1;g.beginPath();g.arc(p.x+ox,p.y+oy-9,17,0,TAU);g.stroke()}if(!lvl)return;const v=weaponStats('orbit',lvl,this.stats,this.character),count=v.count;for(let i=0;i<count;i++){const dir=lvl===6&&i%2?-1:1,a=this.orbitAngle*dir+i*TAU/count,r=v.radius+(i%2?v.outerOffset:0),x=p.x+ox+Math.cos(a)*r,y=p.y+oy-8+Math.sin(a)*r;for(let j=4;j>0;j--){let aa=a-j*.09*dir;g.globalAlpha=.12+(4-j)*.09;g.fillStyle='#a6d7be';g.fillRect(Math.round(p.x+ox+Math.cos(aa)*r)-2,Math.round(p.y+oy-8+Math.sin(aa)*r)-2,4,4)}g.globalAlpha=1;glow(g,x,y,v.contactRadius,'#b5e7c323');diamond(g,Math.round(x),Math.round(y),lvl===6?7:5,'#78bcae');diamond(g,Math.round(x),Math.round(y)-1,3,'#d9edc6');g.fillStyle='#eff3d8';g.fillRect(Math.round(x)-1,Math.round(y)-2,2,3)}}
- drawProjectiles(g,ox,oy,t){for(const b of this.projectiles){let x=Math.round(b.x+ox),y=Math.round(b.y+oy);if(b.trail){for(let i=0;i<b.trail.length;i++){g.globalAlpha=i/b.trail.length*.45;g.fillStyle=b.type==='flame'?'#d29a55':b.fusionKind?'#c7b4ec':b.homing?'#d8c9a0':'#9fac80';g.fillRect(Math.round(b.trail[i].x+ox)-1,Math.round(b.trail[i].y+oy)-1,b.type==='flame'?4:2,b.type==='flame'?4:2)}g.globalAlpha=1}
+ drawWeapons(g,ox,oy,t){drawFusionWeapons(this,g,ox,oy);const p=this.player,lvl=this.weapons.orbit;if(p.shield>0){g.strokeStyle='#bfe4cc88';g.lineWidth=1;g.beginPath();g.arc(p.x+ox,p.y+oy-9,17,0,TAU);g.stroke()}if(!lvl)return;const v=weaponStats('orbit',lvl,this.stats,this.character),count=v.count;for(let i=0;i<count;i++){const dir=lvl===6&&i%2?-1:1,a=this.orbitAngle*dir+i*TAU/count,r=v.radius+(i%2?v.outerOffset:0),x=p.x+ox+Math.cos(a)*r,y=p.y+oy-8+Math.sin(a)*r;for(let j=4;j>0;j--){let aa=a-j*.09*dir;g.globalAlpha=.12+(4-j)*.09;g.fillStyle='#a6d7be';g.fillRect(Math.round(p.x+ox+Math.cos(aa)*r)-2,Math.round(p.y+oy-8+Math.sin(aa)*r)-2,4,4)}g.globalAlpha=1;drawSpirit(g,x,y,t+i*.3,lvl===6?20:16,lvl===6)}}
+ drawProjectiles(g,ox,oy,t){for(const b of this.projectiles){if(drawCombatProjectile(g,b,ox,oy,t))continue;let x=Math.round(b.x+ox),y=Math.round(b.y+oy);if(b.trail){for(let i=0;i<b.trail.length;i++){g.globalAlpha=i/b.trail.length*.45;g.fillStyle=b.type==='flame'?'#d29a55':b.fusionKind?'#c7b4ec':b.homing?'#d8c9a0':'#9fac80';g.fillRect(Math.round(b.trail[i].x+ox)-1,Math.round(b.trail[i].y+oy)-1,b.type==='flame'?4:2,b.type==='flame'?4:2)}g.globalAlpha=1}
   if(drawExpandedProjectile(g,b,ox,oy,t))continue;
   if(b.type==='bolt'){const a=Math.atan2(b.vy,b.vx);g.strokeStyle=b.fusionKind?'#d8c9ff':b.homing?'#efdfa5':'#e0d9ab';g.lineWidth=2;g.beginPath();g.moveTo(x-Math.cos(a)*9,y-Math.sin(a)*9);g.lineTo(x+Math.cos(a)*4,y+Math.sin(a)*4);g.stroke();diamond(g,x+Math.cos(a)*4,y+Math.sin(a)*4,2,'#eae1b3')}
   if(b.type==='flame'){glow(g,x,y,23,'#eca85b3d');diamond(g,x,y,6,'#ba713c');diamond(g,x,y,4,'#e8b565');g.fillStyle='#f8dfac';g.fillRect(x-1,y-2,2,3)}
   if(b.enemy){glow(g,x,y,15,'#b691ba33');diamond(g,x,y,5,'#805e84');diamond(g,x,y,3,'#dbb5c1');g.fillStyle='#f0d2c9';g.fillRect(x-1,y-1,2,2)}
  }}
  drawEffects(g,ox,oy,t){for(const fx of this.effects){const x=fx.x+ox,y=fx.y+oy,p=1-fx.t/fx.max;g.save();
-  drawExpandedEffect(g,fx,ox,oy);
+  if(drawCombatEffect(g,fx,ox,oy,t)){g.restore();continue}drawExpandedEffect(g,fx,ox,oy);
   if(fx.type==='tideBurst'){g.globalAlpha=1-p;drawTideHazard(g,fx,ox,oy)}
   if(fx.type==='fusion'){
    g.globalAlpha=1-p;g.strokeStyle=fx.color;g.lineWidth=2;

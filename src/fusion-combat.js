@@ -1,4 +1,6 @@
 import {TAU,glow,diamond} from './art.js';
+import {artAvailable} from './assets.js';
+import {drawOrbitCrystal} from './combat-art.js';
 import {weaponStats} from './stats.js';
 import {onWeaponCast} from './relic-combat.js';
 
@@ -29,7 +31,7 @@ export function updateFusion(game,kind,v,dt) {
   if(!target){game.timers[kind]=.08;return}
   game.timers[kind]=v.cooldown;const projectileStart=game.projectiles.length;
   if(kind==='solar') {
-    game.effects.push({type:'slash',x:p.x,y:p.y-8,r:v.radius,a:game.time,arc:TAU,t:.4,max:.4,evolved:true,color:'#ffe2a1'});
+    game.effects.push({type:'slash',source:kind,x:p.x,y:p.y-8,r:v.radius,a:game.time,arc:TAU,t:.4,max:.4,evolved:true,color:'#ffe2a1'});
     for(const e of game.grid.near(p.x,p.y,v.radius+28))if(Math.hypot(e.x-p.x,e.y-p.y)<v.radius+e.r)game.hit(e,v.damage,p.x,p.y,130,true,kind);
     game.zones.push({kind:'solar',x:p.x,y:p.y-8,r:v.radius,innerRadius:v.innerRadius,t:v.duration,max:v.duration,tick:0,hitInterval:v.hitInterval,damage:v.burnDamage,seed:game.time});
     game.sound.play('slash');game.sound.play('flame');game.shake=Math.max(game.shake,2.5);
@@ -47,7 +49,7 @@ export function updateFusion(game,kind,v,dt) {
     const x=p.x,y=p.y-8;
     for(const e of game.grid.near(x,y,v.fieldRadius+28))if(Math.hypot(e.x-x,e.y-y)<v.fieldRadius+e.r){e.freeze=Math.max(e.freeze,e.boss?v.bossFreeze:v.freeze);e.slow=Math.max(e.slow,v.fieldDuration)}
     game.zones.push({kind:'glacier',x,y,r:v.fieldRadius,t:v.fieldDuration,max:v.fieldDuration,tick:0,hitInterval:v.fieldInterval,damage:v.fieldDamage,pullSpeed:v.pullSpeed,pullRadius:v.radius,blastDamage:v.blastDamage,seed:game.time});
-    game.effects.push({type:'frost',x,y,r:v.fieldRadius,t:.8,max:.8,evolved:true});
+    game.effects.push({type:'frost',source:kind,x,y,r:v.fieldRadius,t:.8,max:.8,evolved:true});
     game.sound.play('frost');game.burst(x,y,26,'#c1e6e9',130);
   }
   onWeaponCast(game,kind,game.projectiles[projectileStart]);
@@ -62,7 +64,7 @@ export function chainArrow(game,arrow,first) {
     const target=game.closest(last.x,last.y,arrow.chainRange,excluded);
     if(!target)break;
     excluded.add(target.id);
-    game.effects.push({type:'lightning',x:last.x,y:last.y-9,tx:target.x,ty:target.y-9,t:.3,max:.3,seed:Math.random()*100,lvl:1});
+    game.effects.push({type:'lightning',source:'thunderbolt',x:last.x,y:last.y-9,tx:target.x,ty:target.y-9,t:.3,max:.3,seed:Math.random()*100,lvl:1});
     game.hit(target,arrow.chainDamage,last.x,last.y,35);
     last=target;
   }
@@ -74,7 +76,7 @@ export function updateFusionZone(game,z,dt) {
   if(z.t<=0) {
     if(z.kind==='glacier') {
       for(const e of game.grid.near(z.x,z.y,z.r+28))if(Math.hypot(e.x-z.x,e.y-z.y)<z.r+e.r)game.hit(e,z.blastDamage,z.x,z.y,160,true,z.kind);
-      game.effects.push({type:'frost',x:z.x,y:z.y,r:z.r+14,t:.65,max:.65,evolved:true});
+      game.effects.push({type:'frost',source:z.kind,x:z.x,y:z.y,r:z.r+14,t:.65,max:.65,evolved:true});
       game.burst(z.x,z.y,32,'#d2f1e9',150);game.sound.play('frost');game.shake=Math.max(game.shake,3);
     }
     return;
@@ -123,6 +125,6 @@ export function drawFusionWeapons(game,g,ox,oy) {
   const v=weaponStats('glacier',level,game.stats,game.character);
   for(const crystal of crystalPositions(game,v)) {
     const x=Math.round(crystal.x+ox),y=Math.round(crystal.y+oy);
-    glow(g,x,y,19,'#a6d8e933');diamond(g,x,y,8,'#5d96b3');diamond(g,x,y-1,5,'#b7e2e9');g.fillStyle='#e8f6e6';g.fillRect(x-1,y-4,2,5);
+    if(artAvailable()){drawOrbitCrystal(g,x,y,game.ambient+crystal.angle);continue}glow(g,x,y,19,'#a6d8e933');diamond(g,x,y,8,'#5d96b3');diamond(g,x,y-1,5,'#b7e2e9');g.fillStyle='#e8f6e6';g.fillRect(x-1,y-4,2,5);
   }
 }

@@ -12,6 +12,9 @@ import {characterStats,weaponStats} from './stats.js';
 import {passiveEffect,resonanceText,weaponFacts} from './item-info.js';
 import {CHARACTER_TALENTS,talentPoints,characterTalentStatus,characterTalentProgress} from './talents.js';
 import {ALTAR_REWARDS,worldEventStatus,worldEventTarget} from './world-events.js';
+import {loadArt} from './assets.js';
+
+await loadArt();
 
 const $=id=>document.getElementById(id);
 const show=id=>$(id).classList.remove('hidden');
